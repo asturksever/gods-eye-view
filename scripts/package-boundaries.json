@@ -580,7 +580,8 @@
       "src/ui/aircraftDisplay.js",
       "src/ui/layerBindings.js",
       "src/ui/displayBindings.js",
-      "src/ui/shellFacade.js"
+      "src/ui/shellFacade.js",
+      "src/ui/mapillaryControls.js"
     ],
     "external": ["cesium"]
   },
@@ -1734,7 +1735,24 @@
       "src/voice/realtimeFacade.js",
       "src/voice/realtimeRadio.js",
       "src/voice/realtimeTurns.js",
-      "src/voice/realtimeConnection.js"
+      "src/voice/realtimeConnection.js",
+      "src/ui/mapillaryControls.js",
+      "src/layers/mapillary/policy.js",
+      "src/layers/mapillary/ndjson.js",
+      "src/layers/mapillary/source.js",
+      "src/layers/mapillary/state.js",
+      "src/layers/mapillary/viewerBridge.js",
+      "src/layers/mapillary/selection.js",
+      "src/layers/mapillary/values.js",
+      "src/layers/mapillary/query.js",
+      "src/layers/mapillary/tileMath.js",
+      "src/layers/mapillary/features.js",
+      "src/layers/mapillary/glyphs.js",
+      "src/layers/mapillary/decode.js",
+      "src/layers/mapillary/coverage.js",
+      "src/layers/mapillary/sequences.js",
+      "src/layers/mapillary/index.js",
+      "src/app/layers/mapillary.js"
     ],
     "external": [
       "@mapbox/vector-tile",
@@ -1742,7 +1760,8 @@
       "egm96-universal",
       "mgrs",
       "pbf",
-      "satellite.js"
+      "satellite.js",
+      "mapillary-js"
     ]
   },
   "application-catalog": {
@@ -2128,7 +2147,21 @@
       "src/sources/overpassFeaturesRecords.js",
       "src/sources/overpassFeatures.js",
       "src/sources/featureSource.js",
-      "src/sources/overpassRoads.js"
+      "src/sources/overpassRoads.js",
+      "src/layers/mapillary/state.js",
+      "src/layers/mapillary/viewerBridge.js",
+      "src/layers/mapillary/policy.js",
+      "src/layers/mapillary/selection.js",
+      "src/layers/mapillary/values.js",
+      "src/layers/mapillary/features.js",
+      "src/layers/mapillary/query.js",
+      "src/layers/mapillary/sequences.js",
+      "src/layers/mapillary/glyphs.js",
+      "src/layers/mapillary/tileMath.js",
+      "src/layers/mapillary/decode.js",
+      "src/layers/mapillary/coverage.js",
+      "src/layers/mapillary/index.js",
+      "src/app/layers/mapillary.js"
     ],
     "external": [
       "cesium",
@@ -2136,7 +2169,8 @@
       "satellite.js",
       "@mapbox/vector-tile",
       "pbf",
-      "mgrs"
+      "mgrs",
+      "mapillary-js"
     ]
   },
   "application-operations": {

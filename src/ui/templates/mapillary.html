@@ -1,0 +1,136 @@
+<!-- Mapillary street-level dock: AI query, results, and the embedded viewer.
+       Self-contained (not part of the left panel stack) so the integration
+       stays isolated from the rail layout engine. -->
+<section
+  id="mapillary-dock"
+  class="mly-dock collapsed"
+  data-mly-dock
+  aria-label="Mapillary street level"
+>
+  <div class="panel-glow"></div>
+  <div class="mly-dock-inner">
+    <header class="mly-header">
+      <button
+        id="mly-dock-toggle"
+        class="mly-title-btn"
+        type="button"
+        aria-expanded="false"
+        aria-controls="mly-body"
+        title="Expand Mapillary"
+      >
+        <span class="mly-brand-dot" aria-hidden="true"></span>
+        <span class="mly-title">MAPILLARY</span>
+        <span id="mly-status-chip" class="mly-chip" aria-live="polite"
+          >OFF</span
+        >
+      </button>
+      <button
+        id="mly-enable-btn"
+        class="mly-power"
+        type="button"
+        aria-pressed="false"
+        title="Toggle the Street Level layer"
+      >
+        STREET LEVEL OFF
+      </button>
+    </header>
+    <div id="mly-body" class="mly-body">
+      <form id="mly-query-form" class="mly-query" autocomplete="off">
+        <label for="mly-query-input" class="mly-kicker">MAPILLARY AI</label>
+        <div class="mly-query-row">
+          <input
+            id="mly-query-input"
+            type="text"
+            maxlength="600"
+            spellcheck="false"
+            placeholder="show me all fire hydrants in Sacramento"
+            aria-label="Ask Mapillary AI"
+          />
+          <button id="mly-query-run" class="scene-btn mly-run" type="submit">
+            ASK
+          </button>
+        </div>
+        <div class="mly-suggestions" role="group" aria-label="Example queries">
+          <button
+            type="button"
+            class="mly-suggestion"
+            data-mly-suggestion="show me all fire hydrants in Sacramento"
+          >
+            Hydrants · Sacramento
+          </button>
+          <button
+            type="button"
+            class="mly-suggestion"
+            data-mly-suggestion="stop signs in downtown Detroit"
+          >
+            Stop signs · Detroit
+          </button>
+          <button
+            type="button"
+            class="mly-suggestion"
+            data-mly-suggestion="street lights and utility poles around here"
+          >
+            Street lights · here
+          </button>
+          <button
+            type="button"
+            class="mly-suggestion"
+            data-mly-suggestion="show me the street view here"
+          >
+            Look here
+          </button>
+        </div>
+      </form>
+      <div id="mly-answer" class="mly-answer" role="status" aria-live="polite">
+        Turn on Street Level to see Mapillary coverage, then ask for anything
+        that appears in street imagery.
+      </div>
+      <div id="mly-progress" class="mly-progress" hidden>
+        <div id="mly-progress-fill" class="mly-progress-fill"></div>
+        <span id="mly-progress-label" class="mly-progress-label"></span>
+      </div>
+      <div id="mly-results" class="mly-results" hidden>
+        <div id="mly-result-chips" class="mly-chips"></div>
+        <div class="mly-actions">
+          <button id="mly-frame-btn" class="scene-btn" type="button">
+            FRAME
+          </button>
+          <button id="mly-clear-btn" class="scene-btn" type="button">
+            CLEAR
+          </button>
+        </div>
+      </div>
+      <div class="mly-actions mly-street-actions">
+        <button
+          id="mly-look-btn"
+          class="scene-btn"
+          type="button"
+          title="Open the nearest Mapillary image to the view centre"
+        >
+          LOOK HERE
+        </button>
+        <button
+          id="mly-follow-btn"
+          class="scene-btn"
+          type="button"
+          aria-pressed="false"
+          title="Drive the globe camera from the street-level view"
+        >
+          STREET COCKPIT OFF
+        </button>
+        <button id="mly-viewer-close" class="scene-btn" type="button" hidden>
+          CLOSE VIEW
+        </button>
+      </div>
+      <div id="mly-viewer-wrap" class="mly-viewer-wrap" hidden>
+        <div
+          id="mly-viewer"
+          class="mly-viewer"
+          aria-label="Mapillary street-level viewer"
+        ></div>
+        <div id="mly-image-meta" class="mly-image-meta"></div>
+      </div>
+      <div id="mly-coverage-meta" class="mly-meta"></div>
+    </div>
+  </div>
+</section>

@@ -4,6 +4,8 @@ import { describeError } from './standalone/errors.js';
 const application = createStandaloneApplication({
   googleApiKey: import.meta.env.GOOGLE_MAPS_API_KEY,
   cesiumToken: import.meta.env.CESIUM_ION_TOKEN,
+  // GEV_VOICE_UI=off in .env removes the voice agent and its mic control.
+  voice: { enabled: import.meta.env.GEV_VOICE_UI !== 'off' },
   allowQaRegistration: import.meta.env.DEV,
 });
 

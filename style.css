@@ -8,6 +8,8 @@
 @import './src/ui/styles/layers.css';
 @import './src/ui/styles/radio.css';
 @import './src/ui/styles/cctv.css';
+@import './src/ui/styles/mapillary-js.css';
+@import './src/ui/styles/mapillary.css';
 @import './src/ui/styles/scenes.css';
 @import './src/ui/styles/bhote-koshi.css';
 @import './src/ui/styles/recording.css';

@@ -15,12 +15,12 @@ Include repro steps and impact. We'll acknowledge, investigate, and credit you (
 
 The golden rule: **secret-bearing API keys stay on the server side.** The dev/preview server (middleware under `server/providers/`) brokers every request that needs a private credential, so the browser never receives one.
 
-| Key | Where it lives | How the browser uses it |
-|-----|----------------|--------------------------|
-| `OPENAI_API_KEY` | Server only | Browser fetches a short-lived **ephemeral** Realtime session token from `/api/realtime/token`; the real key never ships |
-| `AISSTREAM_API_KEY` | Server only | Server holds the AISStream websocket; browser polls the same-origin `/api/ais-live` cache |
-| OpenSky OAuth (`OPENSKY_CLIENT_ID/SECRET`) | Server only | Server mints + refreshes the token behind `/api/opensky` |
-| `GOOGLE_MAPS_SERVER_API_KEY` (optional, #33) | Server only | Server calls Places (`/api/google/nearby-places`, `/api/google/text-search`) and the Street View fallback with this key; falls back to `GOOGLE_MAPS_API_KEY` when unset |
+| Key                                          | Where it lives | How the browser uses it                                                                                                                                                 |
+| -------------------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY`                             | Server only    | Browser fetches a short-lived **ephemeral** Realtime session token from `/api/realtime/token`; the real key never ships                                                 |
+| `AISSTREAM_API_KEY`                          | Server only    | Server holds the AISStream websocket; browser polls the same-origin `/api/ais-live` cache                                                                               |
+| OpenSky OAuth (`OPENSKY_CLIENT_ID/SECRET`)   | Server only    | Server mints + refreshes the token behind `/api/opensky`                                                                                                                |
+| `GOOGLE_MAPS_SERVER_API_KEY` (optional, #33) | Server only    | Server calls Places (`/api/google/nearby-places`, `/api/google/text-search`) and the Street View fallback with this key; falls back to `GOOGLE_MAPS_API_KEY` when unset |
 
 ### Two deliberately client-side keys — restrict them
 
@@ -28,6 +28,7 @@ These are designed to be used directly in the browser (like a Mapbox public toke
 
 1. **Google Maps API key** — loads Photorealistic 3D Tiles directly and powers GEV place search. **Restrict it** (HTTP referrer + API restriction to the required Google APIs) in the Google Cloud Console. An unrestricted key in a public deployment can be abused and billed to you.
 2. **Cesium ion token** (`CESIUM_ION_TOKEN`, optional — for ion-hosted Google Photorealistic 3D Tiles, Bing world imagery, and world terrain) — used as `Cesium.Ion.defaultAccessToken` client-side. Use a public **`assets:read`** token with **URL restrictions** for any hosted deployment. The Community plan has eligibility and usage limits; a public token is not a secret, but it can still consume the account's quota.
+3. **Mapillary client token** (`MAPILLARY_CLIENT_TOKEN`, optional — street-level imagery, coverage tiles and Mapillary AI) — used by the embedded MapillaryJS viewer and for Graph API lookups client-side. Mapillary client tokens are designed for browser use and can be scoped per application in the Mapillary developer dashboard; the dev server also uses the same token for cached vector-tile fetches. The Anthropic key behind Mapillary AI never leaves the server.
 
 > The explicit browser `define` block in `build/vite.js` controls exactly what reaches the client: only these two keys. Everything else stays server-side.
 

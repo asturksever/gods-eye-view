@@ -11,6 +11,15 @@ import {
   releaseContinuousRender,
 } from '../renderGovernor.js';
 
+/** Inert stand-in for the voice controller when the voice UI is switched off. */
+function createDisabledVoiceCommands() {
+  return Object.freeze({
+    disabled: true,
+    stop() {},
+    isActive: () => false,
+  });
+}
+
 /** Attach scene tools, rendering listeners and the application debug handle. */
 export function createApplicationTools({
   scene,
@@ -116,19 +125,25 @@ export function createApplicationTools({
   defer(() => {
     if (window.__godsEyeView === debug) delete window.__godsEyeView;
   });
-  const voiceCommands = initGevVoiceCommands({
-    ...voice,
-    floorServices: operations.surface.groundFloor,
-    annotationResolver: operations.annotationResolver,
-    searchNavigation: operations.searchAndFlyTo,
-    signal,
-    placeSearch,
-    viewer,
-    styleManager,
-    dataManager,
-    sceneDirector,
-    annotations,
-  });
+  // GEV_VOICE_UI=off keeps the OpenAI Realtime mic (and its dock control)
+  // out of the app entirely for operators who drive it from typed controls
+  // such as Mapillary AI; every other feature is untouched.
+  const { enabled: voiceEnabled = true, ...voiceOptions } = voice;
+  const voiceCommands = voiceEnabled
+    ? initGevVoiceCommands({
+        ...voiceOptions,
+        floorServices: operations.surface.groundFloor,
+        annotationResolver: operations.annotationResolver,
+        searchNavigation: operations.searchAndFlyTo,
+        signal,
+        placeSearch,
+        viewer,
+        styleManager,
+        dataManager,
+        sceneDirector,
+        annotations,
+      })
+    : createDisabledVoiceCommands();
   defer(() => {
     voiceCommands.stop({ removeUi: true });
     if (window.__gevVoiceCommands === voiceCommands)

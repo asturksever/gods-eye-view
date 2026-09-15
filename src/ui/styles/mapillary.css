@@ -1,0 +1,326 @@
+/* ── Mapillary dock ─────────────────────────── */
+#mapillary-dock {
+  --mly-green: #05cb63;
+  --mly-width: 400px;
+  position: fixed;
+  right: 16px;
+  bottom: 3.4rem;
+  z-index: 118;
+  width: var(--mly-width);
+  max-width: calc(100vw - 32px);
+  pointer-events: auto;
+  font-family: var(--font-mono);
+}
+
+#mapillary-dock .panel-glow {
+  position: absolute;
+  inset: -18px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(5, 203, 99, 0.16) 0%,
+    transparent 65%
+  );
+  filter: blur(16px);
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.mly-dock-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--panel-radius);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  max-height: calc(100vh - 7rem);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.mly-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mly-title-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 0;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 2px 0;
+  font: inherit;
+  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+}
+
+.mly-brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--mly-green);
+  box-shadow: 0 0 10px rgba(5, 203, 99, 0.8);
+}
+
+.mly-chip {
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border-hover);
+  color: var(--text-secondary);
+}
+
+.mly-chip.is-on {
+  color: var(--mly-green);
+  border-color: rgba(5, 203, 99, 0.55);
+}
+
+.mly-chip.is-busy {
+  color: var(--accent);
+  border-color: rgba(0, 212, 255, 0.55);
+}
+
+.mly-chip.is-warn {
+  color: #ffb300;
+  border-color: rgba(255, 179, 0, 0.55);
+}
+
+.mly-power {
+  font: inherit;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  padding: 6px 10px;
+  border-radius: var(--btn-radius);
+  border: 1px solid var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.mly-power[aria-pressed='true'] {
+  color: #0a0a0f;
+  background: var(--mly-green);
+  border-color: var(--mly-green);
+  box-shadow: 0 0 14px rgba(5, 203, 99, 0.45);
+}
+
+#mapillary-dock.collapsed .mly-body {
+  display: none;
+}
+
+.mly-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mly-kicker {
+  font-size: 0.56rem;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+}
+
+.mly-query {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mly-query-row {
+  display: flex;
+  gap: 6px;
+}
+
+#mly-query-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--btn-radius);
+  border: 1px solid var(--glass-border-hover);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.72rem;
+}
+
+#mly-query-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+.mly-run {
+  min-width: 56px;
+}
+
+.mly-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mly-suggestion {
+  font: inherit;
+  font-size: 0.56rem;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.mly-suggestion:hover {
+  color: var(--text-primary);
+  border-color: var(--glass-border-hover);
+}
+
+.mly-answer {
+  font-family: var(--font-sans);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: var(--text-primary);
+  min-height: 1.2em;
+}
+
+.mly-answer.is-error {
+  color: #ff8a80;
+}
+
+.mly-progress {
+  position: relative;
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mly-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--mly-green), var(--accent));
+  transition: width 160ms linear;
+}
+
+.mly-progress-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  color: var(--text-primary);
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+
+.mly-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mly-value-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.58rem;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  color: var(--text-primary);
+}
+
+.mly-value-chip i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.mly-value-chip b {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.mly-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mly-actions .scene-btn {
+  flex: 1 1 auto;
+}
+
+.scene-btn[aria-pressed='true'] {
+  color: #0a0a0f;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.mly-viewer-wrap {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border-hover);
+  background: #000;
+}
+
+.mly-viewer {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  min-height: 200px;
+}
+
+.mly-image-meta {
+  padding: 6px 8px;
+  font-size: 0.56rem;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mly-meta {
+  font-size: 0.56rem;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+/* Match the app's chrome-hiding modes. */
+body.ui-clean-view #mapillary-dock,
+body.recording-mode #mapillary-dock {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.cockpit-mode #mapillary-dock {
+  display: none !important;
+}
+
+@media (max-width: 720px) {
+  #mapillary-dock {
+    left: 16px;
+    right: 16px;
+    width: auto;
+    bottom: 6.4rem;
+  }
+}

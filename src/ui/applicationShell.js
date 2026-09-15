@@ -14,6 +14,7 @@ import { readShellElements } from './shellElements.js';
 import { CockpitCoordinator } from './cockpitCoordinator.js';
 import { ContextControls } from './context.js';
 import { CctvControls } from './cctv.js';
+import { MapillaryControls } from './mapillaryControls.js';
 import { RadioControls } from './radio.js';
 import { LocationNavigation } from './locationNavigation.js';
 import { bindClearLayersControl } from './layers.js';
@@ -536,6 +537,7 @@ export class StyleManager extends ShellFacade {
     this._initRightPanelAdaptiveLayout();
     this._initRadioPanel();
     this._initCctvPanel();
+    this._initMapillaryPanel();
     this._initGlobalContextPanel();
     this._initLocationBar();
     this._initShareButton();
@@ -918,6 +920,26 @@ export class StyleManager extends ShellFacade {
         setSplitFlapText,
       },
     });
+  }
+
+  /** Compose the Mapillary dock from the street-level layer and layer-manager actions. */
+  _initMapillaryPanel() {
+    const { mapillaryLayer } = this.services;
+    this._mapillaryControls?.destroy();
+    if (!mapillaryLayer || !this._mapillaryDock) return;
+    this._mapillaryControls = new MapillaryControls({
+      root: this._mapillaryDock,
+      mapillary: mapillaryLayer,
+      actions: {
+        isEnabled: () => this._dataManager?.isEnabled('mapillary') === true,
+        setEnabled: (enabled) =>
+          this._dataManager?.setEnabled('mapillary', enabled, {
+            origin: 'user',
+          }),
+        showToast: (message) => this._showToast(message),
+      },
+    });
+    this._mapillaryControls.connect();
   }
 
   /**
@@ -1471,6 +1493,7 @@ export class StyleManager extends ShellFacade {
     this._cameraOrientationControls?.destroy();
     this._clearLayersControl?.destroy();
     this._cctvControls?.destroy();
+    this._mapillaryControls?.destroy();
     this._radioControls?.destroy();
     this._cockpitCoordinator.stop();
     this._visualSettings.stop();
