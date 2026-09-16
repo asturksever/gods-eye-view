@@ -1,9 +1,9 @@
-<!-- Mapillary street-level dock: AI query, results, and the embedded viewer.
-       Self-contained (not part of the left panel stack) so the integration
-       stays isolated from the rail layout engine. -->
+<!-- Mapillary street-level dock: AI query, results, filters and the embedded
+       viewer. Self-contained (not part of the left panel stack) so the
+       integration stays isolated from the rail layout engine. -->
 <section
   id="mapillary-dock"
-  class="mly-dock collapsed"
+  class="mly-dock"
   data-mly-dock
   aria-label="Mapillary street level"
 >
@@ -14,9 +14,9 @@
         id="mly-dock-toggle"
         class="mly-title-btn"
         type="button"
-        aria-expanded="false"
+        aria-expanded="true"
         aria-controls="mly-body"
-        title="Expand Mapillary"
+        title="Collapse Mapillary · drag the header to move the window, double-click to snap it back"
       >
         <span class="mly-brand-dot" aria-hidden="true"></span>
         <span class="mly-title">MAPILLARY</span>
@@ -36,20 +36,29 @@
     </header>
     <div id="mly-body" class="mly-body">
       <form id="mly-query-form" class="mly-query" autocomplete="off">
-        <label for="mly-query-input" class="mly-kicker">MAPILLARY AI</label>
+        <div class="mly-ai-head">
+          <span class="mly-ai-pulse" aria-hidden="true"></span>
+          <label for="mly-query-input" class="mly-kicker"
+            >ASK MAPILLARY AI</label
+          >
+          <span id="mly-ai-model" class="mly-ai-model"></span>
+        </div>
         <div class="mly-query-row">
           <input
             id="mly-query-input"
             type="text"
             maxlength="600"
             spellcheck="false"
-            placeholder="show me all fire hydrants in Sacramento"
+            placeholder="Type a question, e.g. show me all fire hydrants in Sacramento"
             aria-label="Ask Mapillary AI"
           />
-          <button id="mly-query-run" class="scene-btn mly-run" type="submit">
-            ASK
-          </button>
+          <button id="mly-query-run" class="mly-ask" type="submit">ASK</button>
         </div>
+        <p id="mly-ai-hint" class="mly-ai-hint">
+          Type what you want to see in plain English — objects, traffic signs,
+          coverage or a street view of any place — and press Enter. Follow-ups
+          refine the last answer.
+        </p>
         <div class="mly-suggestions" role="group" aria-label="Example queries">
           <button
             type="button"
@@ -75,9 +84,9 @@
           <button
             type="button"
             class="mly-suggestion"
-            data-mly-suggestion="show me the street view here"
+            data-mly-suggestion="show me a 360 street view here"
           >
-            Look here
+            360° view · here
           </button>
         </div>
       </form>
@@ -95,10 +104,66 @@
           <button id="mly-frame-btn" class="scene-btn" type="button">
             FRAME
           </button>
+          <button
+            id="mly-3d-btn"
+            class="scene-btn"
+            type="button"
+            aria-pressed="false"
+            title="Stand the results up as 3D objects (small result sets)"
+          >
+            3D OBJECTS OFF
+          </button>
           <button id="mly-clear-btn" class="scene-btn" type="button">
             CLEAR
           </button>
         </div>
+        <div id="mly-3d-note" class="mly-meta" hidden></div>
+      </div>
+      <div class="mly-filters" role="group" aria-label="Imagery filters">
+        <span class="mly-filter-label">IMAGERY</span>
+        <div class="mly-seg" role="radiogroup" aria-label="Panorama filter">
+          <button
+            type="button"
+            class="mly-seg-btn is-active"
+            data-mly-pano="all"
+            role="radio"
+            aria-checked="true"
+          >
+            ALL
+          </button>
+          <button
+            type="button"
+            class="mly-seg-btn"
+            data-mly-pano="pano"
+            role="radio"
+            aria-checked="false"
+          >
+            360°
+          </button>
+          <button
+            type="button"
+            class="mly-seg-btn"
+            data-mly-pano="flat"
+            role="radio"
+            aria-checked="false"
+          >
+            FLAT
+          </button>
+        </div>
+        <label class="mly-filter-label" for="mly-since">SINCE</label>
+        <select
+          id="mly-since"
+          class="mly-select"
+          aria-label="Show imagery captured since"
+        >
+          <option value="0">any date</option>
+          <option value="365">last year</option>
+          <option value="730">2 years</option>
+          <option value="1826">5 years</option>
+          <option value="year:2024">2024</option>
+          <option value="year:2022">2022</option>
+          <option value="year:2020">2020</option>
+        </select>
       </div>
       <div class="mly-actions mly-street-actions">
         <button
@@ -118,11 +183,31 @@
         >
           STREET COCKPIT OFF
         </button>
+        <button
+          id="mly-photoreal-btn"
+          class="scene-btn"
+          type="button"
+          aria-pressed="false"
+          title="Switch the globe to Google Photorealistic 3D Tiles (needs a Google Maps key or Cesium ion token)"
+        >
+          GOOGLE 3D
+        </button>
         <button id="mly-viewer-close" class="scene-btn" type="button" hidden>
           CLOSE VIEW
         </button>
       </div>
       <div id="mly-viewer-wrap" class="mly-viewer-wrap" hidden>
+        <div class="mly-viewer-tools">
+          <button
+            id="mly-viewer-expand"
+            class="scene-btn"
+            type="button"
+            aria-pressed="false"
+            title="Expand the street-level view (Esc shrinks it)"
+          >
+            ⤢ EXPAND
+          </button>
+        </div>
         <div
           id="mly-viewer"
           class="mly-viewer"

@@ -5,7 +5,12 @@ import { createFeatures } from './features.js';
 import { createViewerBridge } from './viewerBridge.js';
 import { createQuery } from './query.js';
 import { createSelection } from './selection.js';
-import { MAPILLARY_KEY_ID, MAPILLARY_LAYER_ID } from './policy.js';
+import { createObjects3d } from './objects3d.js';
+import {
+  MAPILLARY_KEY_ID,
+  MAPILLARY_LAYER_ID,
+  OBJECTS_3D_LIMIT,
+} from './policy.js';
 import { groupCountsByLabel, humanizeValue } from './values.js';
 
 export { MAPILLARY_LAYER_ID } from './policy.js';
@@ -41,6 +46,7 @@ export function createMapillaryLayer({ source, services = {} }) {
   parts.viewer = createViewerBridge(context);
   parts.query = createQuery(context);
   parts.selection = createSelection(context);
+  parts.objects3d = createObjects3d(context);
 
   // Street-level actions shared by clicks, the query engine and the UI.
   parts.street = {
@@ -55,6 +61,7 @@ export function createMapillaryLayer({ source, services = {} }) {
     },
     async openFeature(featureId) {
       const row = parts.features.findRow(featureId);
+      parts.features.select(featureId);
       state.street.loading = true;
       state.street.error = null;
       state.street.feature = row
@@ -82,6 +89,11 @@ export function createMapillaryLayer({ source, services = {} }) {
         };
         if (!images.length) throw new Error('No image detected this feature');
         await parts.street.openImage(images[0].id);
+        await parts.viewer.highlightDetections(
+          images[0].id,
+          detail.object_value,
+          humanizeValue(detail.object_value),
+        );
       } catch (error) {
         state.street.error = error?.message || 'Feature detail unavailable';
         state.street.loading = false;
@@ -128,6 +140,8 @@ export function createMapillaryLayer({ source, services = {} }) {
       plannerModel: state.status?.plannerModel || null,
       coverage: {
         zoom: state.coverage.zoom,
+        kind: state.coverage.kind,
+        filter: { ...state.coverage.filter },
         loading: state.coverage.loading > 0,
         sequences: parts.coverage.sequenceCount(),
         hint: state.coverage.hint,
@@ -148,6 +162,7 @@ export function createMapillaryLayer({ source, services = {} }) {
         failed: state.features.failed,
         iconMode: state.features.iconMode,
         hasBbox: Boolean(state.features.bbox),
+        selectedId: state.features.selectedId,
         bbox: state.features.bbox ? [...state.features.bbox] : null,
       },
       street: {
@@ -163,6 +178,17 @@ export function createMapillaryLayer({ source, services = {} }) {
         sequenceId: state.street.sequenceId,
         creator: state.street.creator || null,
         feature: state.street.feature ? { ...state.street.feature } : null,
+        highlight: state.street.highlight
+          ? { ...state.street.highlight }
+          : null,
+      },
+      objects3d: {
+        enabled: state.objects3d.enabled,
+        active: state.objects3d.active,
+        building: state.objects3d.building,
+        count: state.objects3d.count,
+        error: state.objects3d.error,
+        limit: OBJECTS_3D_LIMIT,
       },
       query: {
         busy: state.query.busy,
@@ -215,6 +241,8 @@ export function createMapillaryLayer({ source, services = {} }) {
     disable() {
       state.enabled = false;
       parts.query.abort();
+      parts.objects3d.clear();
+      parts.features.clearSelection();
       parts.coverage.setResting(false);
       parts.coverage.detach();
       parts.coverage.clear();
@@ -232,6 +260,7 @@ export function createMapillaryLayer({ source, services = {} }) {
 
     destroy(viewer = state.viewer) {
       layer.disable();
+      parts.objects3d.destroy(viewer);
       parts.features.destroy(viewer);
       parts.sequences.destroy(viewer);
       state.listeners.clear();
@@ -281,6 +310,16 @@ export function createMapillaryLayer({ source, services = {} }) {
       if (element && state.street.open) parts.viewer.resize();
     },
     runQuery: (prompt) => parts.query.run(prompt),
+    /** Imagery filter for coverage, cones and nearest-image lookups. */
+    setCoverageFilter(next) {
+      parts.coverage.setFilter(next);
+      parts.sequences.rerender();
+    },
+    getCoverageFilter: () => ({ ...state.coverage.filter }),
+    /** Swap flat icons for procedural 3D objects (small result sets). */
+    setObjects3d: (enabled) => parts.objects3d.setEnabled(enabled),
+    selectFeature: (id) => parts.features.select(id),
+    clearFeatureSelection: () => parts.features.clearSelection(),
     /** Execute a ready-made plan (voice agent, tests) without the planner. */
     runPlan: (plan, options) => parts.query.runPlan(plan, options),
     clearQuery: () => parts.query.clear(),

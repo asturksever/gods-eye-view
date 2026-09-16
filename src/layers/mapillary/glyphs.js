@@ -142,3 +142,26 @@ export function rasterizeSprite(svgText, { size = 60 } = {}) {
     image.src = url;
   });
 }
+
+/** Selection ring drawn behind the picked map feature. */
+export function selectionRingGlyph({ size = 64, color = '#00d4ff' } = {}) {
+  const key = `ring:${size}:${color}`;
+  if (_cache.has(key)) return _cache.get(key);
+  const element = canvas(size);
+  const ctx = element.getContext('2d');
+  const c = size / 2;
+  ctx.beginPath();
+  ctx.arc(c, c, size * 0.46, 0, Math.PI * 2);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(2, size * 0.06);
+  ctx.globalAlpha = 0.95;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(c, c, size * 0.34, 0, Math.PI * 2);
+  ctx.lineWidth = Math.max(1, size * 0.03);
+  ctx.globalAlpha = 0.5;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  _cache.set(key, element);
+  return element;
+}

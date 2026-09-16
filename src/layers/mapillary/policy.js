@@ -8,6 +8,7 @@ export const PICK_PREFIX = Object.freeze({
   sequence: 'mly:seq:',
   image: 'mly:img:',
   feature: 'mly:feat:',
+  object: 'mly:obj:',
   position: 'mly:pos',
 });
 
@@ -24,6 +25,9 @@ export const COLORS = Object.freeze({
 /** Camera-driven coverage refresh. */
 export const COVERAGE_MOVE_DEBOUNCE_MS = 320;
 export const COVERAGE_MAX_TILES = 9;
+/** Overview (z0–5) coverage points seen from orbit. */
+export const COVERAGE_OVERVIEW_MAX_TILES = 16;
+export const COVERAGE_OVERVIEW_POINT_PX = 2.5;
 export const COVERAGE_MAX_SEQUENCES = 6000;
 export const COVERAGE_LINE_WIDTH_PX = 2.5;
 /** Sequences newer than this many days draw at full brightness. */
@@ -38,8 +42,13 @@ export const IMAGE_CONE_MIN_SPACING_M = 3;
 export const NEAREST_RADIUS_M = 50;
 export const NEAREST_LIMIT = 8;
 
-/** Query-result rendering: icons up to this many features, points beyond. */
+/** Query-result rendering: clamped icons up to this many features, unclamped
+ * icons up to FEATURE_ICON_MAX, coloured points beyond. */
 export const FEATURE_ICON_LIMIT = 6000;
+export const FEATURE_ICON_MAX = 80_000;
+/** 3D object models are built for result sets up to this size. */
+export const OBJECTS_3D_LIMIT = 1500;
+export const OBJECTS_3D_BATCH = 50;
 export const FEATURE_ICON_SIZE_PX = 30;
 export const FEATURE_POINT_SIZE_PX = 9;
 export const FEATURE_RENDER_BATCH = 4000;

@@ -581,7 +581,8 @@
       "src/ui/layerBindings.js",
       "src/ui/displayBindings.js",
       "src/ui/shellFacade.js",
-      "src/ui/mapillaryControls.js"
+      "src/ui/mapillaryControls.js",
+      "src/ui/floatingWindow.js"
     ],
     "external": ["cesium"]
   },
@@ -1752,7 +1753,9 @@
       "src/layers/mapillary/coverage.js",
       "src/layers/mapillary/sequences.js",
       "src/layers/mapillary/index.js",
-      "src/app/layers/mapillary.js"
+      "src/app/layers/mapillary.js",
+      "src/layers/mapillary/objects3d.js",
+      "src/ui/floatingWindow.js"
     ],
     "external": [
       "@mapbox/vector-tile",
@@ -2161,7 +2164,8 @@
       "src/layers/mapillary/decode.js",
       "src/layers/mapillary/coverage.js",
       "src/layers/mapillary/index.js",
-      "src/app/layers/mapillary.js"
+      "src/app/layers/mapillary.js",
+      "src/layers/mapillary/objects3d.js"
     ],
     "external": [
       "cesium",

@@ -25,6 +25,8 @@ export function createState({ services }) {
       terrainReady: null,
       hint: '',
       resting: false,
+      kind: null,
+      filter: { pano: 'all', sinceMs: null },
     },
 
     sequence: {
@@ -54,6 +56,10 @@ export function createState({ services }) {
       progress: { done: 0, tiles: 0 },
       abort: null,
       iconMode: false,
+      iconsHidden: false,
+      selectedId: null,
+      billboardById: new Map(),
+      highlight: null,
     },
 
     street: {
@@ -72,6 +78,15 @@ export function createState({ services }) {
       error: null,
       marker: null,
       markerCollection: null,
+    },
+
+    objects3d: {
+      enabled: false,
+      active: false,
+      building: false,
+      count: 0,
+      error: null,
+      abort: null,
     },
 
     query: {

@@ -145,3 +145,19 @@ export function coverageZoomForHeight(heightM) {
   if (heightM > 1_800) return 13;
   return 14;
 }
+
+/**
+ * Pick the low-zoom `overview` tile level for a camera far above the ground.
+ * Mapillary publishes coverage points at z0–5; sequences start at z6 and are
+ * far too heavy for a continent-sized view. Returns null below the overview
+ * ceiling (60 km), where `coverageZoomForHeight` takes over.
+ */
+export function overviewZoomForHeight(heightM) {
+  if (!Number.isFinite(heightM) || heightM <= 60_000) return null;
+  if (heightM > 15_000_000) return 0;
+  if (heightM > 7_000_000) return 1;
+  if (heightM > 3_000_000) return 2;
+  if (heightM > 1_200_000) return 3;
+  if (heightM > 400_000) return 4;
+  return 5;
+}

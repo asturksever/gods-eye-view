@@ -1,4 +1,7 @@
+import { makeFloating } from './floatingWindow.js';
+
 const DOCK_STORAGE_KEY = 'gev:mapillary-dock:collapsed';
+const DOCK_WINDOW_KEY = 'gev:mapillary-dock:window:v1';
 
 function formatDate(ms) {
   if (!Number.isFinite(ms)) return '';
@@ -46,11 +49,19 @@ export class MapillaryControls {
       results: byId('mly-results'),
       chips: byId('mly-result-chips'),
       frameBtn: byId('mly-frame-btn'),
+      threeDBtn: byId('mly-3d-btn'),
+      threeDNote: byId('mly-3d-note'),
+      photorealBtn: byId('mly-photoreal-btn'),
+      sinceSelect: byId('mly-since'),
+      aiHint: byId('mly-ai-hint'),
+      aiModel: byId('mly-ai-model'),
       clearBtn: byId('mly-clear-btn'),
       lookBtn: byId('mly-look-btn'),
       followBtn: byId('mly-follow-btn'),
       closeBtn: byId('mly-viewer-close'),
       viewerWrap: byId('mly-viewer-wrap'),
+      viewerExpand: byId('mly-viewer-expand'),
+      header: this.root?.querySelector('.mly-header') || null,
       viewer: byId('mly-viewer'),
       imageMeta: byId('mly-image-meta'),
       coverageMeta: byId('mly-coverage-meta'),
@@ -71,6 +82,27 @@ export class MapillaryControls {
     this.listen(el.toggle, 'click', () =>
       this.setCollapsed(!this.root.classList.contains('collapsed')),
     );
+    // Portable, resizable window: drag the header, resize from the grip.
+    this._floating = makeFloating(this.root, {
+      handle: el.header,
+      storageKey: DOCK_WINDOW_KEY,
+      dragThrough: '.mly-title-btn',
+      minWidth: 320,
+      minHeight: 220,
+      onChange: () => this.mapillary.resizeViewer?.(),
+    });
+    this.listen(el.viewerExpand, 'click', () =>
+      this.setViewerExpanded(
+        !this.root.classList.contains('mly-viewer-expanded'),
+      ),
+    );
+    this.listen(document, 'keydown', (event) => {
+      if (
+        event.key === 'Escape' &&
+        this.root.classList.contains('mly-viewer-expanded')
+      )
+        this.setViewerExpanded(false);
+    });
     this.listen(el.enableBtn, 'click', () => this._toggleEnabled());
     this.listen(el.form, 'submit', (event) => {
       event.preventDefault();
@@ -94,6 +126,28 @@ export class MapillaryControls {
       this.mapillary.setFollow?.(next);
     });
     this.listen(el.closeBtn, 'click', () => this.mapillary.closeViewer?.());
+    this.listen(el.threeDBtn, 'click', () => {
+      const next = !(this._state?.objects3d?.enabled === true);
+      this.mapillary.setObjects3d?.(next);
+    });
+    for (const button of this.root.querySelectorAll('[data-mly-pano]')) {
+      this.listen(button, 'click', () =>
+        this.mapillary.setCoverageFilter?.({ pano: button.dataset.mlyPano }),
+      );
+    }
+    this.listen(el.sinceSelect, 'change', () => {
+      const value = String(el.sinceSelect.value || '0');
+      let sinceMs = null;
+      if (value.startsWith('year:'))
+        sinceMs = Date.UTC(Number(value.slice(5)), 0, 1);
+      else if (Number(value) > 0)
+        sinceMs = Date.now() - Number(value) * 86_400_000;
+      this.mapillary.setCoverageFilter?.({ sinceMs });
+    });
+    this.listen(el.photorealBtn, 'click', async () => {
+      const result = await this.actions.setMapStack?.('photoreal');
+      if (result?.error) this.actions.showToast?.(result.error);
+    });
     // Keep the app's keyboard shortcuts from firing while typing a query.
     this.listen(el.input, 'keydown', (event) => event.stopPropagation());
     this.listen(el.input, 'keyup', (event) => event.stopPropagation());
@@ -141,20 +195,38 @@ export class MapillaryControls {
   }
 
   _restoreCollapsed() {
-    let collapsed = true;
+    // Open by default: the typed Mapillary AI box is the front door.
+    let collapsed = false;
     try {
       const stored = localStorage.getItem(DOCK_STORAGE_KEY);
-      if (stored === '0') collapsed = false;
+      if (stored === '1') collapsed = true;
     } catch {
       /* storage unavailable */
     }
     this.setCollapsed(collapsed, { persist: false });
   }
 
+  /** Grow the street-level viewer to most of the screen, or shrink it back. */
+  setViewerExpanded(expanded) {
+    if (!this.root) return;
+    const on = expanded === true;
+    this.root.classList.toggle('mly-viewer-expanded', on);
+    const button = this._elements.viewerExpand;
+    if (button) {
+      button.textContent = on ? '⤡ SHRINK' : '⤢ EXPAND';
+      button.setAttribute('aria-pressed', String(on));
+    }
+    requestAnimationFrame(() => this.mapillary.resizeViewer?.());
+  }
+
   setCollapsed(collapsed, { persist = true } = {}) {
     if (!this.root) return;
     this.root.classList.toggle('collapsed', collapsed);
     this._elements.toggle?.setAttribute('aria-expanded', String(!collapsed));
+    this._elements.toggle?.setAttribute(
+      'title',
+      collapsed ? 'Expand Mapillary' : 'Collapse Mapillary',
+    );
     if (!collapsed) this.mapillary.resizeViewer?.();
     if (persist) {
       try {
@@ -189,12 +261,56 @@ export class MapillaryControls {
     el.statusChip.textContent = chip;
     el.statusChip.className = `mly-chip ${chipClass}`.trim();
 
+    if (enabled && this._wasEnabled === false) this.setCollapsed(false);
+    this._wasEnabled = enabled;
+
     el.runBtn.disabled = state.query.busy;
     el.runBtn.textContent = state.query.busy ? '…' : 'ASK';
     el.input.disabled = false;
     el.input.placeholder = state.planner
-      ? 'show me all fire hydrants in Sacramento'
+      ? 'Type a question, e.g. show me all fire hydrants in Sacramento'
       : 'Add an Anthropic key in POWER UP to enable Mapillary AI';
+    if (el.aiModel)
+      el.aiModel.textContent = state.plannerModel
+        ? `· ${state.plannerModel}`
+        : '';
+    if (el.aiHint) {
+      el.aiHint.classList.toggle('is-warn', !state.planner);
+      el.aiHint.textContent = state.planner
+        ? 'Type what you want to see in plain English — objects, traffic signs, coverage or a street view of any place — and press Enter. Follow-ups refine the last answer.'
+        : 'Mapillary AI is off until an Anthropic key is added in POWER UP. Coverage, sequences and the viewer work without it.';
+    }
+
+    // Imagery filters.
+    const filter = state.coverage.filter || { pano: 'all', sinceMs: null };
+    for (const button of this.root.querySelectorAll('[data-mly-pano]')) {
+      const active = button.dataset.mlyPano === filter.pano;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-checked', String(active));
+    }
+
+    // 3D objects.
+    const objects = state.objects3d || {};
+    el.threeDBtn.setAttribute('aria-pressed', String(objects.enabled === true));
+    el.threeDBtn.textContent = objects.building
+      ? '3D OBJECTS …'
+      : objects.enabled
+        ? '3D OBJECTS ON'
+        : '3D OBJECTS OFF';
+    el.threeDNote.hidden = !(
+      objects.enabled &&
+      (objects.error || objects.active)
+    );
+    el.threeDNote.textContent = objects.error
+      ? objects.error
+      : objects.active
+        ? `${objects.count.toLocaleString()} objects standing in 3D · click one to open its image`
+        : '';
+
+    el.photorealBtn.setAttribute(
+      'aria-pressed',
+      String(this.actions.isMapStackActive?.('photoreal') === true),
+    );
 
     // Answer / error line.
     const error = state.query.error || state.street.error;
@@ -256,6 +372,8 @@ export class MapillaryControls {
     // Street-level viewer.
     const { street } = state;
     el.viewerWrap.hidden = !street.open;
+    if (!street.open && this.root.classList.contains('mly-viewer-expanded'))
+      this.setViewerExpanded(false);
     el.closeBtn.hidden = !street.open;
     el.followBtn.setAttribute('aria-pressed', String(street.follow === true));
     el.followBtn.textContent = street.follow
@@ -271,6 +389,10 @@ export class MapillaryControls {
         parts.push(`hdg ${Math.round(street.bearing)}°`);
       if (street.isPano) parts.push('360°');
       if (street.creator) parts.push(`© ${street.creator}`);
+      if (street.highlight?.count)
+        parts.push(
+          `${street.highlight.count} detection${street.highlight.count === 1 ? '' : 's'} outlined`,
+        );
       if (street.feature?.label)
         parts.unshift(
           `${street.feature.label}${street.feature.imageCount ? ` · ${street.feature.imageCount} sightings` : ''}`,
@@ -308,6 +430,7 @@ export class MapillaryControls {
     if (this.destroyed) return;
     this.destroyed = true;
     this.listeners.abort();
+    this._floating?.destroy();
     this._unsubscribe?.();
     this._unsubscribe = null;
     this.mapillary.attachViewerHost?.(null);

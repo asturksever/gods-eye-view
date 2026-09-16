@@ -324,3 +324,264 @@ body.cockpit-mode #mapillary-dock {
     bottom: 6.4rem;
   }
 }
+
+/* ── Prominent AI entry ─────────────────────── */
+.mly-ai-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mly-ai-head .mly-kicker {
+  font-size: 0.66rem;
+  color: var(--text-primary);
+}
+
+.mly-ai-model {
+  margin-left: auto;
+  font-size: 0.52rem;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.mly-ai-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.6);
+  animation: mly-pulse 2.2s ease-out infinite;
+}
+
+@keyframes mly-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 9px rgba(0, 212, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 212, 255, 0);
+  }
+}
+
+#mapillary-dock #mly-query-input {
+  padding: 11px 12px;
+  font-size: 0.8rem;
+  border: 1px solid rgba(0, 212, 255, 0.45);
+  background: rgba(0, 212, 255, 0.06);
+  box-shadow: 0 0 18px rgba(0, 212, 255, 0.12) inset;
+}
+
+#mapillary-dock #mly-query-input::placeholder {
+  color: rgba(232, 234, 237, 0.55);
+}
+
+#mapillary-dock #mly-query-input:focus {
+  background: rgba(0, 212, 255, 0.1);
+  box-shadow:
+    0 0 0 2px var(--accent-dim),
+    0 0 22px rgba(0, 212, 255, 0.25);
+}
+
+.mly-ask {
+  min-width: 64px;
+  font: inherit;
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  border-radius: var(--btn-radius);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #0a0a0f;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.mly-ask:hover:not(:disabled) {
+  box-shadow: 0 0 16px rgba(0, 212, 255, 0.5);
+}
+
+.mly-ask:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.mly-ai-hint {
+  font-family: var(--font-sans);
+  font-size: 0.66rem;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.mly-ai-hint.is-warn {
+  color: #ffb300;
+}
+
+/* ── Imagery filters ────────────────────────── */
+.mly-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mly-filter-label {
+  font-size: 0.54rem;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+}
+
+.mly-seg {
+  display: inline-flex;
+  border: 1px solid var(--glass-border-hover);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.mly-seg-btn {
+  font: inherit;
+  font-size: 0.56rem;
+  letter-spacing: 0.08em;
+  padding: 4px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.mly-seg-btn + .mly-seg-btn {
+  border-left: 1px solid var(--glass-border);
+}
+
+.mly-seg-btn.is-active {
+  background: rgba(5, 203, 99, 0.22);
+  color: var(--text-primary);
+}
+
+.mly-select {
+  font: inherit;
+  font-size: 0.56rem;
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border-hover);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text-primary);
+}
+
+.mly-select option {
+  background: #0a0a0f;
+}
+
+/* ── Portable, resizable windows ────────────── */
+.gev-floating-handle {
+  cursor: grab;
+}
+
+.gev-floating-dragging,
+.gev-floating-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+.gev-floating {
+  position: fixed !important;
+  right: auto !important;
+  bottom: auto !important;
+  margin: 0 !important;
+  max-width: calc(100vw - 12px) !important;
+  z-index: 132 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.gev-resize-grip {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  z-index: 6;
+  opacity: 0.6;
+  border-radius: 3px;
+  background: linear-gradient(
+    135deg,
+    transparent 0 45%,
+    var(--accent) 45% 55%,
+    transparent 55% 70%,
+    var(--accent) 70% 80%,
+    transparent 80%
+  );
+}
+
+.gev-resize-grip:hover {
+  opacity: 1;
+}
+
+#mapillary-dock.gev-floating .mly-dock-inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  height: 100%;
+}
+
+/* The CCTV panel lives in the left stack until dragged; then it floats. */
+#left-panel-stack > #cctv-panel.gev-floating {
+  position: fixed !important;
+  flex: none !important;
+  height: auto !important;
+  max-height: calc(100vh - 12px) !important;
+  width: var(--panel-expanded-width);
+}
+
+#cctv-panel.gev-floating .cctv-panel-inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+}
+
+#cctv-panel.gev-floating.collapsed .cctv-panel-inner {
+  height: auto;
+}
+
+/* ── Expanded street-level viewer ───────────── */
+.mly-viewer-tools {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 4;
+  display: flex;
+  gap: 4px;
+}
+
+.mly-viewer-tools .scene-btn {
+  padding: 4px 8px;
+  font-size: 0.56rem;
+  background: rgba(10, 10, 15, 0.75);
+}
+
+#mapillary-dock.mly-viewer-expanded .mly-viewer-wrap {
+  position: fixed;
+  left: 4vw;
+  right: 4vw;
+  top: 5vh;
+  bottom: 9vh;
+  z-index: 141;
+  display: flex;
+  flex-direction: column;
+  border-color: rgba(0, 212, 255, 0.55);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
+}
+
+#mapillary-dock.mly-viewer-expanded .mly-viewer {
+  flex: 1 1 auto;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
+#mapillary-dock.mly-viewer-expanded .mly-image-meta {
+  font-size: 0.64rem;
+}

@@ -5,8 +5,8 @@ export const MAPILLARY_TILE_HOST = 'https://tiles.mapillary.com/maps/vtp';
 
 /** Public tile layer names this proxy exposes, mapped to Mapillary's ids. */
 export const TILE_LAYERS = Object.freeze({
-  // Sequences (z6–14) and image points (z14 only).
-  coverage: Object.freeze({ upstream: 'mly1_public', minZoom: 6, maxZoom: 14 }),
+  // Overview points (z0–5), sequences (z6–14) and image points (z14 only).
+  coverage: Object.freeze({ upstream: 'mly1_public', minZoom: 0, maxZoom: 14 }),
   // Point map features such as fire hydrants, benches and utility poles.
   points: Object.freeze({
     upstream: 'mly_map_feature_point',

@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { decodeDetectionPolygons } from './decode.js';
 
 /** Eye height above the sampled ground when the globe camera follows the viewer. */
 const FOLLOW_EYE_HEIGHT_M = 2.4;
@@ -127,7 +128,13 @@ export function createViewerBridge({ state, source, parts }) {
     viewer = new Viewer({
       accessToken: source.token,
       container,
-      component: { cover: false, bearing: true, zoom: true, attribution: true },
+      component: {
+        cover: false,
+        bearing: true,
+        zoom: true,
+        attribution: true,
+        tag: true,
+      },
       trackResize: true,
     });
     state.street.container = container;
@@ -163,6 +170,60 @@ export function createViewerBridge({ state, source, parts }) {
       if (pendingOpen === id) state.street.loading = false;
       state.notify?.();
     }
+  }
+
+  /**
+   * Outline every detection of `value` inside the current image using the
+   * MapillaryJS tag component. Detections are per image on the Graph API;
+   * their geometry is a small vector tile in image-normalized coordinates.
+   */
+  async function highlightDetections(imageId, value, label) {
+    if (!viewer || !imageId) return 0;
+    const { OutlineTag, PolygonGeometry } = Library || {};
+    let component;
+    try {
+      component = viewer.getComponent('tag');
+      component.removeAll();
+    } catch {
+      return 0;
+    }
+    state.street.highlight = { value, count: 0, loading: true };
+    state.notify?.();
+    let detections = [];
+    try {
+      detections = await source.getImageDetections(imageId);
+    } catch {
+      detections = [];
+    }
+    if (pendingOpen !== String(imageId) || !viewer) return 0;
+    const tags = [];
+    for (const detection of detections) {
+      if (value && detection.value !== value) continue;
+      decodeDetectionPolygons(detection.geometry).forEach((polygon, index) => {
+        try {
+          tags.push(
+            new OutlineTag(
+              `mly-det-${detection.id}-${index}`,
+              new PolygonGeometry(polygon),
+              {
+                lineColor: 0x00d4ff,
+                lineWidth: 3,
+                fillColor: 0x00d4ff,
+                fillOpacity: 0.22,
+                text: tags.length === 0 ? label || undefined : undefined,
+                textColor: 0xffffff,
+              },
+            ),
+          );
+        } catch {
+          /* degenerate polygon */
+        }
+      });
+    }
+    if (tags.length) component.add(tags);
+    state.street.highlight = { value, count: tags.length, loading: false };
+    state.notify?.();
+    return tags.length;
   }
 
   function setFollow(enabled) {
@@ -203,10 +264,19 @@ export function createViewerBridge({ state, source, parts }) {
       tilt: null,
       loading: false,
       error: null,
+      highlight: null,
     });
     parts.sequences.setMarker(null);
     state.notify?.();
   }
 
-  return { open, close, setFollow, resize, lookAtPosition, destroy: close };
+  return {
+    open,
+    close,
+    setFollow,
+    resize,
+    lookAtPosition,
+    highlightDetections,
+    destroy: close,
+  };
 }

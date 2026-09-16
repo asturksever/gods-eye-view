@@ -27,6 +27,9 @@ export function createSelection({ state, parts }) {
       parts.street.openImage(id.slice(PICK_PREFIX.image.length));
     } else if (id.startsWith(PICK_PREFIX.feature)) {
       parts.street.openFeature(id.slice(PICK_PREFIX.feature.length));
+    } else if (id.startsWith(PICK_PREFIX.object)) {
+      // 3D object entities are id'd `mly:obj:<featureId>:<part>`.
+      parts.street.openFeature(id.split(':')[2]);
     }
   }
 

@@ -1,5 +1,9 @@
 # Changelog
 
+- Mapillary dock and CCTV panel become portable, resizable windows (drag the header, corner grip to resize, double-click to snap back, position remembered); the street-level viewer gains an **⤢ EXPAND** mode.
+
+- Mapillary: coverage at every altitude (z0–5 capture points from orbit down to the z11–14 sequence web), 360°/flat and capture-date imagery filters, Mapillary sprite icons for every result set, a selection ring plus in-photo detection outlines for the clicked object, an optional procedural **3D OBJECTS** mode oriented by `aligned_direction`, a **GOOGLE 3D** map-stack shortcut, a `prefer_pano` planner field, and a more prominent typed **ASK MAPILLARY AI** entry that opens by default.
+
 - Add the Mapillary **Street Level** layer: coverage sequences clamped to terrain and 3D tiles, per-sequence image cones, an embedded MapillaryJS viewer with a **Street Cockpit** camera-follow mode, and **Mapillary AI** — a typed natural-language query (Claude planner, server-side key) that fans a geocoded place out over z14 map-feature tiles and streams detected objects and traffic signs onto the globe as NDJSON, first as points and then as Mapillary's own icons. New keys `MAPILLARY_CLIENT_TOKEN` (browser-side by design) and `ANTHROPIC_API_KEY` (server-side) in POWER UP.
 
 - Keep parked transit vehicles aligned to their world course during camera orbits, fall back to reported bearing, and keep vehicles with no course consistently screen-up.

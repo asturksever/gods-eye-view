@@ -16,6 +16,7 @@ const basePlan = {
   values: ['object--fire-hydrant'],
   seen_after: null,
   seen_before: null,
+  prefer_pano: false,
   visualise: 'icons',
   title: 'Fire hydrants · Sacramento',
   answer: 'Showing fire hydrants in Sacramento.',

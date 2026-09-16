@@ -1,12 +1,18 @@
 import * as Cesium from 'cesium';
 import { decodeCoverageTile } from './decode.js';
-import { coverageZoomForHeight, tilesForBbox } from './tileMath.js';
+import {
+  coverageZoomForHeight,
+  overviewZoomForHeight,
+  tilesForBbox,
+} from './tileMath.js';
 import {
   COLORS,
   COVERAGE_LINE_WIDTH_PX,
   COVERAGE_MAX_SEQUENCES,
   COVERAGE_MAX_TILES,
   COVERAGE_MOVE_DEBOUNCE_MS,
+  COVERAGE_OVERVIEW_MAX_TILES,
+  COVERAGE_OVERVIEW_POINT_PX,
   COVERAGE_RECENT_DAYS,
   PICK_PREFIX,
 } from './policy.js';
@@ -27,6 +33,23 @@ export function sequenceColor(
   return ageDays <= COVERAGE_RECENT_DAYS
     ? Cesium.Color.fromCssColorString(COLORS.coverage).withAlpha(0.92)
     : Cesium.Color.fromCssColorString(COLORS.coverageOld).withAlpha(0.7);
+}
+
+/**
+ * Whether one capture passes the imagery filter: panorama mode
+ * ('all' | 'pano' | 'flat') and an optional earliest capture time.
+ */
+export function passesImageryFilter(record, filter) {
+  if (!filter) return true;
+  if (filter.pano === 'pano' && !record.isPano) return false;
+  if (filter.pano === 'flat' && record.isPano) return false;
+  if (
+    Number.isFinite(filter.sinceMs) &&
+    filter.sinceMs > 0 &&
+    (record.capturedAt || 0) < filter.sinceMs
+  )
+    return false;
+  return true;
 }
 
 /**
@@ -98,7 +121,11 @@ export function visibleBbox(viewer, { grid = 5 } = {}) {
   ];
 }
 
-/** Camera-driven coverage tiles rendered as terrain/mesh-clamped polylines. */
+/**
+ * Camera-driven coverage: z0–5 `overview` points from orbit down to 60 km,
+ * then z11–14 sequence polylines clamped to terrain and 3D tiles. Decoded
+ * tiles are kept so the imagery filter can rebuild without refetching.
+ */
 export function createCoverage({ state, source }) {
   const { render } = state.services;
 
@@ -115,10 +142,15 @@ export function createCoverage({ state, source }) {
     return `${z}/${x}/${y}`;
   }
 
-  function buildPrimitive(sequences) {
+  function filter() {
+    return state.coverage.filter;
+  }
+
+  function buildSequencePrimitive(sequences) {
     const now = Date.now();
     const instances = [];
     for (const sequence of sequences) {
+      if (!passesImageryFilter(sequence, filter())) continue;
       const flat = [];
       for (const [lon, lat] of sequence.coordinates) flat.push(lon, lat);
       let positions;
@@ -156,20 +188,71 @@ export function createCoverage({ state, source }) {
     });
   }
 
+  function buildOverviewCollection(points) {
+    const collection = new Cesium.PointPrimitiveCollection({
+      blendOption: Cesium.BlendOption.TRANSLUCENT,
+    });
+    const green = Cesium.Color.fromCssColorString(COLORS.coverage).withAlpha(
+      0.85,
+    );
+    const pink = Cesium.Color.fromCssColorString(COLORS.pano).withAlpha(0.9);
+    let count = 0;
+    for (const point of points) {
+      if (!passesImageryFilter(point, filter())) continue;
+      collection.add({
+        position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat),
+        color: point.isPano ? pink : green,
+        pixelSize: COVERAGE_OVERVIEW_POINT_PX,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      });
+      count++;
+    }
+    return { collection, count };
+  }
+
+  function attachPrimitive(entry) {
+    const scene = state.viewer?.scene;
+    if (!scene) return;
+    if (entry.kind === 'sequence') {
+      entry.primitive = buildSequencePrimitive(entry.sequenceList);
+      entry.count = entry.primitive
+        ? entry.primitive.geometryInstances.length
+        : 0;
+      if (entry.primitive) {
+        entry.primitive.show = !state.coverage.resting;
+        scene.groundPrimitives.add(entry.primitive);
+      }
+    } else {
+      const { collection, count } = buildOverviewCollection(entry.points);
+      entry.primitive = collection;
+      entry.count = count;
+      // Orbit-level points never rest: results are invisible at that scale.
+      collection.show = true;
+      scene.primitives.add(collection);
+    }
+  }
+
+  function detachPrimitive(entry) {
+    if (!entry.primitive) return;
+    const scene = state.viewer?.scene;
+    try {
+      if (entry.kind === 'sequence')
+        scene?.groundPrimitives?.remove(entry.primitive);
+      else scene?.primitives?.remove(entry.primitive);
+    } catch {
+      /* already gone */
+    }
+    entry.primitive = null;
+  }
+
   function removeTile(key) {
     const entry = state.coverage.tiles.get(key);
     if (!entry) return;
-    if (entry.primitive) {
-      try {
-        state.viewer?.scene?.groundPrimitives?.remove(entry.primitive);
-      } catch {
-        /* already gone */
-      }
-    }
+    detachPrimitive(entry);
     state.coverage.tiles.delete(key);
   }
 
-  async function loadTile(tile, generation) {
+  async function loadTile(tile, generation, kind) {
     const key = tileKey(tile);
     if (state.coverage.tiles.has(key) || state.coverage.pending.has(key))
       return;
@@ -178,30 +261,29 @@ export function createCoverage({ state, source }) {
     state.coverage.loading++;
     notify();
     try {
-      await ensureTerrainReady();
+      if (kind === 'sequence') await ensureTerrainReady();
       const bytes = await source.getTile('coverage', tile.z, tile.x, tile.y, {
         signal: controller.signal,
       });
       if (controller.signal.aborted || generation !== state.coverage.generation)
         return;
       const decoded = decodeCoverageTile(bytes, tile);
-      // Newest first, capped per tile so a dense city stays within budget.
-      const sequences = decoded.sequences
-        .sort((a, b) => (b.capturedAt || 0) - (a.capturedAt || 0))
-        .slice(0, PER_TILE_SEQUENCE_CAP);
-      const primitive = buildPrimitive(sequences);
-      if (primitive) {
-        primitive.show = !state.coverage.resting;
-        state.viewer.scene.groundPrimitives.add(primitive);
+      const entry = { kind, primitive: null, count: 0 };
+      if (kind === 'sequence') {
+        // Newest first, capped per tile so a dense city stays within budget.
+        const sequences = decoded.sequences
+          .sort((a, b) => (b.capturedAt || 0) - (a.capturedAt || 0))
+          .slice(0, PER_TILE_SEQUENCE_CAP);
+        entry.sequenceList = sequences;
+        entry.sequences = new Map(sequences.map((s) => [s.id, s]));
+        entry.total = decoded.sequences.length;
+      } else {
+        entry.points = decoded.overview;
+        entry.sequences = new Map();
+        entry.total = decoded.overview.length;
       }
-      state.coverage.tiles.set(key, {
-        primitive,
-        sequences: new Map(
-          sequences.map((sequence) => [sequence.id, sequence]),
-        ),
-        count: sequences.length,
-        total: decoded.sequences.length,
-      });
+      attachPrimitive(entry);
+      state.coverage.tiles.set(key, entry);
       state.coverage.lastError = null;
       requestRender();
     } catch (error) {
@@ -224,22 +306,32 @@ export function createCoverage({ state, source }) {
     const viewer = state.viewer;
     if (!viewer || !state.enabled || state.keyRequired) return;
     const height = cameraHeightAboveGround(viewer);
-    const zoom = coverageZoomForHeight(height);
-    const bbox = zoom ? visibleBbox(viewer) : null;
+    const sequenceZoom = coverageZoomForHeight(height);
+    const overviewZoom = sequenceZoom ? null : overviewZoomForHeight(height);
+    const zoom = sequenceZoom ?? overviewZoom;
+    const kind = sequenceZoom ? 'sequence' : 'overview';
+    let bbox = visibleBbox(viewer);
+    if (kind === 'overview' && (!bbox || zoom <= 1))
+      bbox = [-180, -85, 180, 85];
     if (!zoom || !bbox) {
-      state.coverage.hint = 'Zoom in below 60 km for Mapillary coverage';
+      state.coverage.hint =
+        'Point the camera at the globe for Mapillary coverage';
       clear();
       notify();
       return;
     }
     state.coverage.hint = '';
-    if (zoom !== state.coverage.zoom) {
+    if (zoom !== state.coverage.zoom || kind !== state.coverage.kind) {
       clear();
       state.coverage.zoom = zoom;
+      state.coverage.kind = kind;
     }
     state.coverage.generation++;
     const generation = state.coverage.generation;
-    const { tiles } = tilesForBbox(bbox, zoom, { limit: COVERAGE_MAX_TILES });
+    const { tiles } = tilesForBbox(bbox, zoom, {
+      limit:
+        kind === 'sequence' ? COVERAGE_MAX_TILES : COVERAGE_OVERVIEW_MAX_TILES,
+    });
     const wanted = new Set(tiles.map(tileKey));
     for (const key of [...state.coverage.tiles.keys()])
       if (!wanted.has(key)) removeTile(key);
@@ -248,7 +340,7 @@ export function createCoverage({ state, source }) {
         controller.abort();
         state.coverage.pending.delete(key);
       }
-    for (const tile of tiles) loadTile(tile, generation);
+    for (const tile of tiles) loadTile(tile, generation, kind);
     notify();
   }
 
@@ -286,7 +378,30 @@ export function createCoverage({ state, source }) {
     state.coverage.loading = 0;
     for (const key of [...state.coverage.tiles.keys()]) removeTile(key);
     state.coverage.zoom = null;
+    state.coverage.kind = null;
     requestRender();
+  }
+
+  /** Apply a new imagery filter and rebuild every loaded tile from its cache. */
+  function setFilter(next) {
+    const current = state.coverage.filter;
+    const pano = ['all', 'pano', 'flat'].includes(next?.pano)
+      ? next.pano
+      : current.pano;
+    const sinceMs =
+      next && 'sinceMs' in next
+        ? Number.isFinite(next.sinceMs) && next.sinceMs > 0
+          ? next.sinceMs
+          : null
+        : current.sinceMs;
+    if (pano === current.pano && sinceMs === current.sinceMs) return;
+    state.coverage.filter = { pano, sinceMs };
+    for (const entry of state.coverage.tiles.values()) {
+      detachPrimitive(entry);
+      attachPrimitive(entry);
+    }
+    requestRender();
+    notify();
   }
 
   /** Look a sequence up across loaded tiles. */
@@ -319,11 +434,12 @@ export function createCoverage({ state, source }) {
     requestRender();
   }
 
-  /** Hide (rest) or show every loaded coverage primitive without dropping tiles. */
+  /** Rest (hide) the street-level sequence web while results are shown; orbit points stay. */
   function setResting(resting) {
     state.coverage.resting = resting === true;
     for (const entry of state.coverage.tiles.values())
-      if (entry.primitive) entry.primitive.show = !state.coverage.resting;
+      if (entry.primitive && entry.kind === 'sequence')
+        entry.primitive.show = !state.coverage.resting;
     requestRender();
   }
 
@@ -342,5 +458,6 @@ export function createCoverage({ state, source }) {
     recolorSequence,
     sequenceCount,
     setResting,
+    setFilter,
   };
 }

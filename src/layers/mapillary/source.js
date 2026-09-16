@@ -201,6 +201,31 @@ export function createMapillarySource({
       return graph(String(id), { fields: FEATURE_FIELDS }, { signal });
     },
 
+    /** Batched entity lookup (`/?ids=`), up to 50 ids per call. */
+    async getMapFeaturesBatch(
+      ids,
+      { signal, fields = 'id,object_value,aligned_direction' } = {},
+    ) {
+      const list = [...new Set((ids || []).map(String))].slice(0, 50);
+      if (!list.length) return {};
+      const payload = await graph(
+        '',
+        { ids: list.join(','), fields },
+        { signal },
+      );
+      return payload && typeof payload === 'object' ? payload : {};
+    },
+
+    /** Detections (segmentation polygons + values) inside one image. */
+    async getImageDetections(imageId, { signal } = {}) {
+      const payload = await graph(
+        `${String(imageId)}/detections`,
+        { fields: 'id,value,geometry,created_at' },
+        { signal },
+      );
+      return Array.isArray(payload?.data) ? payload.data : [];
+    },
+
     spriteUrl(value) {
       return `${urls.sprite}/${encodeURIComponent(value)}.svg`;
     },

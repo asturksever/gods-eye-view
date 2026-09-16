@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium';
 import { imageConeGlyph } from './glyphs.js';
+import { passesImageryFilter } from './coverage.js';
 import {
   COLORS,
   IMAGE_CONE_MIN_SPACING_M,
@@ -88,6 +89,7 @@ export function createSequences({ state, source, parts }) {
     const cone = imageConeGlyph({ size: 32, color: COLORS.image });
     const ring = imageConeGlyph({ size: 32, color: COLORS.pano, pano: true });
     for (const image of images) {
+      if (!passesImageryFilter(image, state.coverage.filter)) continue;
       collection.add({
         id: `${PICK_PREFIX.image}${image.id}`,
         position: Cesium.Cartesian3.fromDegrees(image.lon, image.lat),
@@ -187,6 +189,11 @@ export function createSequences({ state, source, parts }) {
     requestRender();
   }
 
+  /** Re-draw the current sequence's cones (after an imagery filter change). */
+  function rerender() {
+    if (state.sequence.images.length) renderCones(state.sequence.images);
+  }
+
   function hide(visible) {
     if (state.sequence.collection) state.sequence.collection.show = visible;
     if (state.street.markerCollection)
@@ -222,6 +229,7 @@ export function createSequences({ state, source, parts }) {
     select,
     clearSelection,
     setMarker,
+    rerender,
     setVisible: hide,
     destroy,
   };

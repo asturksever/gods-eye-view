@@ -4,6 +4,7 @@ import {
   bboxAreaDeg2,
   countTilesForBbox,
   coverageZoomForHeight,
+  overviewZoomForHeight,
   latToTileY,
   lonToTileX,
   normalizeBbox,
@@ -73,4 +74,14 @@ test('coverageZoomForHeight steps from coarse to z14 as the camera descends', ()
   assert.equal(coverageZoomForHeight(3_000), 13);
   assert.equal(coverageZoomForHeight(500), 14);
   assert.equal(coverageZoomForHeight(Number.NaN), null);
+});
+
+test('overviewZoomForHeight covers the globe above the sequence ceiling', () => {
+  assert.equal(overviewZoomForHeight(30_000), null);
+  assert.equal(overviewZoomForHeight(100_000), 5);
+  assert.equal(overviewZoomForHeight(900_000), 4);
+  assert.equal(overviewZoomForHeight(2_000_000), 3);
+  assert.equal(overviewZoomForHeight(5_000_000), 2);
+  assert.equal(overviewZoomForHeight(10_000_000), 1);
+  assert.equal(overviewZoomForHeight(25_000_000), 0);
 });

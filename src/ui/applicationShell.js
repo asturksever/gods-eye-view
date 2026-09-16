@@ -15,6 +15,7 @@ import { CockpitCoordinator } from './cockpitCoordinator.js';
 import { ContextControls } from './context.js';
 import { CctvControls } from './cctv.js';
 import { MapillaryControls } from './mapillaryControls.js';
+import { makeFloating } from './floatingWindow.js';
 import { RadioControls } from './radio.js';
 import { LocationNavigation } from './locationNavigation.js';
 import { bindClearLayersControl } from './layers.js';
@@ -937,9 +938,39 @@ export class StyleManager extends ShellFacade {
             origin: 'user',
           }),
         showToast: (message) => this._showToast(message),
+        isMapStackActive: (id) =>
+          this.mapStackController?.getActiveId?.() === id,
+        setMapStack: async (id) => {
+          const controller = this.mapStackController;
+          if (!controller) return { error: 'Map stacks are unavailable' };
+          if (!controller.isStackAvailable?.(id))
+            return {
+              error:
+                controller._unavailableReason?.(controller.getStack?.(id)) ||
+                'Google 3D needs a Google Maps key or Cesium ion token (POWER UP)',
+            };
+          try {
+            const state = await controller.setStack(id);
+            return state?.lastError && state.activeId !== id
+              ? { error: state.lastError }
+              : { ok: true };
+          } catch (error) {
+            return { error: error?.message || 'Map stack switch failed' };
+          }
+        },
       },
     });
     this._mapillaryControls.connect();
+    // The CCTV window overlaps the Mapillary dock on narrow layouts; let it
+    // be dragged out of the left stack and resized like the dock.
+    this._cctvFloating?.destroy();
+    this._cctvFloating = makeFloating(this._cctvPanel, {
+      handle: this._cctvPanel?.querySelector('.panel-header'),
+      storageKey: 'gev:cctv-panel:window:v1',
+      minWidth: 300,
+      minHeight: 160,
+      onChange: () => this._syncCctvPanelViewport?.(),
+    });
   }
 
   /**
@@ -1494,6 +1525,7 @@ export class StyleManager extends ShellFacade {
     this._clearLayersControl?.destroy();
     this._cctvControls?.destroy();
     this._mapillaryControls?.destroy();
+    this._cctvFloating?.destroy();
     this._radioControls?.destroy();
     this._cockpitCoordinator.stop();
     this._visualSettings.stop();

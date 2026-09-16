@@ -1,5 +1,5 @@
 import * as Cesium from 'cesium';
-import { visibleBbox } from './coverage.js';
+import { passesImageryFilter, visibleBbox } from './coverage.js';
 import { countTilesForBbox, normalizeBbox } from './tileMath.js';
 import { groupCountsByLabel } from './values.js';
 
@@ -171,6 +171,7 @@ export function createQuery({ state, source, parts }) {
 
   async function runFeatures(plan, area, signal) {
     const features = state.features;
+    parts.objects3d.clear();
     parts.features.reset();
     Object.assign(features, {
       bbox: area.bbox,
@@ -217,12 +218,16 @@ export function createQuery({ state, source, parts }) {
     features.loading = false;
     notify();
     await parts.features.upgradeToIcons();
+    if (state.objects3d.enabled) parts.objects3d.rebuild();
     state.query.answer = `${plan.answer} ${summarizeResults(features)}`;
     notify();
   }
 
   async function runNearest(plan, area, signal) {
-    const found = await nearestImageAround(area.center, signal);
+    const found = await nearestImageAround(area.center, signal, {
+      preferPano:
+        plan.prefer_pano === true || state.coverage.filter.pano === 'pano',
+    });
     if (!found)
       throw new Error(
         `No Mapillary imagery within ${NEAREST_RING_M[NEAREST_RING_M.length - 1] + 50} m of ${area.label || 'that point'}`,
@@ -236,7 +241,11 @@ export function createQuery({ state, source, parts }) {
    * geocoded centre sits inside a large footprint. Probe the centre first,
    * then rings of points around it, and keep the closest hit overall.
    */
-  async function nearestImageAround(center, signal) {
+  async function nearestImageAround(
+    center,
+    signal,
+    { preferPano = false } = {},
+  ) {
     const rings = [[center]];
     for (const ring of NEAREST_RING_M) {
       const probes = [];
@@ -264,6 +273,7 @@ export function createQuery({ state, source, parts }) {
         ),
       );
       let best = null;
+      let fallback = null;
       for (const images of results)
         for (const image of images) {
           const coordinates =
@@ -274,9 +284,28 @@ export function createQuery({ state, source, parts }) {
             lon: coordinates[0],
             lat: coordinates[1],
           });
-          if (!best || distanceM < best.distanceM) best = { image, distanceM };
+          const record = {
+            isPano: image.is_pano === true,
+            capturedAt: Number(image.captured_at) || 0,
+          };
+          // The dock's imagery filter is a hard constraint; a 360° preference
+          // from the request only breaks ties within the filtered set.
+          const candidate = {
+            image,
+            distanceM,
+            score: distanceM + (preferPano && !record.isPano ? 1000 : 0),
+          };
+          if (!fallback || distanceM < fallback.distanceM) fallback = candidate;
+          if (!passesImageryFilter(record, state.coverage.filter)) continue;
+          if (!best || candidate.score < best.score) best = candidate;
         }
       if (best) return best;
+      if (
+        fallback &&
+        state.coverage.filter.pano === 'all' &&
+        !state.coverage.filter.sinceMs
+      )
+        return fallback;
     }
     return null;
   }
@@ -416,6 +445,7 @@ export function createQuery({ state, source, parts }) {
   /** Drop the drawn results and the conversational context. */
   function clear() {
     abort();
+    parts.objects3d.clear();
     parts.features.reset();
     parts.coverage.setResting(false);
     Object.assign(state.query, {
