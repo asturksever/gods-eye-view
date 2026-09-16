@@ -6,7 +6,14 @@ export const MAPILLARY_TILE_HOST = 'https://tiles.mapillary.com/maps/vtp';
 /** Public tile layer names this proxy exposes, mapped to Mapillary's ids. */
 export const TILE_LAYERS = Object.freeze({
   // Overview points (z0–5), sequences (z6–14) and image points (z14 only).
-  coverage: Object.freeze({ upstream: 'mly1_public', minZoom: 0, maxZoom: 14 }),
+  // The z14 `image` point layer is ~98% of a 10 MB tile and unused here:
+  // image positions come from the graph API per sequence. Dropped in transit.
+  coverage: Object.freeze({
+    upstream: 'mly1_public',
+    minZoom: 0,
+    maxZoom: 14,
+    dropLayers: Object.freeze(['image']),
+  }),
   // Point map features such as fire hydrants, benches and utility poles.
   points: Object.freeze({
     upstream: 'mly_map_feature_point',

@@ -14,6 +14,9 @@ export function createViewerBridge({ state, source, parts }) {
   let viewer = null;
   let Library = null;
   let pendingOpen = null;
+  let prewarming = false;
+  /** In-flight viewer construction, so pre-warm and open never build two. */
+  let creating = null;
 
   function requestRender() {
     render?.governorRequestRender?.('mapillary-viewer');
@@ -121,13 +124,9 @@ export function createViewerBridge({ state, source, parts }) {
             : null;
         state.street.creator = image.creatorUsername || null;
         // mapillary.com highlights the selected image's sequence on the map;
-        // mirror that so the surrounding captures are one click away.
-        if (
-          image.sequenceId &&
-          image.sequenceId !== state.sequence.selectedId &&
-          state.enabled
-        )
-          parts.sequences.select(image.sequenceId);
+        // mirror that once the image itself is on screen, so the sequence
+        // lookup never competes with the image download.
+        if (!state.street.loading) selectCurrentSequence();
       }
       parts.sequences.setMarker(state.street.position, state.street.bearing);
       followCamera();
@@ -137,8 +136,40 @@ export function createViewerBridge({ state, source, parts }) {
     }
   }
 
-  async function ensureViewer(container) {
+  function selectCurrentSequence() {
+    const { sequenceId } = state.street;
+    if (sequenceId && state.enabled && sequenceId !== state.sequence.selectedId)
+      parts.sequences.select(sequenceId);
+  }
+
+  /**
+   * Load the library and stand the viewer up ahead of the first image, so
+   * opening one only costs the image download. Safe to call repeatedly.
+   */
+  async function prewarm(container = state.street.host) {
+    if (prewarming || !state.enabled) return;
+    prewarming = true;
+    try {
+      await ensureLibrary();
+      if (container && state.enabled && !viewer) await ensureViewer(container);
+    } catch {
+      /* the real open reports errors */
+    } finally {
+      prewarming = false;
+    }
+  }
+
+  function ensureViewer(container) {
     if (viewer && state.street.container === container) return viewer;
+    if (creating?.container === container) return creating.promise;
+    const promise = createViewer(container).finally(() => {
+      if (creating?.promise === promise) creating = null;
+    });
+    creating = { container, promise };
+    return promise;
+  }
+
+  async function createViewer(container) {
     destroyViewer();
     const { Viewer } = await ensureLibrary();
     viewer = new Viewer({
@@ -187,6 +218,7 @@ export function createViewerBridge({ state, source, parts }) {
       if (pendingOpen === id) state.street.loading = false;
       state.notify?.();
     }
+    if (pendingOpen === id && !state.street.error) selectCurrentSequence();
   }
 
   function clearHighlight() {
@@ -291,9 +323,10 @@ export function createViewerBridge({ state, source, parts }) {
     state.street.container = null;
   }
 
+  /** Close the image. The viewer instance is kept warm for the next open. */
   function close() {
     pendingOpen = null;
-    destroyViewer();
+    clearHighlight();
     Object.assign(state.street, {
       open: false,
       follow: false,
@@ -317,8 +350,12 @@ export function createViewerBridge({ state, source, parts }) {
     setFollow,
     setRenderMode,
     resize,
+    prewarm,
     lookAtPosition,
     highlightDetections,
-    destroy: close,
+    destroy() {
+      close();
+      destroyViewer();
+    },
   };
 }

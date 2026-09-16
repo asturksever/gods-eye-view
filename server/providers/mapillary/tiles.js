@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
+import { stripTileLayers } from './trim.js';
 import {
   MAPILLARY_TILE_HOST,
   TILE_LAYERS,
@@ -54,6 +55,7 @@ export function normalizeTileAddress({ layer, z, x, y }) {
   return {
     layer,
     upstream: spec.upstream,
+    dropLayers: spec.dropLayers || [],
     z: zi,
     x: xi,
     y: yi,
@@ -146,6 +148,20 @@ async function fetchUpstream(address, signal) {
   return bytes;
 }
 
+/** Strip the layers this proxy never serves for the address's layer spec. */
+function trim(address, bytes) {
+  if (!address.dropLayers.length || !bytes.length) return bytes;
+  try {
+    return stripTileLayers(bytes, address.dropLayers);
+  } catch (error) {
+    console.warn(
+      '[Mapillary Proxy] tile trim failed, serving raw:',
+      error?.message || error,
+    );
+    return bytes;
+  }
+}
+
 /**
  * Fetch one tile through memory, disk and in-flight coalescing, then
  * Mapillary. Returns the raw protobuf bytes (empty for a tile with no data).
@@ -159,12 +175,16 @@ export async function fetchTile(request, { signal } = {}) {
   if (memory) return { bytes: memory, source: 'memory', address };
   const disk = await readDisk(address);
   if (disk) {
-    memoryPut(address.key, disk);
-    return { bytes: disk, source: 'disk', address };
+    // Older cache files may still hold the untrimmed tile: trim and replace.
+    const bytes = trim(address, disk);
+    if (bytes !== disk) writeDisk(address, bytes);
+    memoryPut(address.key, bytes);
+    return { bytes, source: 'disk', address };
   }
   const pending = _inFlight.get(address.key);
   if (pending) return { bytes: await pending, source: 'inflight', address };
   const work = fetchUpstream(address, signal)
+    .then((raw) => trim(address, raw))
     .then((bytes) => {
       memoryPut(address.key, bytes);
       writeDisk(address, bytes);

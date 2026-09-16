@@ -17,6 +17,15 @@ import {
   PICK_PREFIX,
 } from './policy.js';
 
+/** Old-zoom tiles are kept at most this long after a zoom change. */
+const STALE_TILE_MAX_MS = 6000;
+/**
+ * Sequences per ground primitive. Ground polyline geometry is built on a
+ * worker in proportion to the instance count, so smaller batches put the
+ * first lines on screen sooner instead of one big batch arriving late.
+ */
+const SEQUENCE_PRIMITIVE_BATCH = 120;
+
 const PER_TILE_SEQUENCE_CAP = Math.floor(
   COVERAGE_MAX_SEQUENCES / COVERAGE_MAX_TILES,
 );
@@ -146,7 +155,8 @@ export function createCoverage({ state, source }) {
     return state.coverage.filter;
   }
 
-  function buildSequencePrimitive(sequences) {
+  /** One or more ground primitives for a tile's sequences, in draw batches. */
+  function buildSequencePrimitives(sequences) {
     const now = Date.now();
     const instances = [];
     for (const sequence of sequences) {
@@ -178,14 +188,18 @@ export function createCoverage({ state, source }) {
         }),
       );
     }
-    if (!instances.length) return null;
-    return new Cesium.GroundPolylinePrimitive({
-      geometryInstances: instances,
-      appearance: new Cesium.PolylineColorAppearance(),
-      classificationType: Cesium.ClassificationType.BOTH,
-      asynchronous: true,
-      allowPicking: true,
-    });
+    const primitives = [];
+    for (let i = 0; i < instances.length; i += SEQUENCE_PRIMITIVE_BATCH)
+      primitives.push(
+        new Cesium.GroundPolylinePrimitive({
+          geometryInstances: instances.slice(i, i + SEQUENCE_PRIMITIVE_BATCH),
+          appearance: new Cesium.PolylineColorAppearance(),
+          classificationType: Cesium.ClassificationType.BOTH,
+          asynchronous: true,
+          allowPicking: true,
+        }),
+      );
+    return { primitives, count: instances.length };
   }
 
   function buildOverviewCollection(points) {
@@ -214,13 +228,12 @@ export function createCoverage({ state, source }) {
     const scene = state.viewer?.scene;
     if (!scene) return;
     if (entry.kind === 'sequence') {
-      entry.primitive = buildSequencePrimitive(entry.sequenceList);
-      entry.count = entry.primitive
-        ? entry.primitive.geometryInstances.length
-        : 0;
-      if (entry.primitive) {
-        entry.primitive.show = !state.coverage.resting;
-        scene.groundPrimitives.add(entry.primitive);
+      const { primitives, count } = buildSequencePrimitives(entry.sequenceList);
+      entry.primitives = primitives;
+      entry.count = count;
+      for (const primitive of primitives) {
+        primitive.show = !state.coverage.resting;
+        scene.groundPrimitives.add(primitive);
       }
     } else {
       const { collection, count } = buildOverviewCollection(entry.points);
@@ -233,16 +246,23 @@ export function createCoverage({ state, source }) {
   }
 
   function detachPrimitive(entry) {
-    if (!entry.primitive) return;
     const scene = state.viewer?.scene;
-    try {
-      if (entry.kind === 'sequence')
-        scene?.groundPrimitives?.remove(entry.primitive);
-      else scene?.primitives?.remove(entry.primitive);
-    } catch {
-      /* already gone */
+    for (const primitive of entry.primitives || []) {
+      try {
+        scene?.groundPrimitives?.remove(primitive);
+      } catch {
+        /* already gone */
+      }
     }
-    entry.primitive = null;
+    entry.primitives = [];
+    if (entry.primitive) {
+      try {
+        scene?.primitives?.remove(entry.primitive);
+      } catch {
+        /* already gone */
+      }
+      entry.primitive = null;
+    }
   }
 
   function removeTile(key) {
@@ -261,14 +281,22 @@ export function createCoverage({ state, source }) {
     state.coverage.loading++;
     notify();
     try {
-      if (kind === 'sequence') await ensureTerrainReady();
-      const bytes = await source.getTile('coverage', tile.z, tile.x, tile.y, {
+      // Fetch and the one-time terrain-height table load run side by side.
+      const fetching = source.getTile('coverage', tile.z, tile.x, tile.y, {
         signal: controller.signal,
       });
-      if (controller.signal.aborted || generation !== state.coverage.generation)
+      if (kind === 'sequence') await ensureTerrainReady();
+      const bytes = await fetching;
+      // A refresh that still wants this tile must not throw the bytes away;
+      // only an abort (tile no longer wanted, or zoom changed) does.
+      if (
+        controller.signal.aborted ||
+        kind !== state.coverage.kind ||
+        tile.z !== state.coverage.zoom
+      )
         return;
       const decoded = decodeCoverageTile(bytes, tile);
-      const entry = { kind, primitive: null, count: 0 };
+      const entry = { kind, primitive: null, primitives: [], count: 0 };
       if (kind === 'sequence') {
         // Newest first, capped per tile so a dense city stays within budget.
         const sequences = decoded.sequences
@@ -293,8 +321,38 @@ export function createCoverage({ state, source }) {
     } finally {
       state.coverage.pending.delete(key);
       state.coverage.loading = Math.max(0, state.coverage.loading - 1);
+      if (!state.coverage.pending.size) purgeStale();
       notify();
     }
+  }
+
+  /** Drop the previous zoom's tiles once the new ones are on screen. */
+  function purgeStale() {
+    clearTimeout(state.coverage.staleTimer);
+    state.coverage.staleTimer = null;
+    if (!state.coverage.stale.size) return;
+    for (const entry of state.coverage.stale.values()) detachPrimitive(entry);
+    state.coverage.stale.clear();
+    requestRender();
+  }
+
+  /**
+   * Move every loaded tile to the stale set instead of removing it, so the
+   * old zoom stays visible while the new zoom streams in (no blank globe).
+   */
+  function retire() {
+    for (const controller of state.coverage.pending.values())
+      controller.abort();
+    state.coverage.pending.clear();
+    state.coverage.loading = 0;
+    for (const [key, entry] of state.coverage.tiles) {
+      const previous = state.coverage.stale.get(key);
+      if (previous) detachPrimitive(previous);
+      state.coverage.stale.set(key, entry);
+    }
+    state.coverage.tiles.clear();
+    clearTimeout(state.coverage.staleTimer);
+    state.coverage.staleTimer = setTimeout(purgeStale, STALE_TILE_MAX_MS);
   }
 
   function notify() {
@@ -322,7 +380,7 @@ export function createCoverage({ state, source }) {
     }
     state.coverage.hint = '';
     if (zoom !== state.coverage.zoom || kind !== state.coverage.kind) {
-      clear();
+      retire();
       state.coverage.zoom = zoom;
       state.coverage.kind = kind;
     }
@@ -377,6 +435,7 @@ export function createCoverage({ state, source }) {
     state.coverage.pending.clear();
     state.coverage.loading = 0;
     for (const key of [...state.coverage.tiles.keys()]) removeTile(key);
+    purgeStale();
     state.coverage.zoom = null;
     state.coverage.kind = null;
     requestRender();
@@ -396,6 +455,7 @@ export function createCoverage({ state, source }) {
         : current.sinceMs;
     if (pano === current.pano && sinceMs === current.sinceMs) return;
     state.coverage.filter = { pano, sinceMs };
+    purgeStale();
     for (const entry of state.coverage.tiles.values()) {
       detachPrimitive(entry);
       attachPrimitive(entry);
@@ -418,17 +478,20 @@ export function createCoverage({ state, source }) {
     const instanceId = `${PICK_PREFIX.sequence}${id}`;
     for (const entry of state.coverage.tiles.values()) {
       const sequence = entry.sequences.get(id);
-      if (!sequence || !entry.primitive?.ready) continue;
-      try {
-        const attributes =
-          entry.primitive.getGeometryInstanceAttributes(instanceId);
-        if (attributes)
-          attributes.color = Cesium.ColorGeometryInstanceAttribute.toValue(
-            sequenceColor(sequence, { selected }),
-            attributes.color,
-          );
-      } catch {
-        /* instance not in this primitive */
+      if (!sequence) continue;
+      for (const primitive of entry.primitives || []) {
+        if (!primitive.ready) continue;
+        try {
+          const attributes =
+            primitive.getGeometryInstanceAttributes(instanceId);
+          if (attributes)
+            attributes.color = Cesium.ColorGeometryInstanceAttribute.toValue(
+              sequenceColor(sequence, { selected }),
+              attributes.color,
+            );
+        } catch {
+          /* instance not in this primitive */
+        }
       }
     }
     requestRender();
@@ -438,8 +501,9 @@ export function createCoverage({ state, source }) {
   function setResting(resting) {
     state.coverage.resting = resting === true;
     for (const entry of state.coverage.tiles.values())
-      if (entry.primitive && entry.kind === 'sequence')
-        entry.primitive.show = !state.coverage.resting;
+      if (entry.kind === 'sequence')
+        for (const primitive of entry.primitives || [])
+          primitive.show = !state.coverage.resting;
     requestRender();
   }
 

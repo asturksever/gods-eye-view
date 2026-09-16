@@ -16,6 +16,9 @@ export function createState({ services }) {
       zoom: null,
       /** @type {Map<string, {primitive: object|null, sequences: Map<string, object>, count: number}>} */
       tiles: new Map(),
+      /** Tiles from the previous zoom, kept on screen until replacements land. */
+      stale: new Map(),
+      staleTimer: null,
       pending: new Map(),
       generation: 0,
       loading: 0,
@@ -32,6 +35,8 @@ export function createState({ services }) {
     sequence: {
       selectedId: null,
       images: [],
+      /** @type {Map<string, Array<object>>} recent sequences' thinned images */
+      cache: new Map(),
       collection: null,
       loading: false,
       abort: null,

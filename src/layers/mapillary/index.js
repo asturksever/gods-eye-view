@@ -106,6 +106,13 @@ export function createMapillaryLayer({ source, services = {} }) {
     },
   };
 
+  /** Run low-priority work when the browser is idle (or soon, headless). */
+  function scheduleIdle(task) {
+    if (typeof globalThis.requestIdleCallback === 'function')
+      globalThis.requestIdleCallback(() => task(), { timeout: 1500 });
+    else setTimeout(task, 200);
+  }
+
   let notifyQueued = false;
   function notify() {
     if (notifyQueued) return;
@@ -240,6 +247,7 @@ export function createMapillaryLayer({ source, services = {} }) {
       parts.selection.install(viewer);
       parts.coverage.attach(viewer);
       if (!state.status) refreshStatus();
+      scheduleIdle(() => parts.viewer.prewarm());
       notify();
     },
 
@@ -253,7 +261,7 @@ export function createMapillaryLayer({ source, services = {} }) {
       parts.coverage.clear();
       parts.sequences.clearSelection();
       parts.selection.uninstall();
-      parts.viewer.close();
+      parts.viewer.destroy();
       parts.sequences.setVisible(false);
       parts.features.setVisible(false);
       notify();
@@ -313,6 +321,8 @@ export function createMapillaryLayer({ source, services = {} }) {
     attachViewerHost(element) {
       state.street.host = element || null;
       if (element && state.street.open) parts.viewer.resize();
+      if (element && state.enabled)
+        scheduleIdle(() => parts.viewer.prewarm(element));
     },
     runQuery: (prompt) => parts.query.run(prompt),
     /** Imagery filter for coverage, cones and nearest-image lookups. */

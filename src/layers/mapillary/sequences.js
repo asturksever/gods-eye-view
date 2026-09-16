@@ -8,6 +8,9 @@ import {
   PICK_PREFIX,
 } from './policy.js';
 
+/** How many recently viewed sequences keep their image list in memory. */
+const SEQUENCE_CACHE_SIZE = 40;
+
 /** Approximate metres between two lon/lat points (small distances). */
 function metresBetween(a, b) {
   const lat = ((a.lat + b.lat) / 2) * (Math.PI / 180);
@@ -108,17 +111,39 @@ export function createSequences({ state, source, parts }) {
     requestRender();
   }
 
+  function remember(sequenceId, images) {
+    const { cache } = state.sequence;
+    cache.delete(sequenceId);
+    cache.set(sequenceId, images);
+    while (cache.size > SEQUENCE_CACHE_SIZE)
+      cache.delete(cache.keys().next().value);
+  }
+
   /** Select a sequence: highlight its line and load its image cones. */
   async function select(sequenceId) {
     if (!sequenceId || !state.viewer) return;
+    if (
+      state.sequence.selectedId === sequenceId &&
+      state.sequence.images.length
+    )
+      return;
     if (state.sequence.selectedId && state.sequence.selectedId !== sequenceId)
       parts.coverage.recolorSequence(state.sequence.selectedId, false);
     state.sequence.abort?.abort();
+    state.sequence.selectedId = sequenceId;
+    parts.coverage.recolorSequence(sequenceId, true);
+    const cached = state.sequence.cache.get(sequenceId);
+    if (cached) {
+      state.sequence.abort = null;
+      state.sequence.loading = false;
+      state.sequence.images = cached;
+      renderCones(cached);
+      state.notify?.();
+      return;
+    }
     const controller = new AbortController();
     state.sequence.abort = controller;
-    state.sequence.selectedId = sequenceId;
     state.sequence.loading = true;
-    parts.coverage.recolorSequence(sequenceId, true);
     state.notify?.();
     try {
       const records = await source.getSequenceImages(sequenceId, {
@@ -131,6 +156,7 @@ export function createSequences({ state, source, parts }) {
           .filter(Boolean)
           .sort((a, b) => a.capturedAt - b.capturedAt),
       );
+      remember(sequenceId, images);
       state.sequence.images = images;
       renderCones(images);
     } catch (error) {
