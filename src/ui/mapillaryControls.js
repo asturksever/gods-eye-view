@@ -210,7 +210,22 @@ export class MapillaryControls {
   setViewerExpanded(expanded) {
     if (!this.root) return;
     const on = expanded === true;
+    const wrap = this._elements.viewerWrap;
+    if (on === this.root.classList.contains('mly-viewer-expanded')) return;
     this.root.classList.toggle('mly-viewer-expanded', on);
+    if (wrap) {
+      if (on) {
+        // Lift the viewer out of the dock: the dock's backdrop-filter would
+        // otherwise pin a fixed-position child inside the panel.
+        this._wrapHome = { parent: wrap.parentNode, next: wrap.nextSibling };
+        document.body.appendChild(wrap);
+        wrap.classList.add('mly-viewer-wrap-expanded');
+      } else if (this._wrapHome?.parent) {
+        wrap.classList.remove('mly-viewer-wrap-expanded');
+        this._wrapHome.parent.insertBefore(wrap, this._wrapHome.next);
+        this._wrapHome = null;
+      }
+    }
     const button = this._elements.viewerExpand;
     if (button) {
       button.textContent = on ? '⤡ SHRINK' : '⤢ EXPAND';
@@ -429,6 +444,7 @@ export class MapillaryControls {
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.setViewerExpanded(false);
     this.listeners.abort();
     this._floating?.destroy();
     this._unsubscribe?.();

@@ -563,7 +563,9 @@ body.cockpit-mode #mapillary-dock {
   background: rgba(10, 10, 15, 0.75);
 }
 
-#mapillary-dock.mly-viewer-expanded .mly-viewer-wrap {
+/* The dock's backdrop-filter makes it the containing block for fixed
+   descendants, so the expanded viewer is re-parented to <body>. */
+.mly-viewer-wrap-expanded {
   position: fixed;
   left: 4vw;
   right: 4vw;
@@ -572,16 +574,36 @@ body.cockpit-mode #mapillary-dock {
   z-index: 141;
   display: flex;
   flex-direction: column;
+  font-family: var(--font-mono);
   border-color: rgba(0, 212, 255, 0.55);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
 }
 
-#mapillary-dock.mly-viewer-expanded .mly-viewer {
+.mly-viewer-wrap-expanded .mly-viewer {
   flex: 1 1 auto;
   min-height: 0;
   aspect-ratio: auto;
 }
 
-#mapillary-dock.mly-viewer-expanded .mly-image-meta {
+.mly-viewer-wrap-expanded .mly-image-meta {
   font-size: 0.64rem;
+}
+
+.mly-viewer-wrap-expanded .mly-viewer-tools {
+  top: 10px;
+  left: 10px;
+}
+
+.mly-viewer-wrap-expanded .mly-viewer-tools .scene-btn {
+  padding: 8px 14px;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  color: var(--text-primary);
+  border-color: rgba(0, 212, 255, 0.6);
+  background: rgba(10, 10, 15, 0.82);
+}
+
+.mly-viewer-wrap-expanded .mly-viewer-tools .scene-btn::after {
+  content: ' · ESC';
+  color: var(--text-secondary);
 }
