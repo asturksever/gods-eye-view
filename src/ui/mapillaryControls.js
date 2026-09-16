@@ -1,6 +1,7 @@
 import { makeFloating } from './floatingWindow.js';
 
 const DOCK_STORAGE_KEY = 'gev:mapillary-dock:collapsed';
+const DOCK_MINIMIZED_KEY = 'gev:mapillary-dock:minimized';
 const DOCK_WINDOW_KEY = 'gev:mapillary-dock:window:v1';
 const RENDER_MODE_KEY = 'gev:mapillary:render-mode';
 const MAPILLARY_APP_URL = 'https://www.mapillary.com/app/';
@@ -39,6 +40,7 @@ export class MapillaryControls {
     this._elements = this._collect();
     this._bind();
     this._restoreCollapsed();
+    this._restoreMinimized();
   }
 
   _collect() {
@@ -48,6 +50,9 @@ export class MapillaryControls {
       body: byId('mly-body'),
       statusChip: byId('mly-status-chip'),
       enableBtn: byId('mly-enable-btn'),
+      minimizeBtn: byId('mly-minimize-btn'),
+      minimized: byId('mly-minimized'),
+      minimizedBadge: byId('mly-minimized-badge'),
       form: byId('mly-query-form'),
       input: byId('mly-query-input'),
       runBtn: byId('mly-query-run'),
@@ -147,6 +152,8 @@ export class MapillaryControls {
       });
       this._resizeObserver.observe(el.viewer);
     }
+    this.listen(el.minimizeBtn, 'click', () => this.setMinimized(true));
+    this.listen(el.minimized, 'click', () => this.setMinimized(false));
     this.listen(el.enableBtn, 'click', () => this._toggleEnabled());
     this.listen(el.form, 'submit', (event) => {
       event.preventDefault();
@@ -250,6 +257,61 @@ export class MapillaryControls {
     this.setCollapsed(collapsed, { persist: false });
   }
 
+  _restoreMinimized() {
+    let minimized = false;
+    try {
+      minimized = localStorage.getItem(DOCK_MINIMIZED_KEY) === '1';
+    } catch {
+      /* storage unavailable */
+    }
+    this.setMinimized(minimized, { persist: false });
+  }
+
+  /**
+   * Shrink the whole panel to a round Mapillary logo, or bring it back.
+   * The logo carries the layer's on/off state and a result-count badge.
+   */
+  setMinimized(minimized, { persist = true } = {}) {
+    if (!this.root) return;
+    const on = minimized === true;
+    if (on) this.setViewerExpanded(false);
+    this.root.classList.toggle('minimized', on);
+    if (this._elements.minimized) this._elements.minimized.hidden = !on;
+    this.root.setAttribute('aria-expanded', String(!on));
+    if (!on) {
+      this.setCollapsed(false, { persist });
+      requestAnimationFrame(() => this.mapillary.resizeViewer?.());
+    }
+    if (persist) {
+      try {
+        localStorage.setItem(DOCK_MINIMIZED_KEY, on ? '1' : '0');
+      } catch {
+        /* storage unavailable */
+      }
+    }
+    this._renderMinimized(this._state);
+  }
+
+  isMinimized() {
+    return this.root?.classList.contains('minimized') === true;
+  }
+
+  _renderMinimized(state) {
+    const el = this._elements;
+    if (!el.minimized) return;
+    const enabled = state?.enabled === true;
+    el.minimized.classList.toggle('is-off', !enabled);
+    const total = state?.features?.total || 0;
+    if (el.minimizedBadge) {
+      el.minimizedBadge.hidden = !(enabled && total > 0);
+      el.minimizedBadge.textContent =
+        total >= 1000 ? `${Math.round(total / 1000)}k` : String(total);
+    }
+    el.minimized.title = enabled
+      ? `Open Mapillary · Street Level on${total ? ` · ${total.toLocaleString()} results` : ''}`
+      : 'Open Mapillary';
+  }
+
   /** Grow the street-level viewer to most of the screen, or shrink it back. */
   setViewerExpanded(expanded) {
     if (!this.root) return;
@@ -326,6 +388,11 @@ export class MapillaryControls {
 
     if (enabled && this._wasEnabled === false) this.setCollapsed(false);
     this._wasEnabled = enabled;
+    this._renderMinimized(state);
+    // Imagery needs the panel: opening an image brings a minimized dock back.
+    if (state.street.open && !this._wasStreetOpen && this.isMinimized())
+      this.setMinimized(false);
+    this._wasStreetOpen = state.street.open === true;
 
     el.runBtn.disabled = state.query.busy;
     el.runBtn.textContent = state.query.busy ? '…' : 'ASK';
@@ -497,8 +564,10 @@ export class MapillaryControls {
 
     if (state.query.stage !== this._lastStage) {
       this._lastStage = state.query.stage;
-      if (state.query.stage === 'done' || state.query.stage === 'error')
+      if (state.query.stage === 'done' || state.query.stage === 'error') {
         this.setCollapsed(false);
+        if (this.isMinimized()) this.setMinimized(false);
+      }
     }
   }
 
