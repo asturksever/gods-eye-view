@@ -3,7 +3,9 @@
   --mly-green: #05cb63;
   --mly-width: clamp(320px, 30vw, 460px);
   position: fixed;
-  right: 16px;
+  /* Sit beside the right context rail (DISPLAY / CONTEXT / CCTV), which owns
+     the right-hand 330px column from 26vh down, so the two never overlap. */
+  right: calc(var(--right-rail-x, 52px) + 330px + 16px);
   bottom: 3.4rem;
   z-index: 118;
   width: var(--mly-width);
@@ -542,6 +544,13 @@ body.recording-mode #mapillary-dock {
 
 body.cockpit-mode #mapillary-dock {
   display: none !important;
+}
+
+/* Not enough room beside the rail: fall back to the corner (still draggable). */
+@media (max-width: 1100px) {
+  #mapillary-dock {
+    right: 16px;
+  }
 }
 
 @media (max-width: 720px) {
