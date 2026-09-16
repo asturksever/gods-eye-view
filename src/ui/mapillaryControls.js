@@ -272,8 +272,12 @@ export class MapillaryControls {
     }
     const button = this._elements.viewerExpand;
     if (button) {
-      button.textContent = on ? '⤡ SHRINK' : '⤢ EXPAND';
+      const icon = button.querySelector('.mly-btn-icon');
+      const text = button.querySelector('.mly-btn-text');
+      if (icon) icon.textContent = on ? '⤡' : '⤢';
+      if (text) text.textContent = on ? 'SHRINK' : 'EXPAND';
       button.setAttribute('aria-pressed', String(on));
+      button.setAttribute('aria-label', on ? 'Shrink' : 'Expand');
     }
     requestAnimationFrame(() => this.mapillary.resizeViewer?.());
   }

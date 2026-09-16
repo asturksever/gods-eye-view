@@ -302,6 +302,7 @@
 
 .mly-viewer-wrap {
   position: relative;
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
@@ -403,6 +404,7 @@
 }
 
 .mly-viewer-wrap-expanded .mly-viewer-tools.mly-viewer-tools-right {
+  left: auto;
   right: 10px;
   top: 10px;
 }
@@ -701,6 +703,24 @@ body.cockpit-mode #mapillary-dock {
   padding: 4px 8px;
   font-size: 0.56rem;
   background: rgba(10, 10, 15, 0.75);
+  /* Hug the label: the playback bar MapillaryJS centres at the top needs
+     the middle of narrow viewers. */
+  flex: none;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Narrow viewer: icon-only expand button so nothing meets the playback bar. */
+@container (max-width: 380px) {
+  .mly-viewer-tools .mly-btn-text {
+    display: none;
+  }
+
+  .mly-viewer-tools .scene-btn {
+    padding: 4px 7px;
+  }
 }
 
 /* The dock's backdrop-filter makes it the containing block for fixed
