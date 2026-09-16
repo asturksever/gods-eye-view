@@ -50,12 +50,16 @@ export function createMapillaryLayer({ source, services = {} }) {
 
   // Street-level actions shared by clicks, the query engine and the UI.
   parts.street = {
-    async openImage(imageId) {
+    async openImage(imageId, { keepFeature = false } = {}) {
       const host = state.street.host;
       if (!host) {
         state.street.error = 'Open the Mapillary panel to view imagery';
         notify();
         return;
+      }
+      if (!keepFeature) {
+        parts.features.clearSelection();
+        state.street.feature = null;
       }
       await parts.viewer.open(imageId, host);
     },
@@ -88,7 +92,7 @@ export function createMapillaryLayer({ source, services = {} }) {
           imageCount: images.length,
         };
         if (!images.length) throw new Error('No image detected this feature');
-        await parts.street.openImage(images[0].id);
+        await parts.street.openImage(images[0].id, { keepFeature: true });
         await parts.viewer.highlightDetections(
           images[0].id,
           detail.object_value,
@@ -177,6 +181,7 @@ export function createMapillaryLayer({ source, services = {} }) {
         capturedAt: state.street.capturedAt,
         sequenceId: state.street.sequenceId,
         creator: state.street.creator || null,
+        renderMode: state.street.renderMode,
         feature: state.street.feature ? { ...state.street.feature } : null,
         highlight: state.street.highlight
           ? { ...state.street.highlight }
@@ -353,7 +358,16 @@ export function createMapillaryLayer({ source, services = {} }) {
         return false;
       }
     },
-    closeViewer: () => parts.viewer.close(),
+    /**
+     * Close the image and deselect it everywhere on the map: position
+     * marker, highlighted sequence and its cones, result ring and outline.
+     */
+    closeViewer() {
+      parts.viewer.close();
+      parts.features.clearSelection();
+      parts.sequences.clearSelection();
+    },
+    setViewerRenderMode: (mode) => parts.viewer.setRenderMode(mode),
     setFollow: (enabled) => parts.viewer.setFollow(enabled),
     lookAtImage: () => parts.viewer.lookAtPosition(),
     resizeViewer: () => parts.viewer.resize(),

@@ -19,6 +19,12 @@ export function createViewerBridge({ state, source, parts }) {
     render?.governorRequestRender?.('mapillary-viewer');
   }
 
+  function libraryRenderMode(mode) {
+    const { RenderMode } = Library || {};
+    if (!RenderMode) return undefined;
+    return mode === 'fill' ? RenderMode.Fill : RenderMode.Letterbox;
+  }
+
   async function ensureLibrary() {
     if (Library) return Library;
     // The viewer stylesheet is vendored into src/ui/styles/mapillary-js.css.
@@ -100,6 +106,8 @@ export function createViewerBridge({ state, source, parts }) {
       state.street.bearing = pov?.bearing ?? state.street.bearing;
       state.street.tilt = pov?.tilt ?? 0;
       if (image) {
+        if (state.street.imageId && state.street.imageId !== image.id)
+          clearHighlight();
         state.street.imageId = image.id;
         state.street.isPano = image.merged
           ? image.cameraType === 'spherical'
@@ -112,6 +120,14 @@ export function createViewerBridge({ state, source, parts }) {
             ? image.originalAltitude
             : null;
         state.street.creator = image.creatorUsername || null;
+        // mapillary.com highlights the selected image's sequence on the map;
+        // mirror that so the surrounding captures are one click away.
+        if (
+          image.sequenceId &&
+          image.sequenceId !== state.sequence.selectedId &&
+          state.enabled
+        )
+          parts.sequences.select(image.sequenceId);
       }
       parts.sequences.setMarker(state.street.position, state.street.bearing);
       followCamera();
@@ -136,6 +152,7 @@ export function createViewerBridge({ state, source, parts }) {
         tag: true,
       },
       trackResize: true,
+      renderMode: libraryRenderMode(state.street.renderMode),
     });
     state.street.container = container;
     viewer.on('image', (event) => publishPose(event.image));
@@ -169,6 +186,16 @@ export function createViewerBridge({ state, source, parts }) {
     } finally {
       if (pendingOpen === id) state.street.loading = false;
       state.notify?.();
+    }
+  }
+
+  function clearHighlight() {
+    if (!state.street.highlight) return;
+    state.street.highlight = null;
+    try {
+      viewer?.getComponent('tag')?.removeAll();
+    } catch {
+      /* component not ready */
     }
   }
 
@@ -226,6 +253,18 @@ export function createViewerBridge({ state, source, parts }) {
     return tags.length;
   }
 
+  /** Switch between showing the whole image ('letterbox') and cropping ('fill'). */
+  function setRenderMode(mode) {
+    state.street.renderMode = mode === 'fill' ? 'fill' : 'letterbox';
+    try {
+      const value = libraryRenderMode(state.street.renderMode);
+      if (viewer && value !== undefined) viewer.setRenderMode(value);
+    } catch {
+      /* viewer not ready */
+    }
+    state.notify?.();
+  }
+
   function setFollow(enabled) {
     state.street.follow = enabled === true;
     if (state.street.follow) followCamera();
@@ -259,12 +298,14 @@ export function createViewerBridge({ state, source, parts }) {
       open: false,
       follow: false,
       imageId: null,
+      sequenceId: null,
       position: null,
       bearing: null,
       tilt: null,
       loading: false,
       error: null,
       highlight: null,
+      feature: null,
     });
     parts.sequences.setMarker(null);
     state.notify?.();
@@ -274,6 +315,7 @@ export function createViewerBridge({ state, source, parts }) {
     open,
     close,
     setFollow,
+    setRenderMode,
     resize,
     lookAtPosition,
     highlightDetections,

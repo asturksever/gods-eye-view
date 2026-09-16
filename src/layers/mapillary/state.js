@@ -78,6 +78,8 @@ export function createState({ services }) {
       error: null,
       marker: null,
       markerCollection: null,
+      /** 'letterbox' shows the whole image; 'fill' crops it to the frame. */
+      renderMode: 'letterbox',
     },
 
     objects3d: {

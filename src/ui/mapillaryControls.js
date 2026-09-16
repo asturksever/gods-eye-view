@@ -2,6 +2,15 @@ import { makeFloating } from './floatingWindow.js';
 
 const DOCK_STORAGE_KEY = 'gev:mapillary-dock:collapsed';
 const DOCK_WINDOW_KEY = 'gev:mapillary-dock:window:v1';
+const RENDER_MODE_KEY = 'gev:mapillary:render-mode';
+const MAPILLARY_APP_URL = 'https://www.mapillary.com/app/';
+
+/** Deep link to an image on mapillary.com, as the web app shares them. */
+export function mapillaryImageUrl(imageId) {
+  const id = String(imageId || '').trim();
+  if (!id) return MAPILLARY_APP_URL;
+  return `${MAPILLARY_APP_URL}?pKey=${encodeURIComponent(id)}&focus=photo`;
+}
 
 function formatDate(ms) {
   if (!Number.isFinite(ms)) return '';
@@ -61,6 +70,10 @@ export class MapillaryControls {
       closeBtn: byId('mly-viewer-close'),
       viewerWrap: byId('mly-viewer-wrap'),
       viewerExpand: byId('mly-viewer-expand'),
+      viewerFit: byId('mly-viewer-fit'),
+      imageBy: byId('mly-image-by'),
+      imageWhen: byId('mly-image-when'),
+      imageLink: byId('mly-image-link'),
       header: this.root?.querySelector('.mly-header') || null,
       viewer: byId('mly-viewer'),
       imageMeta: byId('mly-image-meta'),
@@ -103,6 +116,37 @@ export class MapillaryControls {
       )
         this.setViewerExpanded(false);
     });
+    this.listen(el.viewerFit, 'click', () => {
+      const next =
+        this._state?.street?.renderMode === 'fill' ? 'letterbox' : 'fill';
+      this.mapillary.setViewerRenderMode?.(next);
+      try {
+        localStorage.setItem(RENDER_MODE_KEY, next);
+      } catch {
+        /* storage unavailable */
+      }
+    });
+    try {
+      const stored = localStorage.getItem(RENDER_MODE_KEY);
+      if (stored === 'fill' || stored === 'letterbox')
+        this.mapillary.setViewerRenderMode?.(stored);
+    } catch {
+      /* storage unavailable */
+    }
+    // MapillaryJS only tracks window resizes; the dock resizes on its own
+    // (drag grip, expand, reflow), so watch the host element directly.
+    if (typeof ResizeObserver === 'function' && el.viewer) {
+      let queued = false;
+      this._resizeObserver = new ResizeObserver(() => {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(() => {
+          queued = false;
+          this.mapillary.resizeViewer?.();
+        });
+      });
+      this._resizeObserver.observe(el.viewer);
+    }
     this.listen(el.enableBtn, 'click', () => this._toggleEnabled());
     this.listen(el.form, 'submit', (event) => {
       event.preventDefault();
@@ -387,32 +431,45 @@ export class MapillaryControls {
     // Street-level viewer.
     const { street } = state;
     el.viewerWrap.hidden = !street.open;
+    this.root.classList.toggle('mly-has-viewer', street.open === true);
     if (!street.open && this.root.classList.contains('mly-viewer-expanded'))
       this.setViewerExpanded(false);
-    el.closeBtn.hidden = !street.open;
     el.followBtn.setAttribute('aria-pressed', String(street.follow === true));
     el.followBtn.textContent = street.follow
       ? 'STREET COCKPIT ON'
       : 'STREET COCKPIT OFF';
     el.followBtn.disabled = !street.open;
+    if (el.viewerFit) {
+      const fill = street.renderMode === 'fill';
+      el.viewerFit.textContent = fill ? 'FILL' : 'FIT';
+      el.viewerFit.title = fill
+        ? 'Filling the frame (cropped) · click to show the whole image'
+        : 'Showing the whole image · click to fill the frame';
+    }
     if (street.open) {
-      const parts = [];
-      if (street.loading) parts.push('LOADING…');
-      if (street.capturedAt)
-        parts.push(`captured ${formatDate(street.capturedAt)}`);
-      if (Number.isFinite(street.bearing))
-        parts.push(`hdg ${Math.round(street.bearing)}°`);
-      if (street.isPano) parts.push('360°');
-      if (street.creator) parts.push(`© ${street.creator}`);
-      if (street.highlight?.count)
-        parts.push(
-          `${street.highlight.count} detection${street.highlight.count === 1 ? '' : 's'} outlined`,
-        );
+      // Caption bar as on mapillary.com: "Image by …" left, date right.
+      const left = [];
+      if (street.loading) left.push('LOADING…');
       if (street.feature?.label)
-        parts.unshift(
+        left.push(
           `${street.feature.label}${street.feature.imageCount ? ` · ${street.feature.imageCount} sightings` : ''}`,
         );
-      el.imageMeta.textContent = parts.join(' · ');
+      if (street.highlight?.count)
+        left.push(
+          `${street.highlight.count} detection${street.highlight.count === 1 ? '' : 's'} outlined`,
+        );
+      if (street.creator) left.push(`Image by ${street.creator}`);
+      const right = [];
+      if (street.isPano) right.push('360°');
+      if (Number.isFinite(street.bearing))
+        right.push(`${Math.round(street.bearing)}°`);
+      if (street.capturedAt) right.push(formatDate(street.capturedAt));
+      if (el.imageBy) el.imageBy.textContent = left.join(' · ');
+      if (el.imageWhen) el.imageWhen.textContent = right.join(' · ');
+      if (el.imageLink) {
+        el.imageLink.href = mapillaryImageUrl(street.imageId);
+        el.imageLink.hidden = !street.imageId;
+      }
       this.mapillary.resizeViewer?.();
     }
 
@@ -446,6 +503,8 @@ export class MapillaryControls {
     this.destroyed = true;
     this.setViewerExpanded(false);
     this.listeners.abort();
+    this._resizeObserver?.disconnect();
+    this._resizeObserver = null;
     this._floating?.destroy();
     this._unsubscribe?.();
     this._unsubscribe = null;

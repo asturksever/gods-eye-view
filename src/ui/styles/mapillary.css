@@ -1,13 +1,16 @@
 /* ── Mapillary dock ─────────────────────────── */
 #mapillary-dock {
   --mly-green: #05cb63;
-  --mly-width: 400px;
+  --mly-width: clamp(320px, 30vw, 460px);
   position: fixed;
   right: 16px;
   bottom: 3.4rem;
   z-index: 118;
   width: var(--mly-width);
   max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 7rem);
+  display: flex;
+  flex-direction: column;
   pointer-events: auto;
   font-family: var(--font-mono);
 }
@@ -39,12 +42,13 @@
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.5),
     0 0 0 1px rgba(255, 255, 255, 0.03) inset;
-  max-height: calc(100vh - 7rem);
-  overflow-y: auto;
-  scrollbar-width: thin;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .mly-header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -125,6 +129,30 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Everything above the viewer scrolls; the viewer itself never does. */
+.mly-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding-right: 2px;
+}
+
+/* Children keep their natural height; the region scrolls instead. */
+.mly-scroll > * {
+  flex-shrink: 0;
+}
+
+#mapillary-dock.mly-has-viewer .mly-scroll {
+  /* Let the imagery win the height fight when the window is short. */
+  flex-shrink: 3;
 }
 
 .mly-kicker {
@@ -274,6 +302,10 @@
 
 .mly-viewer-wrap {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 230px;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--glass-border-hover);
@@ -282,20 +314,103 @@
 
 .mly-viewer {
   width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Intrinsic height while the dock is auto-sized; grows when floating. */
   aspect-ratio: 16 / 10;
-  min-height: 200px;
 }
 
+#mapillary-dock.gev-floating .mly-viewer,
+.mly-viewer-wrap-expanded .mly-viewer {
+  aspect-ratio: auto;
+  min-height: 180px;
+}
+
+/* Caption bar, mapillary.com style: creator left, date right. */
 .mly-image-meta {
-  padding: 6px 8px;
-  font-size: 0.56rem;
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  font-size: 0.58rem;
   letter-spacing: 0.06em;
   color: var(--text-secondary);
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-height: 26px;
+}
+
+.mly-image-by {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.mly-image-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.mly-image-link {
+  color: var(--mly-green);
+  text-decoration: none;
+  letter-spacing: 0.1em;
+}
+
+.mly-image-link:hover {
+  text-decoration: underline;
+}
+
+.mly-viewer-tools.mly-viewer-tools-right {
+  left: auto;
+  right: 6px;
+}
+
+/* Only the buttons catch clicks; the containers let the viewer through. */
+.mly-viewer-tools {
+  pointer-events: none;
+}
+
+.mly-viewer-tools > * {
+  pointer-events: auto;
+}
+
+.mly-viewer-x {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(10, 10, 15, 0.8);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all var(--transition-fast);
+}
+
+.mly-viewer-x:hover {
+  color: #0a0a0f;
+  background: #fff;
+  border-color: #fff;
+}
+
+.mly-viewer-wrap-expanded .mly-viewer-tools.mly-viewer-tools-right {
+  right: 10px;
+  top: 10px;
+}
+
+.mly-viewer-wrap-expanded .mly-viewer-x {
+  width: 40px;
+  height: 40px;
+  font-size: 1.5rem;
 }
 
 .mly-meta {
@@ -321,7 +436,26 @@ body.cockpit-mode #mapillary-dock {
     left: 16px;
     right: 16px;
     width: auto;
+    max-width: none;
     bottom: 6.4rem;
+    max-height: calc(100vh - 8rem);
+  }
+}
+
+/* Short viewports: trim the chrome so the imagery keeps its room. */
+@media (max-height: 640px) {
+  .mly-dock-inner {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  #mapillary-dock.mly-has-viewer .mly-ai-hint,
+  #mapillary-dock.mly-has-viewer .mly-suggestions {
+    display: none;
+  }
+
+  .mly-viewer-wrap {
+    min-height: 200px;
   }
 }
 
@@ -520,6 +654,10 @@ body.cockpit-mode #mapillary-dock {
   opacity: 1;
 }
 
+#mapillary-dock.gev-floating {
+  max-height: none !important;
+}
+
 #mapillary-dock.gev-floating .mly-dock-inner {
   flex: 1 1 auto;
   min-height: 0;
@@ -552,7 +690,9 @@ body.cockpit-mode #mapillary-dock {
   position: absolute;
   top: 6px;
   left: 6px;
-  z-index: 4;
+  /* Above MapillaryJS's own overlays (z 10); the corners are free — its
+     sequence bar is top-centre, bearing/zoom/attribution bottom-right. */
+  z-index: 12;
   display: flex;
   gap: 4px;
 }
@@ -583,6 +723,10 @@ body.cockpit-mode #mapillary-dock {
   flex: 1 1 auto;
   min-height: 0;
   aspect-ratio: auto;
+}
+
+.mly-viewer-wrap-expanded .mly-image-meta {
+  padding: 10px 14px;
 }
 
 .mly-viewer-wrap-expanded .mly-image-meta {
