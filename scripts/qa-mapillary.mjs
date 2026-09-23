@@ -71,6 +71,10 @@ async function main() {
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
+    // The layer swallows listener exceptions into a console warning; surface them.
+    page.on('console', (message) => {
+      if (/listener error/i.test(message.text())) errors.push(message.text());
+    });
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(
       () => Boolean(window.__godsEyeView?.dataManager),
@@ -270,17 +274,49 @@ async function main() {
           },
           { timeout: 90_000 },
         );
-        await sleep(2500);
+        const street = await page.evaluate(
+          () =>
+            window.__godsEyeView.dataManager.layers
+              .get('mapillary')
+              .module.getUIState().street,
+        );
+        assert.equal(street.error, null, `viewer error: ${street.error}`);
+        // Some images carry no creator name; the date/bearing side always fills.
+        try {
+          await page.waitForFunction(
+            () =>
+              document.getElementById('mly-image-when').textContent.trim()
+                .length > 0,
+            { timeout: 30_000 },
+          );
+        } catch (error) {
+          const dump = await page.evaluate(() => {
+            const u = window.__godsEyeView.dataManager.layers
+              .get('mapillary')
+              .module.getUIState();
+            return {
+              street: u.street,
+              wrapHidden: document.getElementById('mly-viewer-wrap').hidden,
+              collapsed: document
+                .getElementById('mapillary-panel')
+                .classList.contains('collapsed'),
+            };
+          });
+          throw new Error(
+            `caption never filled: ${JSON.stringify(dump)}; errors=${JSON.stringify(errors)}`,
+            { cause: error },
+          );
+        }
         const view = await page.evaluate(() => ({
           hidden: document.getElementById('mly-viewer-wrap').hidden,
-          by: document.getElementById('mly-image-by').textContent,
+          when: document.getElementById('mly-image-when').textContent.trim(),
           width: Math.round(
             document.getElementById('mly-viewer').getBoundingClientRect().width,
           ),
         }));
         assert.equal(view.hidden, false);
         assert.ok(view.width > 200);
-        assert.match(view.by, /Image by/);
+        assert.ok(view.when.length > 0, 'caption shows the capture date');
       },
     );
     await step(
