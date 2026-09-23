@@ -31,7 +31,14 @@ test('explicit build inputs preserve browser-only defines, plugin order and loop
     'import.meta.env.GOOGLE_MAPS_API_KEY': '"browser-fixture"',
     'import.meta.env.CESIUM_ION_TOKEN': '"ion-fixture"',
     'import.meta.env.MAPILLARY_CLIENT_TOKEN': '""',
+    'import.meta.env.GEV_VOICE_UI': '"on"',
   });
+  assert.equal(
+    createBrowserViteConfig({ voiceUi: 'OFF' }).define[
+      'import.meta.env.GEV_VOICE_UI'
+    ],
+    '"off"',
+  );
   assert.equal(
     createBrowserViteConfig({ mapillaryToken: 'MLY|1|abc' }).define[
       'import.meta.env.MAPILLARY_CLIENT_TOKEN'

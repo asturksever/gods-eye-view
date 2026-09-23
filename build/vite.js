@@ -8,6 +8,7 @@ export function createBrowserViteConfig({
   googleApiKey,
   cesiumToken,
   mapillaryToken,
+  voiceUi,
   host = 'localhost',
   port = 4173,
 } = {}) {
@@ -36,6 +37,14 @@ export function createBrowserViteConfig({
       // Mapillary client tokens are public by design (see SECURITY.md).
       'import.meta.env.MAPILLARY_CLIENT_TOKEN': JSON.stringify(
         mapillaryToken ?? '',
+      ),
+      // GEV_VOICE_UI=off hides the OpenAI voice dock entirely.
+      'import.meta.env.GEV_VOICE_UI': JSON.stringify(
+        String(voiceUi ?? 'on')
+          .trim()
+          .toLowerCase() === 'off'
+          ? 'off'
+          : 'on',
       ),
     },
     // MapillaryJS is loaded on demand the first time a street-level image is
