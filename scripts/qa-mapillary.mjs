@@ -36,6 +36,8 @@ export function hydrantPlan() {
 export const RAIL_ORDER = Object.freeze([
   'pp-toggles',
   'cctv-panel',
+  'weather-panel',
+  'recent-imagery-panel',
   'mapillary-panel',
   'global-context-panel',
 ]);

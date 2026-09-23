@@ -27,6 +27,8 @@ test('rail order puts Street Level between CCTV and Context', () => {
   assert.deepEqual(RAIL_ORDER, [
     'pp-toggles',
     'cctv-panel',
+    'weather-panel',
+    'recent-imagery-panel',
     'mapillary-panel',
     'global-context-panel',
   ]);
