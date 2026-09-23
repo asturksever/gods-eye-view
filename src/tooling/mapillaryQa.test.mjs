@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import test from 'node:test';
+import {
+  hydrantPlan,
+  isCollapsed,
+  RAIL_ORDER,
+  VIEWPORTS,
+} from '../../scripts/qa-mapillary.mjs';
+
+test('the QA harness exercises both review viewports', () => {
+  assert.deepEqual(
+    VIEWPORTS.map((v) => `${v.width}x${v.height}`),
+    ['1440x900', '1280x800'],
+  );
+});
+
+test('the ready-made plan is executable without the planner', () => {
+  const plan = hydrantPlan();
+  assert.equal(plan.intent, 'map_features');
+  assert.equal(plan.layer, 'points');
+  assert.equal(plan.use_current_view, true);
+  assert.deepEqual(plan.values, ['object--fire-hydrant']);
+});
+
+test('rail order puts Street Level between CCTV and Context', () => {
+  assert.deepEqual(RAIL_ORDER, [
+    'pp-toggles',
+    'cctv-panel',
+    'mapillary-panel',
+    'global-context-panel',
+  ]);
+  assert.equal(isCollapsed(['panel-collapsible', 'collapsed']), true);
+  assert.equal(isCollapsed(['panel-collapsible']), false);
+});
+
+test('the harness only runs its browser flow when executed directly', () => {
+  const source = fs.readFileSync(
+    new URL('../../scripts/qa-mapillary.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(
+    source,
+    /import\.meta\.url === pathToFileURL\(process\.argv\[1\]\)\.href/,
+  );
+  assert.match(source, /PUPPETEER_EXECUTABLE_PATH/);
+  assert.match(source, /--url/);
+});

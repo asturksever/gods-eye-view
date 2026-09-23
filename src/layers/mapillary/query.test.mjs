@@ -4,6 +4,8 @@ import {
   bboxFromGeocode,
   enforceMinimumSpan,
   fitBboxToTileBudget,
+  noResultsAnswer,
+  pluralLabel,
   summarizeResults,
 } from './query.js';
 import { countTilesForBbox } from './tileMath.js';
@@ -54,13 +56,46 @@ test('summarizeResults reports totals, top classes and the sighting window', () 
   });
   assert.match(
     text,
-    /^1,234 features: 1,000 fire hydrant, 200 bench, 20 mailbox and 1 more classes/,
+    /^1,234 features: 1,000 fire hydrants, 200 benches, 20 mailboxes and 1 more class/,
   );
   assert.match(text, /seen 2019–2026 · capped · 2 tiles failed$/);
+});
+
+test('summarizeResults leads with the class when there is only one', () => {
+  const text = summarizeResults({
+    total: 834,
+    counts: new Map([['object--fire-hydrant', 834]]),
+    earliest: Date.UTC(2017, 0, 1),
+    latest: Date.UTC(2021, 0, 1),
+    failed: 1,
+  });
+  assert.equal(text, '834 fire hydrants · seen 2017–2021 · 1 tile failed');
   assert.equal(
-    summarizeResults({ total: 0, counts: new Map() }),
-    'No matching features in this area.',
+    summarizeResults({ total: 1, counts: new Map([['object--bench', 1]]) }),
+    '1 bench',
   );
+});
+
+test('zero results produce no summary so the answer can be replaced', () => {
+  assert.equal(summarizeResults({ total: 0, counts: new Map() }), '');
+  assert.equal(
+    noResultsAnswer(
+      { title: 'Fire hydrants · Springfield' },
+      { label: 'Springfield, IL' },
+    ),
+    'No fire hydrants mapped in Springfield, IL yet. Try a larger area, another place, or set SINCE back to any date.',
+  );
+  assert.match(
+    noResultsAnswer({}, null),
+    /^No matching features mapped here yet/,
+  );
+});
+
+test("pluralLabel handles the taxonomy's English labels", () => {
+  assert.equal(pluralLabel('Fire hydrant', 2), 'fire hydrants');
+  assert.equal(pluralLabel('Bench', 3), 'benches');
+  assert.equal(pluralLabel('Mailbox', 4), 'mailboxes');
+  assert.equal(pluralLabel('Bench', 1), 'bench');
 });
 
 test('node-sized geocode bounds are grown to a queryable neighbourhood box', () => {
