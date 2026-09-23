@@ -1,5 +1,10 @@
 # Changelog
 
+- Rail panels can opt into a portable mode: dragging the CCTV panel by its
+  header lifts it out of the right rail into a floating window that resizes
+  from any edge or corner, remembers its position and size, and snaps back on
+  a header double-click.
+
 - Distinguish PARTIAL vessel snapshots from STALE data in the layer panel, with
   accepted-record counts and unchanged retention, freshness and outage safeguards.
 
