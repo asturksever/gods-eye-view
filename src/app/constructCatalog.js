@@ -1,3 +1,7 @@
+import { createWeatherClock } from '../layers/weather/clock.js';
+import { createWeatherLayer } from '../layers/weather/index.js';
+import { createCyclonesLayer } from '../layers/cyclones/index.js';
+import { createWindLayer } from '../layers/wind/index.js';
 import { createLayerCatalog } from './catalog.js';
 import { LAYER_STATE_REGISTRY } from '../data/layerState.js';
 import { createMilitaryRegistry } from '../layers/aircraft/classification.js';
@@ -9,6 +13,7 @@ import { createApplicationRadio } from './layers/radio.js';
 import { createApplicationTraffic } from './layers/traffic.js';
 import { createApplicationBikeshare } from './layers/bikeshare.js';
 import { createApplicationDirections } from './layers/directions.js';
+import { createApplicationRecentImagery } from './layers/recentImagery.js';
 import { createApplicationTransit } from './layers/transit.js';
 import { createApplicationInstallations } from './layers/militaryInstallations.js';
 import { createApplicationSatellites } from './layers/satellites.js';
@@ -43,6 +48,9 @@ const SOURCE_METHODS = Object.freeze({
   launches: ['getLaunches', 'getActiveTle'],
   alpr: ['fetch'],
   firms: ['getSnapshot'],
+  wind: ['getSnapshot'],
+  weather: ['getSnapshot'],
+  cyclones: ['getSnapshot'],
   earthquakes: ['getSnapshot'],
   cables: ['fetch'],
   mapillary: [
@@ -85,9 +93,11 @@ export function createApplicationCatalog({
       throw new TypeError(`Invalid catalog source: ${name}`);
   }
   const militaryRegistry = createMilitaryRegistry();
+  const weatherClock = createWeatherClock();
   const dispose = () => {
     signal.removeEventListener('abort', dispose);
     militaryRegistry.dispose();
+    weatherClock.destroy();
   };
   signal.addEventListener('abort', dispose, { once: true });
   try {
@@ -134,6 +144,7 @@ export function createApplicationCatalog({
         createApplicationTransit({ surface, source: sources.transit }),
         createApplicationBikeshare({ source: sources.bikeshare }),
         createApplicationDirections(),
+        createApplicationRecentImagery(),
         vessels,
         installations,
         createApplicationAwareness({
@@ -142,6 +153,23 @@ export function createApplicationCatalog({
           vessels,
           installations,
         }),
+        createWindLayer({ feed: sources.wind, clock: weatherClock }),
+        createWeatherLayer({
+          feed: sources.weather,
+          id: 'weather-radar',
+          clock: weatherClock,
+        }),
+        createWeatherLayer({
+          feed: sources.weather,
+          id: 'weather-satellite',
+          clock: weatherClock,
+        }),
+        createWeatherLayer({
+          feed: sources.weather,
+          id: 'weather-lightning',
+          clock: weatherClock,
+        }),
+        createCyclonesLayer({ feed: sources.cyclones }),
         ...createInfrastructureLayers(localGeoJsonServices),
         createApplicationCables({ source: sources.cables }),
         createApplicationFirms({
@@ -155,7 +183,12 @@ export function createApplicationCatalog({
       ],
       metadata,
     );
-    return Object.freeze({ ...catalog, militaryRegistry, surface });
+    return Object.freeze({
+      ...catalog,
+      militaryRegistry,
+      surface,
+      weatherClock,
+    });
   } catch (error) {
     dispose();
     throw error;

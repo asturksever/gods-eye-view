@@ -21,6 +21,9 @@ import { openAiRealtimeProxy } from './openai.js';
 import { googlePlacesContextProxy } from './places.js';
 import { mapillaryProxy } from './mapillary.js';
 import { keySetupEndpoint } from '../standalone/key-setup.js';
+import { weatherProxy } from './weather.js';
+import { cycloneProxy } from './cyclones.js';
+import { windProxy } from './wind.js';
 
 /** Construct the local provider plugins in their established order. */
 function localProviderPlugins() {
@@ -46,6 +49,9 @@ function localProviderPlugins() {
     trackBackfillProxies(),
     openAiRealtimeProxy(),
     googlePlacesContextProxy(),
+    windProxy(),
+    weatherProxy(),
+    cycloneProxy(),
     mapillaryProxy(),
     keySetupEndpoint(),
   ];

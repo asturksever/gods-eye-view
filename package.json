@@ -2,7 +2,7 @@
   "name": "gods-eye-view",
   "private": true,
   "version": "0.1.1",
-  "description": "A real-time intelligence console for planet Earth \u2014 photorealistic 3D globe, live aircraft/ships/satellites/earthquakes/CCTV, and hands-free voice control. Runs in a browser.",
+  "description": "A real-time intelligence console for planet Earth — photorealistic 3D globe, live aircraft/ships/satellites/earthquakes/CCTV, and hands-free voice control. Runs in a browser.",
   "type": "module",
   "license": "MIT",
   "author": "Bilawal Sidhu",
@@ -32,26 +32,28 @@
     "visualization"
   ],
   "scripts": {
+    "build": "vite build",
+    "check:boundaries": "node scripts/check-import-directions.mjs && node scripts/check-package-boundaries.mjs",
+    "dev": "vite",
+    "dev:secure": "./scripts/dev-secure.sh",
     "doctor": "node scripts/setup-doctor.mjs",
     "format": "node scripts/format.mjs --write",
     "format:check": "node scripts/format.mjs --check",
-    "dev": "vite",
-    "dev:secure": "./scripts/dev-secure.sh",
     "opensky:import": "./scripts/opensky-import-client.sh",
-    "build": "vite build",
     "preview": "vite preview",
-    "test": "node scripts/run-unit-tests.mjs",
-    "test:track": "node scripts/track-regression.mjs",
     "qa:map-source-tray": "node scripts/qa-map-source-tray.mjs",
     "qa:mapillary": "node scripts/qa-mapillary.mjs",
-    "check:boundaries": "node scripts/check-import-directions.mjs && node scripts/check-package-boundaries.mjs",
-    "qa:transit": "node scripts/qa-transit.mjs"
+    "qa:transit": "node scripts/qa-transit.mjs",
+    "test": "node scripts/run-unit-tests.mjs",
+    "test:track": "node scripts/track-regression.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
     "@mapbox/vector-tile": "^3.0.0",
+    "@meri-imperiumi/eccodes-wasm": "^2.48.2",
     "cesium": "^1.124.0",
     "egm96-universal": "^1.1.1",
+    "hls.js": "^1.7.3",
     "mapillary-js": "^4.1.2",
     "mgrs": "^2.1.0",
     "pbf": "^5.1.2",
@@ -74,9 +76,6 @@
     "./application/viewer": "./src/app/viewer.js",
     "./build/vite": {
       "node": "./build/vite.js"
-    },
-    "./server/providers/mapillary": {
-      "node": "./server/providers/mapillary.js"
     },
     "./server/providers/live": {
       "node": "./server/providers/live.js"
@@ -157,6 +156,7 @@
     "./aircraft": "./src/layers/aircraft/index.js",
     "./layers/vessels": "./src/layers/vessels/index.js",
     "./layers/earthquakes": "./src/layers/earthquakes/index.js",
+    "./layers/recent-imagery": "./src/layers/recentImagery/index.js",
     "./sources/firms-csv": "./src/data/firmsCsv.js",
     "./layers/firms": "./src/layers/firms/index.js",
     "./layers/satellites": "./src/layers/satellites/index.js",
@@ -167,8 +167,6 @@
     "./layers/bikeshare": "./src/layers/bikeshare/index.js",
     "./layers/directions": "./src/layers/directions/index.js",
     "./layers/cctv": "./src/layers/cctv/index.js",
-    "./layers/mapillary": "./src/layers/mapillary/index.js",
-    "./layers/mapillary/source": "./src/layers/mapillary/source.js",
     "./layers/alpr": "./src/layers/alpr/index.js",
     "./layers/radio": "./src/layers/radio/index.js",
     "./layers/submarine-cables": "./src/layers/submarineCables/index.js",
@@ -250,6 +248,11 @@
     "./layers/transit/standalone": "./src/data/transit.js",
     "./layers/transit/source": "./src/layers/transit/source.js",
     "./sources/transit-service": "./src/sources/transitService.js",
-    "./sources/map-features": "./src/sources/overpassFeatures.js"
+    "./sources/map-features": "./src/sources/overpassFeatures.js",
+    "./server/providers/mapillary": {
+      "node": "./server/providers/mapillary.js"
+    },
+    "./layers/mapillary": "./src/layers/mapillary/index.js",
+    "./layers/mapillary/source": "./src/layers/mapillary/source.js"
   }
 }
