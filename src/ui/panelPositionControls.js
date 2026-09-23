@@ -123,6 +123,7 @@ export class PanelPositionControls {
     if (this.destroyed || this._dragInitialized) return;
     this._dragInitialized = true;
     const cctvPanel = document.getElementById('cctv-panel');
+    const mapillaryPanel = document.getElementById('mapillary-panel');
     // A `portable` spec lifts out of its rail on a header drag, resizes from
     // every edge and remembers its window; the others only reposition in
     // place. Another panel opts in by adding a spec here.
@@ -138,6 +139,13 @@ export class PanelPositionControls {
         handle: cctvPanel?.querySelector('.panel-header'),
         portable: true,
         min: { width: 300, height: 160 },
+      },
+      {
+        id: 'mapillary-panel',
+        panel: mapillaryPanel,
+        handle: mapillaryPanel?.querySelector('.panel-header'),
+        portable: true,
+        min: { width: 320, height: 240 },
       },
     ].filter(Boolean);
 

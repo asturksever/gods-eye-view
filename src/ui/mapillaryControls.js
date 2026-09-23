@@ -212,6 +212,11 @@ export class MapillaryControls {
     if (this.mapillary.getUIState) this.render(this.mapillary.getUIState());
   }
 
+  /** The rail panel was resized or snapped back: refit the viewer. */
+  onPanelResized() {
+    requestAnimationFrame(() => this.mapillary.resizeViewer?.());
+  }
+
   /** Ask the shell to open (or close) the rail panel. */
   setCollapsed(collapsed, options = {}) {
     this.actions.setPanelCollapsed?.(collapsed, options);

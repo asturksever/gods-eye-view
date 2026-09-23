@@ -127,7 +127,8 @@
 #right-context-rail > .panel-floating.collapsed {
   max-height: max-content;
 }
-.panel-floating[style*='height'] > .cctv-panel-inner {
+.panel-floating[style*='height'] > .cctv-panel-inner,
+.panel-floating[style*='height'] > .mapillary-panel-inner {
   box-sizing: border-box;
   height: 100%;
   max-height: none;

@@ -44,12 +44,14 @@ test('the panel is registered with panel chrome, cockpit entry and the right rai
     layoutController,
     /stack\.insertBefore\(this\._mapillaryPanel, globalContextPanel\)/,
   );
+  // The showcase branch guards rail rules with :not(.panel-floating).
+  const guard = '(?::not\\(\\.panel-floating\\))?';
   for (const rule of [
-    '#right-context-rail > #mapillary-panel',
-    '#right-context-rail #mapillary-panel.collapsed',
-    '#right-context-rail.layout-focus > #mapillary-panel:not(.collapsed)',
+    `#right-context-rail > #mapillary-panel${guard}[,{ ]`,
+    `#right-context-rail #mapillary-panel\\.collapsed${guard}[,{ ]`,
+    `#right-context-rail\\.layout-focus\\s*>\\s*#mapillary-panel:not\\(\\.collapsed\\)${guard}[,{ ]`,
   ])
-    assert.ok(css.includes(rule), `layers.css names ${rule}`);
+    assert.match(css, new RegExp(rule), `layers.css names ${rule}`);
 });
 
 test('panel styles stay inside GEV conventions: no !important, no fixed panel', () => {

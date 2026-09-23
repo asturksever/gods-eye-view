@@ -1442,7 +1442,10 @@ export class StyleManager extends ShellFacade {
    * @param {string} _panelId
    * @returns {void}
    */
-  _onPanelResized(_panelId) {}
+  _onPanelResized(panelId) {
+    if (panelId === 'mapillary-panel')
+      this._mapillaryControls?.onPanelResized();
+  }
 
   /**
    * Recalculates the CCTV panel max-height based on its current top position
