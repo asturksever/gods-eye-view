@@ -2515,6 +2515,20 @@ its criteria cannot be silently ignored.
 | Dams ▰ | OpenInfraMap/OSM extract (bundled) | `src/data/localLayers.js` | — | static |
 | Submarine Cables ◠ | TeleGeography public map (bundled) | `src/data/telegeographySubmarineCables.js` | — | static |
 | FIRMS Active Fires ▲ | NASA FIRMS live (VIIRS ×3 NRT, trailing 24h) | `src/data/firmsHeatmap.js` | `/api/firms` (`FIRMS_MAP_KEY`) | 10 min (proxy TTL 30 min) |
+| Street Level 📷 | Mapillary vector tiles + Graph API + MapillaryJS (optional Claude planner, server-side key) | `src/layers/mapillary/` via `src/app/layers/mapillary.js` | `/api/mapillary/status`, `/tiles`, `/features` (NDJSON), `/plan`, `/sprite` (`MAPILLARY_CLIENT_TOKEN`; `ANTHROPIC_API_KEY` optional) | camera-driven (320 ms debounce, ≤9 coverage tiles); queries on demand (≤600 tiles, cached 24 h) |
+
+Street Level (Mapillary) lives in the right context rail next to CCTV as an
+ordinary collapsible panel and starts collapsed. Without `MAPILLARY_CLIENT_TOKEN`
+the panel shows a gated empty state naming the variable; with it, coverage
+draws as ground-clamped sequence lines (z0–5 overview points from orbit,
+z11–14 sequences below 60 km) and the proxy strips the unused `image` point
+layer from z14 tiles in transit (12 MB → ~80 KB). The plain-English query box
+is only live with `ANTHROPIC_API_KEY` (server-side; the browser posts the
+sentence to `/api/mapillary/plan`). While enabled the layer adds an on-globe
+Cesium credit ("Imagery © Mapillary contributors, CC BY-SA 4.0"). Follow-ups
+kept out of the first landing: procedural 3D objects for results, a Google 3D
+map-stack shortcut, and portable/resizable rail panels.
+
 
 Directions is a keyless front end to the routing the voice agent already
 uses. Its row chips are the whole interface: DRIVE / WALK / BIKE pick the

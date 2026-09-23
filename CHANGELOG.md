@@ -1,5 +1,6 @@
 # Changelog
 
+- Street Level (Mapillary): a new layer draws Mapillary coverage on the globe from orbit down to a single street, opens photos and 360° panoramas in an embedded MapillaryJS viewer beside the CCTV panel, and answers plain-English questions ("show me all fire hydrants in Sacramento") with Mapillary's detected objects and traffic signs when an Anthropic key is present; the layer needs a free Mapillary client token and credits CC BY-SA 4.0 imagery on the globe.
 - Distinguish PARTIAL vessel snapshots from STALE data in the layer panel, with
   accepted-record counts and unchanged retention, freshness and outage safeguards.
 
