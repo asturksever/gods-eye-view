@@ -45,7 +45,8 @@
     "qa:map-source-tray": "node scripts/qa-map-source-tray.mjs",
     "qa:mapillary": "node scripts/qa-mapillary.mjs",
     "check:boundaries": "node scripts/check-import-directions.mjs && node scripts/check-package-boundaries.mjs",
-    "qa:transit": "node scripts/qa-transit.mjs"
+    "qa:transit": "node scripts/qa-transit.mjs",
+    "qa:panel-resize": "node scripts/qa-panel-resize.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
