@@ -172,6 +172,28 @@
     ],
     "external": []
   },
+  "mapillary-provider": {
+    "runtime": "node",
+    "exports": ["./server/providers/mapillary"],
+    "modules": [
+      "server/providers/mapillary.js",
+      "server/providers/mapillary/routes.js",
+      "server/providers/mapillary/constants.js",
+      "server/providers/mapillary/tiles.js",
+      "server/providers/mapillary/trim.js",
+      "server/providers/mapillary/decode.js",
+      "server/providers/mapillary/features.js",
+      "server/providers/mapillary/planner.js",
+      "server/providers/mapillary/sprites.js",
+      "src/layers/mapillary/tileMath.js",
+      "src/layers/mapillary/values.js",
+      "src/layers/mapillary/taxonomy.js",
+      "server/providers/common/request.js",
+      "src/sources/rateLimit.js",
+      "server/providers/common/rate-limit.js"
+    ],
+    "external": ["@anthropic-ai/sdk", "zod", "pbf", "@mapbox/vector-tile"]
+  },
   "radio-provider": {
     "runtime": "node",
     "exports": ["./server/providers/radio"],
@@ -580,7 +602,9 @@
       "src/ui/aircraftDisplay.js",
       "src/ui/layerBindings.js",
       "src/ui/displayBindings.js",
-      "src/ui/shellFacade.js"
+      "src/ui/shellFacade.js",
+      "src/ui/mapillaryControls.js",
+      "src/ui/mapillaryPresentation.js"
     ],
     "external": ["cesium"]
   },
@@ -1036,6 +1060,29 @@
       "src/layers/cctv/sourcePolicy.js"
     ],
     "external": ["cesium"]
+  },
+  "mapillary-layer": {
+    "exports": ["./layers/mapillary", "./layers/mapillary/source"],
+    "modules": [
+      "src/layers/mapillary/index.js",
+      "src/layers/mapillary/state.js",
+      "src/layers/mapillary/policy.js",
+      "src/layers/mapillary/coverage.js",
+      "src/layers/mapillary/sequences.js",
+      "src/layers/mapillary/features.js",
+      "src/layers/mapillary/glyphs.js",
+      "src/layers/mapillary/decode.js",
+      "src/layers/mapillary/tileMath.js",
+      "src/layers/mapillary/values.js",
+      "src/layers/mapillary/taxonomy.js",
+      "src/layers/mapillary/ndjson.js",
+      "src/layers/mapillary/query.js",
+      "src/layers/mapillary/selection.js",
+      "src/layers/mapillary/viewerBridge.js",
+      "src/layers/mapillary/source.js",
+      "scripts/qa-mapillary.mjs"
+    ],
+    "external": ["cesium", "pbf", "@mapbox/vector-tile", "mapillary-js"]
   },
   "alpr-cameras": {
     "exports": ["./layers/alpr"],
@@ -1809,7 +1856,26 @@
       "src/director/sharing/lifetime.js",
       "src/director/authoring.js",
       "src/scenes/sharing.js",
-      "src/ui/sceneSharing.js"
+      "src/ui/sceneSharing.js",
+      "src/ui/mapillaryControls.js",
+      "src/ui/mapillaryPresentation.js",
+      "src/layers/mapillary/index.js",
+      "src/layers/mapillary/state.js",
+      "src/layers/mapillary/policy.js",
+      "src/layers/mapillary/coverage.js",
+      "src/layers/mapillary/sequences.js",
+      "src/layers/mapillary/features.js",
+      "src/layers/mapillary/glyphs.js",
+      "src/layers/mapillary/decode.js",
+      "src/layers/mapillary/tileMath.js",
+      "src/layers/mapillary/values.js",
+      "src/layers/mapillary/taxonomy.js",
+      "src/layers/mapillary/ndjson.js",
+      "src/layers/mapillary/query.js",
+      "src/layers/mapillary/selection.js",
+      "src/layers/mapillary/viewerBridge.js",
+      "src/layers/mapillary/source.js",
+      "src/app/layers/mapillary.js"
     ],
     "external": [
       "@mapbox/vector-tile",
@@ -1817,7 +1883,8 @@
       "egm96-universal",
       "mgrs",
       "pbf",
-      "satellite.js"
+      "satellite.js",
+      "mapillary-js"
     ]
   },
   "application-catalog": {
@@ -2203,7 +2270,24 @@
       "src/sources/overpassFeaturesRecords.js",
       "src/sources/overpassFeatures.js",
       "src/sources/featureSource.js",
-      "src/sources/overpassRoads.js"
+      "src/sources/overpassRoads.js",
+      "src/layers/mapillary/index.js",
+      "src/layers/mapillary/state.js",
+      "src/layers/mapillary/policy.js",
+      "src/layers/mapillary/coverage.js",
+      "src/layers/mapillary/sequences.js",
+      "src/layers/mapillary/features.js",
+      "src/layers/mapillary/glyphs.js",
+      "src/layers/mapillary/decode.js",
+      "src/layers/mapillary/tileMath.js",
+      "src/layers/mapillary/values.js",
+      "src/layers/mapillary/taxonomy.js",
+      "src/layers/mapillary/ndjson.js",
+      "src/layers/mapillary/query.js",
+      "src/layers/mapillary/selection.js",
+      "src/layers/mapillary/viewerBridge.js",
+      "src/layers/mapillary/source.js",
+      "src/app/layers/mapillary.js"
     ],
     "external": [
       "cesium",
@@ -2211,7 +2295,8 @@
       "satellite.js",
       "@mapbox/vector-tile",
       "pbf",
-      "mgrs"
+      "mgrs",
+      "mapillary-js"
     ]
   },
   "application-operations": {
