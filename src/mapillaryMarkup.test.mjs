@@ -40,9 +40,10 @@ test('the panel is registered with panel chrome, cockpit entry and the right rai
     /COCKPIT_ENTRY_COLLAPSE_PANEL_IDS = Object\.freeze\(\[[\s\S]*'mapillary-panel'/,
   );
   assert.match(panelChrome, /const isRightRail = \[[\s\S]*'mapillary-panel'/);
+  // The layout controller moves every rail panel in one loop; ours is listed.
   assert.match(
     layoutController,
-    /stack\.insertBefore\(this\._mapillaryPanel, globalContextPanel\)/,
+    /for \(const panel of \[[\s\S]*?this\._mapillaryPanel,[\s\S]*?\]\) \{[\s\S]*?stack\.insertBefore\(panel, globalContextPanel\)/,
   );
   for (const rule of [
     '#right-context-rail > #mapillary-panel',
