@@ -26,7 +26,7 @@ function sendJson(res, status, payload) {
 }
 
 /** Parse an ISO date (or epoch ms) into epoch ms, or null when absent/invalid. */
-export function parseEpochMs(value) {
+function parseEpochMs(value) {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   const parsed = Date.parse(String(value));

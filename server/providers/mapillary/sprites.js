@@ -1,3 +1,7 @@
+/**
+ * Sprite proxy. Icons come from github.com/mapillary/mapillary_sprite_source
+ * (MIT, © Mapillary), fetched on demand and cached on disk.
+ */
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import {

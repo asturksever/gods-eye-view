@@ -1,6 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { readRequestBody } from '../common/request.js';
 import { makeOptInRateLimiter, clientKey } from '../common/rate-limit.js';
 import {
@@ -26,7 +25,7 @@ import {
  * The plan the model returns. Every field is required (structured outputs
  * reject optional keys); "unknown" is spelled with null.
  */
-export const PlanSchema = z.object({
+const PlanSchema = z.object({
   intent: z.enum([
     'map_features',
     'traffic_signs',
@@ -183,6 +182,35 @@ export function buildPlannerUserMessage({ query, context = {}, today }) {
 }
 
 /**
+ * Structured-output format for the plan: the Zod schema as JSON Schema. Kept
+ * free of the SDK's zod helper so the provider only depends on package roots.
+ */
+function planOutputFormat() {
+  const { $schema: _schema, ...schema } = z.toJSONSchema(PlanSchema, {
+    reused: 'ref',
+  });
+  return { type: 'json_schema', schema };
+}
+
+/** The plan object from a structured-output response, or null. */
+function parsePlanResponse(response) {
+  if (response?.parsed_output) return response.parsed_output;
+  const text = (response?.content || [])
+    .filter((block) => block?.type === 'text')
+    .map((block) => block.text)
+    .join('');
+  if (!text.trim()) return null;
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const result = PlanSchema.safeParse(raw);
+  return result.success ? result.data : null;
+}
+
+/**
  * Ask Claude for a plan. Exported for tests with an injectable client.
  * @returns {Promise<{plan: object, usage: object|null, model: string}>}
  */
@@ -190,7 +218,7 @@ export async function planQuery(
   { query, context },
   { anthropic = client(), model = plannerModel(), now = new Date() } = {},
 ) {
-  const response = await anthropic.messages.parse({
+  const response = await anthropic.messages.create({
     model,
     max_tokens: PLANNER_MAX_TOKENS,
     system: [
@@ -210,7 +238,7 @@ export async function planQuery(
         }),
       },
     ],
-    output_config: { format: zodOutputFormat(PlanSchema), effort: 'low' },
+    output_config: { format: planOutputFormat(), effort: 'low' },
   });
   if (response.stop_reason === 'refusal') {
     return {
@@ -230,10 +258,11 @@ export async function planQuery(
       model,
     };
   }
-  if (!response.parsed_output)
+  const parsed = parsePlanResponse(response);
+  if (!parsed)
     throw Object.assign(new Error('Planner returned no plan'), { status: 502 });
   return {
-    plan: finalizePlan(response.parsed_output),
+    plan: finalizePlan(parsed),
     usage: response.usage ?? null,
     model,
   };
