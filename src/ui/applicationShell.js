@@ -897,6 +897,26 @@ export class StyleManager extends ShellFacade {
           this.setPanelCollapsed('mapillary-panel', collapsed, options),
         openKeySetup: () => document.getElementById('key-setup-chip')?.click(),
         showToast: (message) => this._showToast(message),
+        isMapStackActive: (id) =>
+          this.mapStackController?.getActiveId?.() === id,
+        setMapStack: async (id) => {
+          const controller = this.mapStackController;
+          if (!controller) return { error: 'Map stacks are unavailable' };
+          if (!controller.isStackAvailable?.(id))
+            return {
+              error:
+                controller._unavailableReason?.(controller.getStack?.(id)) ||
+                'Google 3D needs a Google Maps key or Cesium ion token (POWER UP)',
+            };
+          try {
+            const state = await controller.setStack(id);
+            return state?.lastError && state.activeId !== id
+              ? { error: state.lastError }
+              : { ok: true };
+          } catch (error) {
+            return { error: error?.message || 'Map stack switch failed' };
+          }
+        },
       },
     });
     this._mapillaryControls.connect();

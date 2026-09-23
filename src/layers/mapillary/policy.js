@@ -48,6 +48,9 @@ export const FEATURE_ICON_LIMIT = 6000;
 export const FEATURE_ICON_MAX = 80_000;
 export const FEATURE_ICON_SIZE_PX = 30;
 export const FEATURE_POINT_SIZE_PX = 9;
+/** 3D object models are built for result sets up to this size. */
+export const OBJECTS_3D_LIMIT = 1500;
+export const OBJECTS_3D_BATCH = 50;
 
 /**
  * On-globe credit shown while the layer is enabled. Mapillary imagery and

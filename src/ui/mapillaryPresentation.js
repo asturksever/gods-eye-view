@@ -146,6 +146,23 @@ function presentMeta(state) {
   return bits.join(' · ');
 }
 
+function presentObjects3d(state) {
+  const objects = state.objects3d || {};
+  return {
+    pressed: objects.enabled === true,
+    text: objects.building
+      ? '3D OBJECTS …'
+      : objects.enabled
+        ? '3D OBJECTS ON'
+        : '3D OBJECTS OFF',
+    note: objects.error
+      ? objects.error
+      : objects.enabled && objects.active
+        ? `${(objects.count || 0).toLocaleString()} objects standing in 3D · click one to open its image`
+        : '',
+  };
+}
+
 /**
  * @param {object} state Snapshot from the layer's `getUIState()`.
  * @returns {object} Everything the panel needs, already worded.
@@ -195,6 +212,7 @@ export function presentMapillaryPanel(state) {
     filter: state.coverage.filter || { pano: 'all', sinceMs: null },
     legend: state.coverage.legend || [],
     viewer: presentViewer(state),
+    objects3d: presentObjects3d(state),
     meta: presentMeta(state),
     /** The panel opens itself at these moments (a native panel stays put otherwise). */
     wantsOpen:

@@ -30,6 +30,9 @@ export function createSelection({ state, parts }) {
     } else if (id.startsWith(PICK_PREFIX.object)) {
       // 3D object entities are id'd `mly:obj:<featureId>:<part>`.
       parts.street.openFeature(id.split(':')[2]);
+    } else if (id.startsWith(PICK_PREFIX.object)) {
+      // 3D object entities are id'd `mly:obj:<featureId>:<part>`.
+      parts.street.openFeature(id.split(':')[2]);
     }
   }
 

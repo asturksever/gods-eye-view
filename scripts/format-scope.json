@@ -785,5 +785,7 @@
   "src/layers/mapillary/tileMath.test.mjs",
   "src/layers/mapillary/values.test.mjs",
   "scripts/qa-mapillary.mjs",
-  "src/tooling/mapillaryQa.test.mjs"
+  "src/tooling/mapillaryQa.test.mjs",
+  "src/layers/mapillary/objects3d.js",
+  "src/layers/mapillary/objects3d.test.mjs"
 ]

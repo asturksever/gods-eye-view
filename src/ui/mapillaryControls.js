@@ -54,6 +54,9 @@ export class MapillaryControls {
       results: byId('mly-results'),
       chips: byId('mly-result-chips'),
       frameBtn: byId('mly-frame-btn'),
+      threeDBtn: byId('mly-3d-btn'),
+      threeDNote: byId('mly-3d-note'),
+      photorealBtn: byId('mly-photoreal-btn'),
       clearBtn: byId('mly-clear-btn'),
       sinceSelect: byId('mly-since'),
       legend: byId('mly-legend'),
@@ -100,6 +103,15 @@ export class MapillaryControls {
       });
     }
     this.listen(el.frameBtn, 'click', () => this.mapillary.frameResults?.());
+    this.listen(el.threeDBtn, 'click', () =>
+      this.mapillary.setObjects3d?.(
+        !(this._state?.objects3d?.enabled === true),
+      ),
+    );
+    this.listen(el.photorealBtn, 'click', async () => {
+      const result = await this.actions.setMapStack?.('photoreal');
+      if (result?.error) this.actions.showToast?.(result.error);
+    });
     this.listen(el.clearBtn, 'click', () => this.mapillary.clearQuery?.());
     this.listen(el.chips, 'click', (event) => {
       const more = event.target.closest?.('[data-mly-more]');
@@ -471,6 +483,19 @@ export class MapillaryControls {
   _renderMeta(view) {
     const el = this._elements;
     if (el.coverageMeta) el.coverageMeta.textContent = view.meta;
+    if (el.threeDBtn) {
+      el.threeDBtn.textContent = view.objects3d.text;
+      el.threeDBtn.setAttribute('aria-pressed', String(view.objects3d.pressed));
+    }
+    if (el.threeDNote) {
+      el.threeDNote.hidden = !view.objects3d.note;
+      el.threeDNote.textContent = view.objects3d.note;
+    }
+    if (el.photorealBtn)
+      el.photorealBtn.setAttribute(
+        'aria-pressed',
+        String(this.actions.isMapStackActive?.('photoreal') === true),
+      );
   }
 
   /** Open the panel at the moments a user would look for it. */

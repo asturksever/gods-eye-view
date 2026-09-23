@@ -5,6 +5,7 @@ import { createFeatures } from './features.js';
 import { createViewerBridge } from './viewerBridge.js';
 import { createQuery } from './query.js';
 import { createSelection } from './selection.js';
+import { createObjects3d } from './objects3d.js';
 import * as Cesium from 'cesium';
 import {
   COLORS,
@@ -12,6 +13,7 @@ import {
   MAPILLARY_CREDIT_HTML,
   MAPILLARY_KEY_ID,
   MAPILLARY_LAYER_ID,
+  OBJECTS_3D_LIMIT,
 } from './policy.js';
 import { groupCountsByLabel, humanizeValue } from './values.js';
 
@@ -48,6 +50,7 @@ export function createMapillaryLayer({ source, services = {} }) {
   parts.viewer = createViewerBridge(context);
   parts.query = createQuery(context);
   parts.selection = createSelection(context);
+  parts.objects3d = createObjects3d(context);
 
   // Street-level actions shared by clicks, the query engine and the UI.
   parts.street = {
@@ -228,6 +231,14 @@ export function createMapillaryLayer({ source, services = {} }) {
           ? { ...state.street.highlight }
           : null,
       },
+      objects3d: {
+        enabled: state.objects3d.enabled,
+        active: state.objects3d.active,
+        building: state.objects3d.building,
+        count: state.objects3d.count,
+        error: state.objects3d.error,
+        limit: OBJECTS_3D_LIMIT,
+      },
       query: {
         busy: state.query.busy,
         stage: state.query.stage,
@@ -283,6 +294,7 @@ export function createMapillaryLayer({ source, services = {} }) {
       state.enabled = false;
       hideCredit(state.viewer);
       parts.query.abort();
+      parts.objects3d.clear();
       parts.features.clearSelection();
       parts.coverage.setResting(false);
       parts.coverage.detach();
@@ -301,6 +313,7 @@ export function createMapillaryLayer({ source, services = {} }) {
 
     destroy(viewer = state.viewer) {
       layer.disable();
+      parts.objects3d.destroy(viewer);
       parts.features.destroy(viewer);
       parts.sequences.destroy(viewer);
       state.listeners.clear();
@@ -352,6 +365,8 @@ export function createMapillaryLayer({ source, services = {} }) {
         scheduleIdle(() => parts.viewer.prewarm(element));
     },
     runQuery: (prompt) => parts.query.run(prompt),
+    /** Swap flat icons for procedural 3D objects (small result sets). */
+    setObjects3d: (enabled) => parts.objects3d.setEnabled(enabled),
     /** Stop a running query (planning, geocoding or streaming). */
     abortQuery: () => parts.query.abort(),
     /** Imagery filter for coverage, cones and nearest-image lookups. */

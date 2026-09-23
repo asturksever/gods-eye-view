@@ -208,6 +208,7 @@ export function createQuery({ state, source, parts }) {
 
   async function runFeatures(plan, area, signal) {
     const features = state.features;
+    parts.objects3d.clear();
     parts.features.reset();
     Object.assign(features, {
       bbox: area.bbox,
@@ -254,6 +255,7 @@ export function createQuery({ state, source, parts }) {
     features.loading = false;
     notify();
     await parts.features.upgradeToIcons();
+    if (state.objects3d.enabled) parts.objects3d.rebuild();
     const summary = summarizeResults(features);
     state.query.answer = summary
       ? `${plan.answer} ${summary}`.trim()
@@ -492,6 +494,7 @@ export function createQuery({ state, source, parts }) {
   /** Drop the drawn results and the conversational context. */
   function clear() {
     abort();
+    parts.objects3d.clear();
     parts.features.reset();
     parts.coverage.setResting(false);
     Object.assign(state.query, {

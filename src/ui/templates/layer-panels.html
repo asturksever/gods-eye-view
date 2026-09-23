@@ -117,8 +117,10 @@
             <div id="mly-result-chips" class="mly-chips"></div>
             <div class="cctv-controls">
               <button id="mly-frame-btn" class="scene-btn" type="button" title="Fly the camera to the result area">ZOOM TO RESULTS</button>
+              <button id="mly-3d-btn" class="scene-btn" type="button" aria-pressed="false" title="Stand the results up as 3D objects (small result sets)">3D OBJECTS OFF</button>
               <button id="mly-clear-btn" class="scene-btn" type="button" title="Remove the results from the globe">CLEAR</button>
             </div>
+            <div id="mly-3d-note" class="mly-meta" hidden></div>
           </div>
           <div class="mly-filters" role="group" aria-label="Imagery filters">
             <span class="cctv-summary-label">IMAGERY</span>
@@ -141,6 +143,7 @@
           <ul id="mly-legend" class="mly-legend" aria-label="Coverage colours"></ul>
           <div class="cctv-controls">
             <button id="mly-follow-btn" class="scene-btn" type="button" aria-pressed="false" title="Move the globe camera wherever the street-level view looks">CAMERA FOLLOWS VIEW</button>
+            <button id="mly-photoreal-btn" class="scene-btn" type="button" aria-pressed="false" title="Switch the globe to Google Photorealistic 3D Tiles (needs a Google Maps key or Cesium ion token)">GOOGLE 3D</button>
           </div>
           <div id="mly-viewer-wrap" class="mly-viewer-wrap" hidden>
             <div class="mly-viewer-tools">

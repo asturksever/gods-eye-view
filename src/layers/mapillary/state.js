@@ -89,6 +89,15 @@ export function createState({ services }) {
       renderMode: 'letterbox',
     },
 
+    objects3d: {
+      enabled: false,
+      active: false,
+      building: false,
+      count: 0,
+      error: null,
+      abort: null,
+    },
+
     query: {
       busy: false,
       stage: 'idle',

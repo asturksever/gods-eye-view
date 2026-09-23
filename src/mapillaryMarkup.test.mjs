@@ -27,10 +27,7 @@ test('Street Level is an ordinary collapsible GEV panel that starts collapsed', 
   );
   assert.match(html, /<span class="panel-title">STREET LEVEL<\/span>/);
   assert.match(html, /<svg class="mly-mark"/);
-  assert.doesNotMatch(
-    html,
-    /mapillary-dock|mly-minimized|mly-3d-btn|mly-photoreal-btn/,
-  );
+  assert.doesNotMatch(html, /mapillary-dock|mly-minimized/);
 });
 
 test('the panel is registered with panel chrome, cockpit entry and the right rail', () => {
