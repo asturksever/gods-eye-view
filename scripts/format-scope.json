@@ -147,6 +147,7 @@
   "src/ui/panelRails.js",
   "src/ui/leftPanelRail.js",
   "src/ui/rightPanelRail.js",
+  "src/ui/panelResize.test.mjs",
   "src/ui/panelMeasurement.js",
   "src/ui/panelRailGeometry.js",
   "src/ui/panelRails.test.mjs",
