@@ -94,6 +94,7 @@ export class PanelLayoutController {
     this._rightPanelStack = document.getElementById('right-context-rail');
     this._ppToggles = document.getElementById('pp-toggles');
     this._cctvPanel = document.getElementById('cctv-panel');
+    this._mapillaryPanel = document.getElementById('mapillary-panel');
     this._sliderPanel = document.getElementById('param-slider-panel');
     this._detectionBtn = document.getElementById('detection-toggle');
   }
@@ -204,6 +205,19 @@ export class PanelLayoutController {
       stack.insertBefore(this._cctvPanel, globalContextPanel);
       this._syncPanelCollapseButton(this._cctvPanel);
     }
+    if (this._mapillaryPanel) {
+      this._mapillaryPanel.style.removeProperty('top');
+      this._mapillaryPanel.style.removeProperty('right');
+      this._mapillaryPanel.style.removeProperty('bottom');
+      this._mapillaryPanel.style.removeProperty('left');
+      this._mapillaryPanel.style.removeProperty('z-index');
+      this._mapillaryPanel.classList.remove(
+        'panel-draggable',
+        'panel-dragging',
+      );
+      stack.insertBefore(this._mapillaryPanel, globalContextPanel);
+      this._syncPanelCollapseButton(this._mapillaryPanel);
+    }
     if (this._sliderPanel) {
       this._sliderPanel.style.removeProperty('top');
       this._sliderPanel.style.removeProperty('right');
@@ -222,6 +236,7 @@ export class PanelLayoutController {
       for (const panel of [
         this._ppToggles,
         this._cctvPanel,
+        this._mapillaryPanel,
         globalContextPanel,
       ]) {
         if (panel) this._rightStackResizeObserver.observe(panel);

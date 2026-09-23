@@ -1,23 +1,13 @@
-/* ── Mapillary dock ─────────────────────────── */
-#mapillary-dock {
+/* ── Street Level (Mapillary) panel ─────────────────────────────────────────
+   Lives in the right context rail next to CCTV; the rail owns position and
+   width (see layers.css). Everything here is panel-internal. */
+#mapillary-panel {
   --mly-green: #05cb63;
-  --mly-width: clamp(320px, 30vw, 460px);
-  position: fixed;
-  /* Sit beside the right context rail (DISPLAY / CONTEXT / CCTV), which owns
-     the right-hand 330px column from 26vh down, so the two never overlap. */
-  right: calc(var(--right-rail-x, 52px) + 330px + 16px);
-  bottom: 3.4rem;
-  z-index: 118;
-  width: var(--mly-width);
-  max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 7rem);
-  display: flex;
-  flex-direction: column;
-  pointer-events: auto;
-  font-family: var(--font-mono);
+  --mly-text: 0.62rem;
+  --mly-text-small: 0.6rem;
 }
 
-#mapillary-dock .panel-glow {
+#mapillary-panel .panel-glow {
   position: absolute;
   inset: -18px;
   background: radial-gradient(
@@ -30,211 +20,71 @@
   pointer-events: none;
 }
 
-.mly-dock-inner {
+.mapillary-panel-inner {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: var(--panel-radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 1px 0 rgba(255, 255, 255, 0.06) inset;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 212, 255, 0.46) rgba(255, 255, 255, 0.06);
 }
 
-.mly-header {
+#mapillary-panel .panel-header {
+  gap: 8px;
+}
+
+.mly-mark {
+  width: 14px;
+  height: 14px;
   flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  color: var(--text-dim);
+  transition: color var(--transition-fast);
 }
 
-.mly-title-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: none;
-  border: 0;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: 2px 0;
-  font: inherit;
-  letter-spacing: 0.12em;
-  font-size: 0.72rem;
+#mapillary-panel[data-mly-enabled='true'] .mly-mark {
+  color: var(--mly-green);
+  filter: drop-shadow(0 0 6px rgba(5, 203, 99, 0.7));
 }
 
-.mly-brand-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--mly-green);
-  box-shadow: 0 0 10px rgba(5, 203, 99, 0.8);
-}
-
-.mly-chip {
-  font-size: 0.58rem;
+.mly-status {
+  font-family: var(--font-mono);
+  font-size: var(--mly-text-small);
   letter-spacing: 0.1em;
   padding: 2px 7px;
   border-radius: 999px;
   border: 1px solid var(--glass-border-hover);
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
-.mly-chip.is-on {
+.mly-status.is-on {
   color: var(--mly-green);
   border-color: rgba(5, 203, 99, 0.55);
 }
 
-.mly-chip.is-busy {
+.mly-status.is-busy {
   color: var(--accent);
   border-color: rgba(0, 212, 255, 0.55);
 }
 
-.mly-chip.is-warn {
+.mly-status.is-warn {
   color: #ffb300;
   border-color: rgba(255, 179, 0, 0.55);
 }
 
-.mly-header-tools {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.mly-icon-btn {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--btn-radius);
-  border: 1px solid var(--glass-border-hover);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 0.7rem;
-  line-height: 1;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  transition: all var(--transition-fast);
-}
-
-.mly-icon-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--accent);
-  background: rgba(0, 212, 255, 0.14);
-}
-
-/* Author display rules would otherwise beat the UA's [hidden] { display: none }. */
-.mly-viewer-wrap[hidden],
-.mly-minimized[hidden],
-.mly-minimized-badge[hidden],
-.mly-image-link[hidden] {
-  display: none !important;
-}
-
-/* ── Minimized: only the Mapillary logo remains ─ */
-.mly-minimized {
-  position: relative;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  border: 1px solid rgba(5, 203, 99, 0.55);
-  background: var(--glass-bg);
-  backdrop-filter: blur(18px) saturate(1.4);
-  -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  color: var(--mly-green);
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  box-shadow:
-    0 6px 24px rgba(0, 0, 0, 0.5),
-    0 0 18px rgba(5, 203, 99, 0.35);
-  transition:
-    transform var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-.mly-minimized:hover {
-  transform: scale(1.06);
-  box-shadow:
-    0 8px 28px rgba(0, 0, 0, 0.55),
-    0 0 26px rgba(5, 203, 99, 0.6);
-}
-
-.mly-minimized .mly-logo {
-  width: 28px;
-  height: 28px;
-  display: block;
-}
-
-.mly-minimized-badge {
-  position: absolute;
-  top: -4px;
-  right: -6px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #0a0a0f;
-  font-size: 0.52rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  display: grid;
-  place-items: center;
-  box-shadow: 0 0 10px rgba(0, 212, 255, 0.6);
-}
-
-.mly-minimized.is-off {
-  color: var(--text-secondary);
-  border-color: var(--glass-border-hover);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
-}
-
-#mapillary-dock.minimized {
-  width: auto !important;
-  height: auto !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
-  max-height: none !important;
-  align-items: flex-end;
-}
-
-#mapillary-dock.minimized .mly-dock-inner,
-#mapillary-dock.minimized .panel-glow,
-#mapillary-dock.minimized .gev-resize-grip,
-#mapillary-dock.minimized .gev-resize-edge {
-  display: none;
-}
-
-.mly-power {
-  font: inherit;
-  font-size: 0.6rem;
-  letter-spacing: 0.1em;
-  padding: 6px 10px;
-  border-radius: var(--btn-radius);
-  border: 1px solid var(--glass-border-hover);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.mly-power[aria-pressed='true'] {
-  color: #0a0a0f;
-  background: var(--mly-green);
-  border-color: var(--mly-green);
-  box-shadow: 0 0 14px rgba(5, 203, 99, 0.45);
-}
-
-#mapillary-dock.collapsed .mly-body {
+/* Collapsed strips hide the body entirely: nothing to paint or tab into. */
+#mapillary-panel.collapsed .mly-body,
+#mapillary-panel.collapsed .mly-status {
   display: none;
 }
 
@@ -242,38 +92,50 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  flex: 1 1 auto;
   min-height: 0;
 }
 
-/* Everything above the viewer scrolls; the viewer itself never does. */
-.mly-scroll {
+.mly-controls {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  flex: 0 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  padding-right: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
-/* Children keep their natural height; the region scrolls instead. */
-.mly-scroll > * {
-  flex-shrink: 0;
+.mly-controls:disabled {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
-#mapillary-dock.mly-has-viewer .mly-scroll {
-  /* Let the imagery win the height fight when the window is short. */
-  flex-shrink: 3;
+/* ── Keyless empty state ─────────────────────────────────────────────────── */
+.mly-keyless {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 179, 0, 0.45);
+  border-radius: 9px;
+  background: rgba(255, 179, 0, 0.06);
 }
 
-.mly-kicker {
-  font-size: 0.56rem;
-  letter-spacing: 0.16em;
-  color: var(--accent);
+.mly-keyless-text {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--text-primary);
 }
 
+.mly-keyless-text code {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: #ffb300;
+}
+
+/* ── Query ───────────────────────────────────────────────────────────────── */
 .mly-query {
   display: flex;
   flex-direction: column;
@@ -288,22 +150,68 @@
 #mly-query-input {
   flex: 1;
   min-width: 0;
-  padding: 8px 10px;
+  padding: 9px 11px;
   border-radius: var(--btn-radius);
-  border: 1px solid var(--glass-border-hover);
-  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(0, 212, 255, 0.45);
+  background: rgba(0, 212, 255, 0.06);
   color: var(--text-primary);
   font: inherit;
-  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+}
+
+#mly-query-input::placeholder {
+  color: rgba(232, 234, 237, 0.55);
 }
 
 #mly-query-input:focus {
+  outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-dim);
 }
 
-.mly-run {
-  min-width: 56px;
+#mly-query-input:disabled {
+  border-color: var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.mly-ask {
+  flex: 0 0 auto;
+  min-width: 64px;
+  color: #0a0a0f;
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.mly-ask:hover:not(:disabled) {
+  color: #0a0a0f;
+  background: var(--accent);
+  box-shadow: 0 0 16px rgba(0, 212, 255, 0.5);
+}
+
+.mly-ask.is-stop {
+  color: #ff8a80;
+  background: rgba(255, 88, 88, 0.15);
+  border-color: #ff7272;
+}
+
+.mly-ask.is-stop:hover:not(:disabled) {
+  color: #ff8a80;
+  background: rgba(255, 88, 88, 0.25);
+  border-color: #ff7272;
+}
+
+.mly-hint {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.mly-hint.is-warn {
+  color: #ffb300;
 }
 
 .mly-suggestions {
@@ -313,8 +221,8 @@
 }
 
 .mly-suggestion {
-  font: inherit;
-  font-size: 0.56rem;
+  font-family: var(--font-mono);
+  font-size: var(--mly-text-small);
   letter-spacing: 0.06em;
   padding: 3px 8px;
   border-radius: 999px;
@@ -324,11 +232,17 @@
   cursor: pointer;
 }
 
-.mly-suggestion:hover {
+.mly-suggestion:hover:not(:disabled) {
   color: var(--text-primary);
   border-color: var(--glass-border-hover);
 }
 
+.mly-suggestion:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── Answer, error, progress ─────────────────────────────────────────────── */
 .mly-answer {
   font-family: var(--font-sans);
   font-size: 0.74rem;
@@ -337,7 +251,14 @@
   min-height: 1.2em;
 }
 
-.mly-answer.is-error {
+.mly-answer:empty {
+  display: none;
+}
+
+.mly-error {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  line-height: 1.4;
   color: #ff8a80;
 }
 
@@ -356,16 +277,38 @@
   transition: width 160ms linear;
 }
 
+.mly-progress.is-indeterminate .mly-progress-fill {
+  width: 40%;
+  animation: mly-indeterminate 1.4s ease-in-out infinite;
+}
+
+@keyframes mly-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
 .mly-progress-label {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.55rem;
+  font-family: var(--font-mono);
+  font-size: var(--mly-text-small);
   letter-spacing: 0.1em;
   color: var(--text-primary);
   text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+
+/* ── Results ─────────────────────────────────────────────────────────────── */
+.mly-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .mly-chips {
@@ -374,15 +317,25 @@
   gap: 4px;
 }
 
+.mly-chips.is-expanded .mly-value-chip.is-overflow {
+  display: inline-flex;
+}
+
 .mly-value-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.58rem;
+  font-family: var(--font-mono);
+  font-size: var(--mly-text-small);
   padding: 3px 8px;
   border-radius: 999px;
   border: 1px solid var(--glass-border);
+  background: transparent;
   color: var(--text-primary);
+}
+
+.mly-value-chip.is-overflow {
+  display: none;
 }
 
 .mly-value-chip i {
@@ -397,54 +350,212 @@
   font-weight: 500;
 }
 
-.mly-actions {
+button.mly-value-chip {
+  cursor: pointer;
+}
+
+button.mly-value-chip:hover {
+  border-color: var(--glass-border-hover);
+}
+
+/* ── Filters and legend ──────────────────────────────────────────────────── */
+.mly-filters {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
-.mly-actions .scene-btn {
-  flex: 1 1 auto;
+.mly-seg {
+  display: inline-flex;
+  border: 1px solid var(--glass-border-hover);
+  border-radius: 999px;
+  overflow: hidden;
 }
 
-.scene-btn[aria-pressed='true'] {
-  color: #0a0a0f;
-  background: var(--accent);
-  border-color: var(--accent);
+.mly-seg-btn {
+  font-family: var(--font-mono);
+  font-size: var(--mly-text-small);
+  letter-spacing: 0.08em;
+  padding: 4px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
 }
 
+.mly-seg-btn + .mly-seg-btn {
+  border-left: 1px solid var(--glass-border);
+}
+
+.mly-seg-btn.is-active {
+  background: rgba(5, 203, 99, 0.22);
+  color: var(--text-primary);
+}
+
+.mly-select {
+  font-family: var(--font-mono);
+  font-size: var(--mly-text-small);
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border-hover);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text-primary);
+}
+
+.mly-select option {
+  background: #0a0a0f;
+}
+
+.mly-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mly-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--mly-text-small);
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.mly-legend-swatch {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* ── Embedded viewer ─────────────────────────────────────────────────────── */
 .mly-viewer-wrap {
   position: relative;
   container-type: inline-size;
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 230px;
+  flex: 0 0 auto;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--glass-border-hover);
   background: #000;
 }
 
-.mly-viewer {
-  width: 100%;
-  flex: 1 1 auto;
-  min-height: 0;
-  /* Intrinsic height while the dock is auto-sized; grows when floating. */
-  aspect-ratio: 16 / 10;
+.mly-viewer-wrap[hidden] {
+  display: none;
 }
 
-#mapillary-dock.gev-floating .mly-viewer,
-.mly-viewer-wrap-expanded .mly-viewer {
-  aspect-ratio: auto;
+.mly-viewer {
+  width: 100%;
+  aspect-ratio: 16 / 10;
   min-height: 180px;
 }
 
-/* Caption bar, mapillary.com style: creator left, date right. */
+.mly-viewer-placeholder {
+  position: absolute;
+  inset: 0 0 26px;
+  display: grid;
+  place-items: center;
+  z-index: 3;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.mly-viewer-placeholder[hidden] {
+  display: none;
+}
+
+.mly-viewer-placeholder::after {
+  content: '';
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--mly-green);
+  animation: mly-spin 0.9s linear infinite;
+}
+
+@keyframes mly-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.mly-viewer-tools {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  /* Above MapillaryJS's overlays (z 10); its sequence bar is top-centre and
+     bearing/zoom/attribution bottom-right, so the top corners are free. */
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.mly-viewer-tools > * {
+  pointer-events: auto;
+}
+
+.mly-viewer-tools.mly-viewer-tools-right {
+  left: auto;
+  right: 6px;
+}
+
+.mly-viewer-tools .scene-btn {
+  padding: 4px 8px;
+  font-size: var(--mly-text-small);
+  background: rgba(10, 10, 15, 0.75);
+  flex: none;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mly-viewer-tools .mly-seg {
+  background: rgba(10, 10, 15, 0.75);
+}
+
+@container (max-width: 380px) {
+  .mly-viewer-tools .mly-btn-text {
+    display: none;
+  }
+}
+
+.mly-viewer-x {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(10, 10, 15, 0.8);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all var(--transition-fast);
+}
+
+.mly-viewer-x:hover {
+  color: #0a0a0f;
+  background: #fff;
+  border-color: #fff;
+}
+
 .mly-image-meta {
   flex: 0 0 auto;
   padding: 6px 10px;
-  font-size: 0.58rem;
+  font-family: var(--font-mono);
+  font-size: var(--mly-text-small);
   letter-spacing: 0.06em;
   color: var(--text-secondary);
   background: rgba(0, 0, 0, 0.7);
@@ -476,441 +587,29 @@
   letter-spacing: 0.1em;
 }
 
+.mly-image-link[hidden] {
+  display: none;
+}
+
 .mly-image-link:hover {
   text-decoration: underline;
 }
 
-.mly-viewer-tools.mly-viewer-tools-right {
-  left: auto;
-  right: 6px;
-}
-
-/* Only the buttons catch clicks; the containers let the viewer through. */
-.mly-viewer-tools {
-  pointer-events: none;
-}
-
-.mly-viewer-tools > * {
-  pointer-events: auto;
-}
-
-.mly-viewer-x {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(10, 10, 15, 0.8);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 1.1rem;
-  line-height: 1;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  transition: all var(--transition-fast);
-}
-
-.mly-viewer-x:hover {
-  color: #0a0a0f;
-  background: #fff;
-  border-color: #fff;
-}
-
-.mly-viewer-wrap-expanded .mly-viewer-tools.mly-viewer-tools-right {
-  left: auto;
-  right: 10px;
-  top: 10px;
-}
-
-.mly-viewer-wrap-expanded .mly-viewer-x {
-  width: 40px;
-  height: 40px;
-  font-size: 1.5rem;
-}
-
 .mly-meta {
-  font-size: 0.56rem;
+  font-family: var(--font-mono);
+  font-size: var(--mly-text-small);
   letter-spacing: 0.06em;
-  color: var(--text-dim);
-}
-
-/* Match the app's chrome-hiding modes. */
-body.ui-clean-view #mapillary-dock,
-body.recording-mode #mapillary-dock {
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-
-body.cockpit-mode #mapillary-dock {
-  display: none !important;
-}
-
-/* Not enough room beside the rail: fall back to the corner (still draggable). */
-@media (max-width: 1100px) {
-  #mapillary-dock {
-    right: 16px;
-  }
-}
-
-@media (max-width: 720px) {
-  #mapillary-dock {
-    left: 16px;
-    right: 16px;
-    width: auto;
-    max-width: none;
-    bottom: 6.4rem;
-    max-height: calc(100vh - 8rem);
-  }
-}
-
-/* Short viewports: trim the chrome so the imagery keeps its room. */
-@media (max-height: 640px) {
-  .mly-dock-inner {
-    padding: 8px 10px;
-    gap: 6px;
-  }
-
-  #mapillary-dock.mly-has-viewer .mly-ai-hint,
-  #mapillary-dock.mly-has-viewer .mly-suggestions {
-    display: none;
-  }
-
-  .mly-viewer-wrap {
-    min-height: 200px;
-  }
-}
-
-/* ── Prominent AI entry ─────────────────────── */
-.mly-ai-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.mly-ai-head .mly-kicker {
-  font-size: 0.66rem;
-  color: var(--text-primary);
-}
-
-.mly-ai-model {
-  margin-left: auto;
-  font-size: 0.52rem;
-  letter-spacing: 0.08em;
-  color: var(--text-dim);
-}
-
-.mly-ai-pulse {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.6);
-  animation: mly-pulse 2.2s ease-out infinite;
-}
-
-@keyframes mly-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.6);
-  }
-  70% {
-    box-shadow: 0 0 0 9px rgba(0, 212, 255, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(0, 212, 255, 0);
-  }
-}
-
-#mapillary-dock #mly-query-input {
-  padding: 11px 12px;
-  font-size: 0.8rem;
-  border: 1px solid rgba(0, 212, 255, 0.45);
-  background: rgba(0, 212, 255, 0.06);
-  box-shadow: 0 0 18px rgba(0, 212, 255, 0.12) inset;
-}
-
-#mapillary-dock #mly-query-input::placeholder {
-  color: rgba(232, 234, 237, 0.55);
-}
-
-#mapillary-dock #mly-query-input:focus {
-  background: rgba(0, 212, 255, 0.1);
-  box-shadow:
-    0 0 0 2px var(--accent-dim),
-    0 0 22px rgba(0, 212, 255, 0.25);
-}
-
-.mly-ask {
-  min-width: 64px;
-  font: inherit;
-  font-size: 0.66rem;
-  letter-spacing: 0.12em;
-  border-radius: var(--btn-radius);
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #0a0a0f;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all var(--transition-fast);
-}
-
-.mly-ask:hover:not(:disabled) {
-  box-shadow: 0 0 16px rgba(0, 212, 255, 0.5);
-}
-
-.mly-ask:disabled {
-  opacity: 0.55;
-  cursor: progress;
-}
-
-.mly-ai-hint {
-  font-family: var(--font-sans);
-  font-size: 0.66rem;
-  line-height: 1.35;
   color: var(--text-secondary);
 }
 
-.mly-ai-hint.is-warn {
-  color: #ffb300;
+.mly-meta:empty {
+  display: none;
 }
 
-/* ── Imagery filters ────────────────────────── */
-.mly-filters {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.mly-filter-label {
-  font-size: 0.54rem;
-  letter-spacing: 0.14em;
-  color: var(--text-dim);
-}
-
-.mly-seg {
-  display: inline-flex;
-  border: 1px solid var(--glass-border-hover);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.mly-seg-btn {
-  font: inherit;
-  font-size: 0.56rem;
-  letter-spacing: 0.08em;
-  padding: 4px 9px;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.mly-seg-btn + .mly-seg-btn {
-  border-left: 1px solid var(--glass-border);
-}
-
-.mly-seg-btn.is-active {
-  background: rgba(5, 203, 99, 0.22);
-  color: var(--text-primary);
-}
-
-.mly-select {
-  font: inherit;
-  font-size: 0.56rem;
-  letter-spacing: 0.06em;
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--glass-border-hover);
-  background: rgba(0, 0, 0, 0.35);
-  color: var(--text-primary);
-}
-
-.mly-select option {
-  background: #0a0a0f;
-}
-
-/* ── Portable, resizable windows ────────────── */
-.gev-floating-handle {
-  cursor: grab;
-}
-
-.gev-floating-dragging,
-.gev-floating-dragging * {
-  cursor: grabbing !important;
-  user-select: none;
-}
-
-.gev-floating {
-  position: fixed !important;
-  right: auto !important;
-  bottom: auto !important;
-  margin: 0 !important;
-  max-width: calc(100vw - 12px) !important;
-  z-index: 132 !important;
-  display: flex;
-  flex-direction: column;
-}
-
-.gev-resize-grip {
-  position: absolute;
-  right: 5px;
-  bottom: 5px;
-  width: 16px;
-  height: 16px;
-  cursor: nwse-resize;
-  z-index: 6;
-  opacity: 0.6;
-  border-radius: 3px;
-  background: linear-gradient(
-    135deg,
-    transparent 0 45%,
-    var(--accent) 45% 55%,
-    transparent 55% 70%,
-    var(--accent) 70% 80%,
-    transparent 80%
-  );
-}
-
-.gev-resize-grip:hover {
-  opacity: 1;
-}
-
-/* Invisible strips along the other edges and corners. */
-.gev-resize-edge {
-  position: absolute;
-  z-index: 7;
-}
-
-.gev-resize-edge[data-dir='n'],
-.gev-resize-edge[data-dir='s'] {
-  left: 10px;
-  right: 10px;
-  height: 7px;
-  cursor: ns-resize;
-}
-
-.gev-resize-edge[data-dir='e'],
-.gev-resize-edge[data-dir='w'] {
-  top: 10px;
-  bottom: 10px;
-  width: 7px;
-  cursor: ew-resize;
-}
-
-.gev-resize-edge[data-dir='n'] {
-  top: -3px;
-}
-
-.gev-resize-edge[data-dir='s'] {
-  bottom: -3px;
-}
-
-.gev-resize-edge[data-dir='e'] {
-  right: -3px;
-}
-
-.gev-resize-edge[data-dir='w'] {
-  left: -3px;
-}
-
-.gev-resize-edge[data-dir='ne'],
-.gev-resize-edge[data-dir='nw'],
-.gev-resize-edge[data-dir='sw'] {
-  width: 14px;
-  height: 14px;
-}
-
-.gev-resize-edge[data-dir='ne'] {
-  top: -3px;
-  right: -3px;
-  cursor: nesw-resize;
-}
-
-.gev-resize-edge[data-dir='nw'] {
-  top: -3px;
-  left: -3px;
-  cursor: nwse-resize;
-}
-
-.gev-resize-edge[data-dir='sw'] {
-  bottom: -3px;
-  left: -3px;
-  cursor: nesw-resize;
-}
-
-#mapillary-dock.gev-floating {
-  max-height: none !important;
-}
-
-#mapillary-dock.gev-floating .mly-dock-inner {
-  flex: 1 1 auto;
-  min-height: 0;
-  max-height: none;
-  height: 100%;
-}
-
-/* The CCTV panel lives in a rail until dragged; then it floats with the
-   width it had (set inline when lifted), never the viewport's. */
-#cctv-panel.gev-floating {
-  position: fixed !important;
-  flex: none !important;
-  max-height: calc(100vh - 12px) !important;
-}
-
-#cctv-panel.gev-floating:not([style*='height']) {
-  height: auto !important;
-}
-
-#cctv-panel.gev-floating .cctv-panel-inner {
-  flex: 1 1 auto;
-  min-height: 0;
-  height: 100%;
-  max-height: none;
-}
-
-#cctv-panel.gev-floating.collapsed .cctv-panel-inner {
-  height: auto;
-}
-
-/* ── Expanded street-level viewer ───────────── */
-.mly-viewer-tools {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  /* Above MapillaryJS's own overlays (z 10); the corners are free — its
-     sequence bar is top-centre, bearing/zoom/attribution bottom-right. */
-  z-index: 12;
-  display: flex;
-  gap: 4px;
-}
-
-.mly-viewer-tools .scene-btn {
-  padding: 4px 8px;
-  font-size: 0.56rem;
-  background: rgba(10, 10, 15, 0.75);
-  /* Hug the label: the playback bar MapillaryJS centres at the top needs
-     the middle of narrow viewers. */
-  flex: none;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* Narrow viewer: icon-only expand button so nothing meets the playback bar. */
-@container (max-width: 380px) {
-  .mly-viewer-tools .mly-btn-text {
-    display: none;
-  }
-
-  .mly-viewer-tools .scene-btn {
-    padding: 4px 7px;
-  }
-}
-
-/* The dock's backdrop-filter makes it the containing block for fixed
-   descendants, so the expanded viewer is re-parented to <body>. */
+/* ── Expanded viewer ─────────────────────────────────────────────────────── */
+/* The panel inner's backdrop-filter makes it the containing block for fixed
+   descendants, so the expanded viewer is re-parented to <body>. z-index sits
+   above panels (≤139) and below the voice pill (150) and toasts (200). */
 .mly-viewer-wrap-expanded {
   position: fixed;
   left: 4vw;
@@ -923,6 +622,7 @@ body.cockpit-mode #mapillary-dock {
   font-family: var(--font-mono);
   border-color: rgba(0, 212, 255, 0.55);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
+  outline: none;
 }
 
 .mly-viewer-wrap-expanded .mly-viewer {
@@ -932,16 +632,18 @@ body.cockpit-mode #mapillary-dock {
 }
 
 .mly-viewer-wrap-expanded .mly-image-meta {
+  font-size: 0.66rem;
   padding: 10px 14px;
-}
-
-.mly-viewer-wrap-expanded .mly-image-meta {
-  font-size: 0.64rem;
 }
 
 .mly-viewer-wrap-expanded .mly-viewer-tools {
   top: 10px;
   left: 10px;
+}
+
+.mly-viewer-wrap-expanded .mly-viewer-tools.mly-viewer-tools-right {
+  left: auto;
+  right: 10px;
 }
 
 .mly-viewer-wrap-expanded .mly-viewer-tools .scene-btn {
@@ -953,7 +655,30 @@ body.cockpit-mode #mapillary-dock {
   background: rgba(10, 10, 15, 0.82);
 }
 
-.mly-viewer-wrap-expanded .mly-viewer-tools .scene-btn::after {
+.mly-viewer-wrap-expanded #mly-viewer-expand::after {
   content: ' · ESC';
   color: var(--text-secondary);
+}
+
+.mly-viewer-wrap-expanded .mly-viewer-x {
+  width: 40px;
+  height: 40px;
+  font-size: 1.5rem;
+}
+
+/* ── Short viewports ─────────────────────────────────────────────────────── */
+@media (max-height: 640px) {
+  .mapillary-panel-inner {
+    padding: 10px;
+    gap: 6px;
+  }
+
+  #mapillary-panel .mly-hint,
+  #mapillary-panel .mly-suggestions {
+    display: none;
+  }
+
+  .mly-viewer {
+    min-height: 150px;
+  }
 }

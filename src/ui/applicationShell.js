@@ -14,6 +14,7 @@ import { readShellElements } from './shellElements.js';
 import { CockpitCoordinator } from './cockpitCoordinator.js';
 import { ContextControls } from './context.js';
 import { CctvControls } from './cctv.js';
+import { MapillaryControls } from './mapillaryControls.js';
 import { RadioControls } from './radio.js';
 import { LocationNavigation } from './locationNavigation.js';
 import { bindClearLayersControl } from './layers.js';
@@ -536,6 +537,7 @@ export class StyleManager extends ShellFacade {
     this._initRightPanelAdaptiveLayout();
     this._initRadioPanel();
     this._initCctvPanel();
+    this._initMapillaryPanel();
     this._initGlobalContextPanel();
     this._initLocationBar();
     this._initShareButton();
@@ -876,6 +878,29 @@ export class StyleManager extends ShellFacade {
   }
 
   /** Compose camera panel controls from the existing camera port and application actions. */
+  _initMapillaryPanel() {
+    const { mapillaryLayer } = this.services;
+    this._mapillaryControls?.destroy();
+    this._mapillaryControls = null;
+    if (!this._mapillaryPanel || !mapillaryLayer) return;
+    this._mapillaryControls = new MapillaryControls({
+      root: this._mapillaryPanel,
+      mapillary: mapillaryLayer,
+      actions: {
+        isEnabled: () => this._dataManager?.isEnabled('mapillary') === true,
+        setEnabled: (enabled) =>
+          this._dataManager?.setEnabled('mapillary', enabled, {
+            origin: 'user',
+          }),
+        setPanelCollapsed: (collapsed, options) =>
+          this.setPanelCollapsed('mapillary-panel', collapsed, options),
+        openKeySetup: () => document.getElementById('key-setup-chip')?.click(),
+        showToast: (message) => this._showToast(message),
+      },
+    });
+    this._mapillaryControls.connect();
+  }
+
   _initCctvPanel() {
     const { cctvLayer } = this.services;
     this._cctvControls?.destroy();
@@ -1471,6 +1496,7 @@ export class StyleManager extends ShellFacade {
     this._cameraOrientationControls?.destroy();
     this._clearLayersControl?.destroy();
     this._cctvControls?.destroy();
+    this._mapillaryControls?.destroy();
     this._radioControls?.destroy();
     this._cockpitCoordinator.stop();
     this._visualSettings.stop();
