@@ -43,16 +43,20 @@
     "test": "node scripts/run-unit-tests.mjs",
     "test:track": "node scripts/track-regression.mjs",
     "qa:map-source-tray": "node scripts/qa-map-source-tray.mjs",
+    "qa:mapillary": "node scripts/qa-mapillary.mjs",
     "check:boundaries": "node scripts/check-import-directions.mjs && node scripts/check-package-boundaries.mjs",
     "qa:transit": "node scripts/qa-transit.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.126.0",
     "@mapbox/vector-tile": "^3.0.0",
     "cesium": "^1.124.0",
     "egm96-universal": "^1.1.1",
+    "mapillary-js": "^4.1.2",
     "mgrs": "^2.1.0",
     "pbf": "^5.1.2",
-    "satellite.js": "^6.0.2"
+    "satellite.js": "^6.0.2",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "prettier": "3.9.6",
@@ -70,6 +74,9 @@
     "./application/viewer": "./src/app/viewer.js",
     "./build/vite": {
       "node": "./build/vite.js"
+    },
+    "./server/providers/mapillary": {
+      "node": "./server/providers/mapillary.js"
     },
     "./server/providers/live": {
       "node": "./server/providers/live.js"
@@ -160,6 +167,8 @@
     "./layers/bikeshare": "./src/layers/bikeshare/index.js",
     "./layers/directions": "./src/layers/directions/index.js",
     "./layers/cctv": "./src/layers/cctv/index.js",
+    "./layers/mapillary": "./src/layers/mapillary/index.js",
+    "./layers/mapillary/source": "./src/layers/mapillary/source.js",
     "./layers/alpr": "./src/layers/alpr/index.js",
     "./layers/radio": "./src/layers/radio/index.js",
     "./layers/submarine-cables": "./src/layers/submarineCables/index.js",

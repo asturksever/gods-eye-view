@@ -7,6 +7,7 @@ export function createBrowserViteConfig({
   publicDir,
   googleApiKey,
   cesiumToken,
+  mapillaryToken,
   host = 'localhost',
   port = 4173,
 } = {}) {
@@ -32,7 +33,15 @@ export function createBrowserViteConfig({
     define: {
       'import.meta.env.GOOGLE_MAPS_API_KEY': JSON.stringify(googleApiKey),
       'import.meta.env.CESIUM_ION_TOKEN': JSON.stringify(cesiumToken),
+      // Mapillary client tokens are public by design (see SECURITY.md).
+      'import.meta.env.MAPILLARY_CLIENT_TOKEN': JSON.stringify(
+        mapillaryToken ?? '',
+      ),
     },
+    // MapillaryJS is loaded on demand the first time a street-level image is
+    // opened. Pre-bundle it so that first dynamic import never triggers a
+    // dev-server re-optimization (which answers in-flight requests with 504).
+    optimizeDeps: { include: ['mapillary-js'] },
     build: { chunkSizeWarningLimit: 1500 },
   };
 }
