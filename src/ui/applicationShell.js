@@ -96,6 +96,7 @@ export class StyleManager extends ShellFacade {
         _setRadioDisclosure: (...args) => this._setRadioDisclosure(...args),
         _syncCctvPanelViewport: (...args) =>
           this._syncCctvPanelViewport(...args),
+        _onPanelResized: (...args) => this._onPanelResized(...args),
         _syncContextRadioLauncherState: (...args) =>
           this._syncContextRadioLauncherState(...args),
         _showToast: (...args) => this._showToast(...args),
@@ -1408,6 +1409,15 @@ export class StyleManager extends ShellFacade {
     });
     this._initCockpitDisplayPortal();
   }
+
+  /**
+   * A portable panel finished a resize or snapped back to its rail. Nothing
+   * in the shell depends on it yet; a panel with a viewport of its own can
+   * refit here.
+   * @param {string} _panelId
+   * @returns {void}
+   */
+  _onPanelResized(_panelId) {}
 
   /**
    * Recalculates the CCTV panel max-height based on its current top position

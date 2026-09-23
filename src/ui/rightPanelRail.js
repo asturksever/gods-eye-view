@@ -41,8 +41,10 @@ export function layoutRightPanelRail({
 }) {
   if (!stack) return;
 
+  // A panel lifted out of the rail (PanelPositionControls' portable mode)
+  // is a fixed window the rail neither measures nor allocates.
   const panels = [...stack.children].filter((panel) =>
-    panel.matches('[data-panel-id]'),
+    panel.matches('[data-panel-id]:not(.panel-floating)'),
   );
   if (!hud.visible || hud.variant !== 'tactical') {
     for (const panel of panels.filter((item) =>

@@ -59,7 +59,10 @@ function element(
     getBoundingClientRect() {
       return this.rect;
     },
-    matches: (selector) => selector === '[data-panel-id]',
+    matches: (selector) =>
+      selector === '[data-panel-id]' ||
+      (selector === '[data-panel-id]:not(.panel-floating)' &&
+        !classes.has('panel-floating')),
     contains(target) {
       return (
         target === this || this.children.some((child) => child.contains(target))

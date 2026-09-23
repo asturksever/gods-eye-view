@@ -56,6 +56,7 @@ export class PanelChrome {
       layoutRightPanels: () => this._layoutRightPanels(),
       syncCctvPanelViewport: () => this._syncCctvPanelViewport(),
       showToast: (message) => this._showToast(message),
+      onPanelResized: (panelId) => this._onPanelResized(panelId),
     });
     this._panelLayout = new PanelLayoutController({
       readHud: () => ({
@@ -139,6 +140,7 @@ export class PanelChrome {
     this._initCommandDockPins();
     this._initCommandDockTrayMetrics();
     this._maybeNotifyLayoutReset();
+    this._panelPosition._initPanelDrag();
   }
 
   _collapsePanelOnEscape(event, panelId) {
