@@ -26,6 +26,8 @@
   "src/main.js",
   "docs/APPLICATION.md",
   "scripts/qa-application.mjs",
+  "scripts/qa-panel-resize.mjs",
+  "src/tooling/panelResizeQa.test.mjs",
   "src/app/application.js",
   "src/app/application.test.mjs",
   "src/app/mapLifecycle.test.mjs",
