@@ -1,5 +1,10 @@
 # Changelog
 
+- Rail panels can opt into a portable mode: dragging the CCTV panel by its
+  header lifts it out of the right rail into a floating window that resizes
+  from any edge or corner, remembers its position and size, and snaps back on
+  a header double-click.
+
 - Street Level: a provider-neutral street-level imagery layer modelled on the iD editor's photo overlay. One panel in the right rail carries a chip per imagery provider, shared 360°/flat and captured-since filters, coverage drawn on the globe from orbit down to a single street, image cones per sequence, and one embedded viewer whose adapter follows the provider of the open image; each active provider credits its imagery on the globe, and share links carry the provider switches and the filter. Mapillary is the first provider (free client token; CC BY-SA 4.0 imagery); Google Street View, KartaView and Panoramax are next.
 
 - CCTV cameras whose bearing is a guess now say so. Packs mark bearings derived

@@ -42,6 +42,7 @@
     "opensky:import": "./scripts/opensky-import-client.sh",
     "preview": "vite preview",
     "qa:map-source-tray": "node scripts/qa-map-source-tray.mjs",
+    "qa:panel-resize": "node scripts/qa-panel-resize.mjs",
     "qa:street-level": "node scripts/qa-street-level.mjs",
     "qa:transit": "node scripts/qa-transit.mjs",
     "test": "node scripts/run-unit-tests.mjs",
