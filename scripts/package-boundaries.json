@@ -20,7 +20,7 @@
   },
   "viewer": {
     "exports": ["./application/viewer"],
-    "modules": ["src/app/viewer.js"],
+    "modules": ["src/app/viewer.js", "src/app/atmosphereCompat.js"],
     "external": ["cesium"]
   },
   "vite-build": {
@@ -279,6 +279,7 @@
     "runtime": "node",
     "exports": ["./server/providers/openai"],
     "modules": [
+      "src/hudLayoutPolicy.js",
       "server/providers/common/rate-limit.js",
       "server/providers/common/request.js",
       "server/providers/common/source-root.js",
@@ -349,6 +350,7 @@
     "exports": ["./ui/layout"],
     "modules": [
       "src/ui/panelRails.js",
+      "src/ui/displayPanelScroll.js",
       "src/ui/leftPanelRail.js",
       "src/ui/rightPanelRail.js",
       "src/ui/panelMeasurement.js",
@@ -484,6 +486,7 @@
       "src/ui/cockpitContext.js",
       "src/ui/cockpitController.js",
       "src/ui/cockpitDisplayPortal.js",
+      "src/ui/displayPanelScroll.js",
       "src/ui/cockpitInput.js",
       "src/ui/cockpitInstruments.js",
       "src/ui/cockpitLayout.js",
@@ -509,6 +512,10 @@
   "ui-shell": {
     "exports": ["./ui/shell"],
     "modules": [
+      "src/hudLayouts.js",
+      "src/hudLayoutPolicy.js",
+      "src/cyberSonar.js",
+      "src/ui/radioPanelPlacement.js",
       "src/app/stateChannel.js",
       "src/bloom.js",
       "src/cctvFocusPolicy.js",
@@ -539,6 +546,7 @@
       "src/styles/surveillance.js",
       "src/styles/thermal.js",
       "src/ui/applicationShell.js",
+      "src/ui/cyberSonarControls.js",
       "src/ui/locationNavigation.js",
       "src/ui/cockpitCoordinator.js",
       "src/ui/cameraOrientationControls.js",
@@ -557,6 +565,7 @@
       "src/ui/cockpitContext.js",
       "src/ui/cockpitController.js",
       "src/ui/cockpitDisplayPortal.js",
+      "src/ui/displayPanelScroll.js",
       "src/ui/cockpitInput.js",
       "src/ui/cockpitInstruments.js",
       "src/ui/cockpitLayout.js",
@@ -626,7 +635,10 @@
       "src/ui/displayBindings.js",
       "src/ui/shellFacade.js",
       "src/ui/mapillaryControls.js",
-      "src/ui/mapillaryPresentation.js"
+      "src/ui/mapillaryPresentation.js",
+      "src/ui/localSdrControls.js",
+      "src/layers/localAdsb/feedNames.js",
+      "src/ui/localSdrPresentation.js"
     ],
     "external": ["cesium"]
   },
@@ -748,6 +760,7 @@
   "civil-flights": {
     "exports": ["./layers/flights"],
     "modules": [
+      "src/cyberSonar.js",
       "src/data/aircraftClass.js",
       "src/data/aircraftIcons.js",
       "src/data/aircraftMeta.js",
@@ -779,13 +792,16 @@
       "src/layers/flights/records.js",
       "src/layers/flights/recordPolicy.js",
       "src/layers/flights/snapshotRenderer.js",
-      "src/data/inputOwnership.js"
+      "src/layers/flights/modelSpec.js",
+      "src/data/inputOwnership.js",
+      "src/data/modelEligibility.js"
     ],
     "external": ["cesium"]
   },
   "military-flights": {
     "exports": ["./layers/military"],
     "modules": [
+      "src/cyberSonar.js",
       "src/data/aircraftClass.js",
       "src/data/aircraftIcons.js",
       "src/data/aircraftMeta.js",
@@ -814,7 +830,8 @@
       "src/layers/military/records.js",
       "src/layers/military/recordPolicy.js",
       "src/layers/military/snapshotRenderer.js",
-      "src/data/inputOwnership.js"
+      "src/data/inputOwnership.js",
+      "src/data/modelEligibility.js"
     ],
     "external": ["cesium"]
   },
@@ -939,6 +956,7 @@
   "launches-layer": {
     "exports": ["./layers/launches"],
     "modules": [
+      "src/cyberSonar.js",
       "src/layers/launches/camera.js",
       "src/layers/launches/controls.js",
       "src/layers/launches/index.js",
@@ -985,6 +1003,7 @@
   "awareness-layer": {
     "exports": ["./layers/awareness"],
     "modules": [
+      "src/cyberSonar.js",
       "src/cockpitMath.js",
       "src/data/iconOrientation.js",
       "src/data/militaryAwarenessEngine.js",
@@ -1077,6 +1096,7 @@
       "src/layers/cctv/geometry.js",
       "src/layers/cctv/geometryQueue.js",
       "src/layers/cctv/ground.js",
+      "src/layers/cctv/headingConfidence.js",
       "src/layers/cctv/health.js",
       "src/layers/cctv/hover.js",
       "src/layers/cctv/index.js",
@@ -1202,6 +1222,7 @@
     "modules": [
       "src/data/naturalEarthRegions.js",
       "src/data/neighborhoodPolygons.js",
+      "src/data/bundledJson.js",
       "src/data/retryableLoad.js",
       "src/data/local_data/neighborhoods/san-francisco.json",
       "src/data/local_data/natural_earth/regions.json",
@@ -1288,6 +1309,12 @@
       "./standalone/catalog"
     ],
     "modules": [
+      "src/cyberSonarScene.js",
+      "src/cyberSonar.js",
+      "src/hudLayouts.js",
+      "src/hudLayoutPolicy.js",
+      "src/ui/radioPanelPlacement.js",
+      "src/cyberSonarGpu.js",
       "src/scenes/nepalEvidencePack.js",
       "src/data/bhoteKoshiEvent.js",
       "src/ui/imagerySplit.js",
@@ -1334,6 +1361,7 @@
       "src/app/surfaceServices.js",
       "src/app/tools.js",
       "src/app/viewer.js",
+      "src/app/atmosphereCompat.js",
       "src/bloom.js",
       "src/camera.js",
       "src/cameraVerbs.js",
@@ -1430,6 +1458,7 @@
       "src/data/regionalBrief.js",
       "src/data/regionalModel.js",
       "src/data/renderAltitude.js",
+      "src/data/bundledJson.js",
       "src/data/retryableLoad.js",
       "src/data/rocketLaunches.js",
       "src/data/routePlausible.js",
@@ -1507,6 +1536,7 @@
       "src/layers/cctv/geometry.js",
       "src/layers/cctv/geometryQueue.js",
       "src/layers/cctv/ground.js",
+      "src/layers/cctv/headingConfidence.js",
       "src/layers/cctv/health.js",
       "src/layers/cctv/hover.js",
       "src/layers/cctv/index.js",
@@ -1726,6 +1756,7 @@
       "src/styles/surveillance.js",
       "src/styles/thermal.js",
       "src/ui/applicationShell.js",
+      "src/ui/cyberSonarControls.js",
       "src/ui/locationNavigation.js",
       "src/ui/cockpitCoordinator.js",
       "src/ui/cameraOrientationControls.js",
@@ -1744,6 +1775,7 @@
       "src/ui/cockpitContext.js",
       "src/ui/cockpitController.js",
       "src/ui/cockpitDisplayPortal.js",
+      "src/ui/displayPanelScroll.js",
       "src/ui/cockpitInput.js",
       "src/ui/cockpitInstruments.js",
       "src/ui/cockpitLayout.js",
@@ -1818,6 +1850,7 @@
       "src/layers/flights/records.js",
       "src/layers/flights/recordPolicy.js",
       "src/layers/flights/snapshotRenderer.js",
+      "src/layers/flights/modelSpec.js",
       "src/layers/military/records.js",
       "src/layers/military/recordPolicy.js",
       "src/layers/military/snapshotRenderer.js",
@@ -1843,6 +1876,12 @@
       "src/data/layerSnapshot.js",
       "src/layers/alpr/records.js",
       "src/layers/earthquakes/records.js",
+      "src/app/layers/perimeters.js",
+      "src/layers/perimeters/index.js",
+      "src/layers/perimeters/source.js",
+      "src/layers/perimeters/records.js",
+      "src/layers/perimeters/cards.js",
+      "src/layers/perimeters/inciweb.js",
       "src/layers/cctv/sourcePolicy.js",
       "src/sources/reference.js",
       "src/search/nominatim.js",
@@ -1871,6 +1910,7 @@
       "src/data/contactTrailRenderer.js",
       "src/data/transitProxy.js",
       "src/data/gtfsRealtime.js",
+      "src/data/modelEligibility.js",
       "src/layers/transit/trails.js",
       "src/layers/transit/movement.js",
       "src/layers/transit/qaMetrics.js",
@@ -1937,6 +1977,23 @@
       "src/layers/cyclones/rendering.js",
       "src/layers/cyclones/labels.js",
       "src/layers/cyclones/source.js",
+      "src/app/layers/localAdsb.js",
+      "src/layers/localAdsb/index.js",
+      "src/layers/localAdsb/policy.js",
+      "src/layers/localAdsb/card.js",
+      "src/layers/localAdsb/feeds.js",
+      "src/layers/localAdsb/status.js",
+      "src/layers/localAdsb/feedNames.js",
+      "src/layers/localAdsb/motion.js",
+      "src/layers/localAdsb/models.js",
+      "src/layers/localAdsb/enrichment.js",
+      "src/sources/adsbRecords.js",
+      "src/sdr/controller.js",
+      "src/sdr/spectrum.js",
+      "src/sdr/gain.js",
+      "src/sdr/usbDevices.js",
+      "src/ui/localSdrControls.js",
+      "src/ui/localSdrPresentation.js",
       "src/app/layers/recentImagery.js",
       "src/layers/recentImagery/index.js",
       "src/layers/recentImagery/model.js",
@@ -1974,7 +2031,8 @@
       "mgrs",
       "pbf",
       "satellite.js",
-      "mapillary-js"
+      "mapillary-js",
+      "@jtarrio/webrtlsdr"
     ]
   },
   "application-catalog": {
@@ -1985,6 +2043,7 @@
   "application-layer-construction": {
     "exports": ["./application/layers"],
     "modules": [
+      "src/cyberSonar.js",
       "src/data/bhoteKoshiEvent.js",
       "src/ui/imagerySplit.js",
       "src/maps/imageryComparison.js",
@@ -2072,6 +2131,7 @@
       "src/data/pickRegistry.js",
       "src/data/radioCountry.js",
       "src/data/renderAltitude.js",
+      "src/data/bundledJson.js",
       "src/data/retryableLoad.js",
       "src/data/routePlausible.js",
       "src/data/satelliteClass.js",
@@ -2136,6 +2196,7 @@
       "src/layers/cctv/geometry.js",
       "src/layers/cctv/geometryQueue.js",
       "src/layers/cctv/ground.js",
+      "src/layers/cctv/headingConfidence.js",
       "src/layers/cctv/health.js",
       "src/layers/cctv/hover.js",
       "src/layers/cctv/index.js",
@@ -2316,6 +2377,7 @@
       "src/layers/flights/records.js",
       "src/layers/flights/recordPolicy.js",
       "src/layers/flights/snapshotRenderer.js",
+      "src/layers/flights/modelSpec.js",
       "src/layers/military/records.js",
       "src/layers/military/recordPolicy.js",
       "src/layers/military/snapshotRenderer.js",
@@ -2339,6 +2401,12 @@
       "src/app/localGeojsonServices.js",
       "src/layers/alpr/records.js",
       "src/layers/earthquakes/records.js",
+      "src/app/layers/perimeters.js",
+      "src/layers/perimeters/index.js",
+      "src/layers/perimeters/source.js",
+      "src/layers/perimeters/records.js",
+      "src/layers/perimeters/cards.js",
+      "src/layers/perimeters/inciweb.js",
       "src/layers/cctv/sourcePolicy.js",
       "src/search/nominatim.js",
       "src/nominatimGeocode.js",
@@ -2389,6 +2457,25 @@
       "src/layers/cyclones/rendering.js",
       "src/layers/cyclones/labels.js",
       "src/layers/cyclones/source.js",
+      "src/app/layers/localAdsb.js",
+      "src/layers/localAdsb/index.js",
+      "src/layers/localAdsb/policy.js",
+      "src/layers/localAdsb/card.js",
+      "src/layers/localAdsb/feeds.js",
+      "src/layers/localAdsb/status.js",
+      "src/layers/localAdsb/feedNames.js",
+      "src/layers/localAdsb/motion.js",
+      "src/layers/localAdsb/models.js",
+      "src/layers/localAdsb/enrichment.js",
+      "src/sources/adsbRecords.js",
+      "src/sdr/controller.js",
+      "src/sdr/spectrum.js",
+      "src/sdr/gain.js",
+      "src/sdr/usbDevices.js",
+      "src/data/detection.js",
+      "src/data/detectionRenderDemand.js",
+      "src/data/detectionPresentation.js",
+      "src/data/modelEligibility.js",
       "src/app/layers/recentImagery.js",
       "src/layers/recentImagery/index.js",
       "src/layers/recentImagery/model.js",
@@ -2422,7 +2509,8 @@
       "@mapbox/vector-tile",
       "pbf",
       "mgrs",
-      "mapillary-js"
+      "mapillary-js",
+      "@jtarrio/webrtlsdr"
     ]
   },
   "application-operations": {
@@ -2440,6 +2528,7 @@
       "src/data/local_data/neighborhoods/san-francisco.json",
       "src/data/naturalEarthRegions.js",
       "src/data/neighborhoodPolygons.js",
+      "src/data/bundledJson.js",
       "src/data/retryableLoad.js",
       "src/data/scenePick.js",
       "src/keylessGeocoder.js",
@@ -2507,6 +2596,10 @@
   "ui-visual-settings": {
     "exports": ["./ui/visual-settings"],
     "modules": [
+      "src/cyberSonar.js",
+      "src/hudLayouts.js",
+      "src/hudLayoutPolicy.js",
+      "src/ui/radioPanelPlacement.js",
       "src/bloom.js",
       "src/cockpitVisionPolicy.js",
       "src/contactsDetectionPolicy.js",
@@ -2531,6 +2624,8 @@
   "ui-panel-chrome": {
     "exports": ["./ui/panel-chrome"],
     "modules": [
+      "src/ui/displayPanelScroll.js",
+      "src/ui/radioPanelPlacement.js",
       "src/panelStackLayout.js",
       "src/ui/leftPanelRail.js",
       "src/ui/panelChrome.js",
@@ -2621,7 +2716,7 @@
   },
   "voice-action-schemas": {
     "exports": ["./voice/action-schemas"],
-    "modules": ["src/voice/actionSchemas.js"],
+    "modules": ["src/voice/actionSchemas.js", "src/hudLayoutPolicy.js"],
     "external": []
   },
   "voice-session": {
@@ -2710,6 +2805,9 @@
       "src/sources/reference.js",
       "src/layers/earthquakes/source.js",
       "src/layers/earthquakes/records.js",
+      "src/sources/httpBody.js",
+      "src/layers/perimeters/source.js",
+      "src/layers/perimeters/records.js",
       "src/layers/submarineCables/bundledSource.js"
     ],
     "external": []
@@ -2780,6 +2878,7 @@
   "transit-standalone": {
     "exports": ["./layers/transit/standalone"],
     "modules": [
+      "src/cyberSonar.js",
       "src/app/sourceSlot.js",
       "src/celestialRing.js",
       "src/data/cameraSensitivity.js",
@@ -2903,6 +3002,27 @@
       "src/sources/overpassFeaturesRecords.js",
       "src/sources/overpassFeatures.js",
       "src/sources/featureSource.js"
+    ],
+    "external": []
+  },
+  "perimeters": {
+    "exports": ["./layers/perimeters"],
+    "modules": [
+      "src/layers/perimeters/index.js",
+      "src/sources/httpBody.js",
+      "src/layers/perimeters/source.js",
+      "src/layers/perimeters/records.js",
+      "src/layers/perimeters/cards.js",
+      "src/layers/perimeters/inciweb.js"
+    ],
+    "external": ["cesium"]
+  },
+  "perimeters-source": {
+    "exports": ["./layers/perimeters/source"],
+    "modules": [
+      "src/layers/perimeters/records.js",
+      "src/sources/httpBody.js",
+      "src/layers/perimeters/source.js"
     ],
     "external": []
   }
