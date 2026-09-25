@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   presentStreetLevelPanel,
-  SINCE_OPTIONS,
+  SINCE_STOPS,
+  sinceStopIndex,
 } from './streetLevelPresentation.js';
 
 const provider = (overrides = {}) => ({
@@ -75,29 +76,44 @@ function deepMerge(target, source) {
 test('a key-gated layer disables every control and flags KEY REQUIRED', () => {
   const view = presentStreetLevelPanel(snapshot({ keyRequired: true }));
   assert.equal(view.controlsDisabled, true);
-  assert.deepEqual(view.status, { text: 'KEY REQUIRED', tone: 'warn' });
+  assert.equal(view.status.text, 'KEY REQUIRED');
+  assert.equal(view.status.tone, 'warn');
 });
 
-test('status reads LOADING while coverage streams, then ON or OFF', () => {
+test('the header pill is the on/off switch and reads OFF, LOADING or ON', () => {
   assert.deepEqual(presentStreetLevelPanel(snapshot()).status, {
     text: 'OFF',
     tone: '',
+    pressed: false,
+    title: 'Turn Street Level on',
   });
   assert.deepEqual(
     presentStreetLevelPanel(
       snapshot({ enabled: true, coverage: { loading: true } }),
     ).status,
-    { text: 'LOADING', tone: 'busy' },
+    {
+      text: 'LOADING',
+      tone: 'busy',
+      pressed: true,
+      title: 'Turn Street Level off',
+    },
   );
   assert.deepEqual(
     presentStreetLevelPanel(snapshot({ enabled: true })).status,
-    { text: 'ON', tone: 'on' },
+    { text: 'ON', tone: 'on', pressed: true, title: 'Turn Street Level off' },
+  );
+  assert.equal(
+    presentStreetLevelPanel(snapshot({ enabled: true, keyRequired: true }))
+      .status.pressed,
+    true,
+    'a keyless layer that is on can still be switched off',
   );
 });
 
 test('one chip per provider: on, off, loading, and keyless as an error chip', () => {
   const view = presentStreetLevelPanel(
     snapshot({
+      enabled: true,
       providers: [
         provider(),
         provider({
@@ -164,15 +180,59 @@ test('errors from the viewer or the coverage web surface in one alert', () => {
   );
 });
 
-test('the filter passes through as the select and segment values', () => {
-  const view = presentStreetLevelPanel(
-    snapshot({ filter: { pano: 'pano', sinceDays: 730 } }),
-  );
-  assert.deepEqual(view.filter, { pano: 'pano', sinceDays: 730 });
+test('chips are dark while the layer is off, so the chip is the layer switch', () => {
+  const view = presentStreetLevelPanel(snapshot({ enabled: false }));
   assert.deepEqual(
-    SINCE_OPTIONS.map((option) => option.days),
-    [0, 365, 730, 1826, 3652],
+    view.providers.map((chip) => [chip.id, chip.active, chip.state]),
+    [['mapillary', false, 'idle']],
   );
+  assert.equal(view.providers[0].title, 'Mapillary imagery off');
+  assert.equal(view.enableButton, undefined, 'no separate ON/OFF button');
+  const keyless = presentStreetLevelPanel(
+    snapshot({ providers: [provider({ keyRequired: true })] }),
+  );
+  assert.equal(
+    keyless.providers[0].state,
+    'error',
+    'a keyless chip still says why',
+  );
+});
+
+test('the SINCE slider runs from any date on the left to the last month on the right', () => {
+  assert.deepEqual(
+    SINCE_STOPS.map((stop) => stop.days),
+    [0, 3652, 1826, 1095, 730, 365, 182, 91, 30],
+  );
+  assert.equal(sinceStopIndex(0), 0);
+  assert.equal(sinceStopIndex(365), 5);
+  assert.equal(
+    sinceStopIndex(400),
+    5,
+    'an off-stop link lands on the nearest stop',
+  );
+  assert.equal(sinceStopIndex(-4), 0);
+});
+
+test('the SINCE readout names the window and the cut-off date it means today', () => {
+  const now = Date.UTC(2026, 8, 25);
+  const any = presentStreetLevelPanel(snapshot(), { now });
+  assert.deepEqual(any.since, { index: 0, days: 0, label: 'ANY DATE' });
+  const year = presentStreetLevelPanel(
+    snapshot({ filter: { pano: 'pano', sinceDays: 365 } }),
+    { now },
+  );
+  assert.deepEqual(year.filter, { pano: 'pano', sinceDays: 365 });
+  assert.deepEqual(year.since, {
+    index: 5,
+    days: 365,
+    label: 'LAST YEAR · SINCE 2025-09-25',
+  });
+  const custom = presentStreetLevelPanel(
+    snapshot({ filter: { pano: 'all', sinceDays: 400 } }),
+    { now },
+  );
+  assert.equal(custom.since.index, 5);
+  assert.equal(custom.since.label, 'LAST 400 DAYS · SINCE 2025-08-21');
 });
 
 test('legend passes through in the layer’s order', () => {
@@ -184,7 +244,10 @@ test('legend passes through in the layer’s order', () => {
 });
 
 test('the meta line never mixes the visible-sequence count with the selected sequence', () => {
-  assert.equal(presentStreetLevelPanel(snapshot()).meta, '');
+  assert.equal(
+    presentStreetLevelPanel(snapshot()).meta,
+    'Switch a provider on to draw its coverage.',
+  );
   const browsing = presentStreetLevelPanel(
     snapshot({ enabled: true, coverage: { count: 812 } }),
   );

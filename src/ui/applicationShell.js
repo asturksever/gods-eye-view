@@ -950,6 +950,7 @@ export class StyleManager extends ShellFacade {
           }),
         setPanelCollapsed: (collapsed, options) =>
           this.setPanelCollapsed('street-level-panel', collapsed, options),
+        dockPanel: () => this._panelChrome.dockPanel('street-level-panel'),
         showToast: (message) => this._showToast(message),
       },
     });
@@ -1497,13 +1498,15 @@ export class StyleManager extends ShellFacade {
   }
 
   /**
-   * A portable panel finished a resize or snapped back to its rail. Nothing
-   * in the shell depends on it yet; a panel with a viewport of its own can
-   * refit here.
-   * @param {string} _panelId
+   * A portable panel finished a resize or snapped back to its rail. A panel
+   * with a viewport of its own refits here.
+   * @param {string} panelId
    * @returns {void}
    */
-  _onPanelResized(_panelId) {}
+  _onPanelResized(panelId) {
+    if (panelId === 'street-level-panel')
+      this._streetLevelControls?.onPanelResized();
+  }
 
   /**
    * Recalculates the CCTV panel max-height based on its current top position

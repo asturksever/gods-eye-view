@@ -2786,6 +2786,19 @@ ground-clamped sequence lines (z0–5 overview points from orbit, z11–14
 sequences below 60 km) and the proxy strips the unused `image` point layer
 from z14 tiles in transit (12 MB → ~80 KB).
 
+The panel has no separate ON/OFF or nearest-photo buttons. The header pill is
+the layer switch, and a provider chip is lit only while the layer is on: with
+one provider it is the layer switch too, and with several, darkening the last
+lit chip turns the layer off while leaving that provider switched on. The
+viewer sits first, under the header, with its tools (EXPAND, FIT/FILL, FOLLOW,
+close) in a bar above the image so the provider's own overlays stay clear;
+the settings follow. SINCE is a stepped range input (any date, 10, 5, 3, 2 and
+1 years, 6, 3 and 1 months) whose readout names the cut-off date. The panel is
+portable (`street-level-panel` spec in `PanelPositionControls`, minimum
+320 × 280, `dockOnCollapse`): in a resized window the viewer takes the spare
+height and only `.sl-settings` scrolls, and collapsing the window or SHRINK
+after EXPAND docks it at its default size.
+
 Street-level providers implement the contract documented in
 `src/layers/streetLevel/registry.js`: a definition (`id`, `name`, `label`,
 `requiresKeyId`, `pickPrefix`, `colors`, `credit`, `capabilities`, `legend`,
@@ -4094,7 +4107,7 @@ easier to meet (detection is now on more often), but does not create it.
   samples and constant elevation during E/N drag; one shared-floor resolution on
   release; late one-shot shared-cell work is permitted during viewshed idle. The
   A+B harness intentionally excludes citywide LOD assertions.
-- Panel positions have a versioned storage name, `godsEyeView.v8.panelPos.<panel-id>`. The rails lay docked panels out adaptively and write nothing for them; a portable panel (currently CCTV) persists `{ left, top, width, height, floating: true }` under that key once a header drag lifts it out of the rail, and a header double-click removes the record again. Collapsed state does persist for every panel at `godsEyeView.v6.panelCollapsed.<panel-id>` (`'0'` open, `'1'` closed, absent means the panel's own default).
+- Panel positions have a versioned storage name, `godsEyeView.v8.panelPos.<panel-id>`. The rails lay docked panels out adaptively and write nothing for them; a portable panel (CCTV, Street Level) persists `{ left, top, width, height, floating: true }` under that key once a header drag lifts it out of the rail, and a header double-click removes the record again. Double presses are detected in the header's `pointerdown` handler (two presses within 400 ms and 6 px, no drag between), because that handler's `preventDefault()` suppresses the mouse events a native `dblclick` needs. A spec with `dockOnCollapse` (Street Level) also docks when collapsed while floating. The rail's startup move of panels into `#right-context-rail` leaves a restored floating window's geometry alone. Collapsed state does persist for every panel at `godsEyeView.v6.panelCollapsed.<panel-id>` (`'0'` open, `'1'` closed, absent means the panel's own default).
 - Legacy draggable-panel position keys may remain in local storage for backward compatibility, but the map-mode right rail ignores them unless they describe a portable panel's floating window; collapsed states still persist at `godsEyeView.v6.panelCollapsed.<panel-id>`.
 - Flight/military tracked entities cache dead-reckoned positions per frame to avoid callback desync flicker.
 - Aircraft 3D-model and tracking invariants are covered by `npm run test:track`; run this before touching `flights.js`, `militaryFlights.js`, `detection.js`, or `trackedReadout.js`.

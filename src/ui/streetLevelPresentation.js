@@ -5,14 +5,52 @@ import { keySetupRequirement } from '../keySetupCore.mjs';
  * renders. Pure: no DOM, no layer calls, so every wording decision is testable.
  */
 
-/** Relative "captured since" windows the panel offers, in days. */
-export const SINCE_OPTIONS = Object.freeze([
-  Object.freeze({ days: 0, label: 'any date' }),
-  Object.freeze({ days: 365, label: 'last year' }),
-  Object.freeze({ days: 730, label: '2 years' }),
-  Object.freeze({ days: 1826, label: '5 years' }),
-  Object.freeze({ days: 3652, label: '10 years' }),
+const DAY_MS = 86_400_000;
+
+/**
+ * Stops of the SINCE slider, oldest window on the left: position 0 shows
+ * every capture, the right end only the last month. Stored as relative days
+ * so a share link keeps its meaning over time.
+ */
+export const SINCE_STOPS = Object.freeze([
+  Object.freeze({ days: 0, label: 'ANY DATE' }),
+  Object.freeze({ days: 3652, label: 'LAST 10 YEARS' }),
+  Object.freeze({ days: 1826, label: 'LAST 5 YEARS' }),
+  Object.freeze({ days: 1095, label: 'LAST 3 YEARS' }),
+  Object.freeze({ days: 730, label: 'LAST 2 YEARS' }),
+  Object.freeze({ days: 365, label: 'LAST YEAR' }),
+  Object.freeze({ days: 182, label: 'LAST 6 MONTHS' }),
+  Object.freeze({ days: 91, label: 'LAST 3 MONTHS' }),
+  Object.freeze({ days: 30, label: 'LAST MONTH' }),
 ]);
+
+/** Slider position for a day count: the exact stop, else the nearest one. */
+export function sinceStopIndex(days) {
+  const value = Number(days) || 0;
+  if (value <= 0) return 0;
+  let best = 1;
+  for (let i = 1; i < SINCE_STOPS.length; i++)
+    if (
+      Math.abs(SINCE_STOPS[i].days - value) <
+      Math.abs(SINCE_STOPS[best].days - value)
+    )
+      best = i;
+  return best;
+}
+
+/** Readout beside the slider: the window, plus the cut-off date it means today. */
+function presentSince(days, now) {
+  const value = Number(days) || 0;
+  const index = sinceStopIndex(value);
+  if (value <= 0) return { index, days: 0, label: 'ANY DATE' };
+  const stop = SINCE_STOPS[index];
+  const window = stop.days === value ? stop.label : `LAST ${value} DAYS`;
+  return {
+    index,
+    days: value,
+    label: `${window} · SINCE ${formatDate(now - value * DAY_MS)}`,
+  };
+}
 
 function formatDate(ms) {
   if (!Number.isFinite(ms)) return '';
@@ -23,17 +61,30 @@ function formatDate(ms) {
   }
 }
 
+/** The header pill doubles as the layer's on/off switch. */
 function presentStatus(state) {
-  if (state.keyRequired) return { text: 'KEY REQUIRED', tone: 'warn' };
-  if (state.coverage.loading) return { text: 'LOADING', tone: 'busy' };
-  return state.enabled ? { text: 'ON', tone: 'on' } : { text: 'OFF', tone: '' };
+  const pressed = state.enabled === true;
+  const title = pressed ? 'Turn Street Level off' : 'Turn Street Level on';
+  if (state.keyRequired)
+    return { text: 'KEY REQUIRED', tone: 'warn', pressed, title };
+  if (state.coverage.loading)
+    return { text: 'LOADING', tone: 'busy', pressed, title };
+  return pressed
+    ? { text: 'ON', tone: 'on', pressed, title }
+    : { text: 'OFF', tone: '', pressed, title };
 }
 
-/** One chip per registered provider; a keyless provider reads as an error chip. */
+/**
+ * One chip per registered provider; a keyless provider reads as an error
+ * chip. A chip is lit only while the layer is on and that provider is
+ * switched on, so with a single provider the chip is the layer's switch.
+ */
 function presentProviders(state) {
+  const enabled = state.enabled === true;
   return (state.providers || []).map((provider) => {
     const keyRequired = provider.keyRequired === true;
-    let title = `${provider.name} imagery ${provider.on ? 'on' : 'off'}`;
+    const on = enabled && provider.on === true;
+    let title = `${provider.name} imagery ${on ? 'on' : 'off'}`;
     if (keyRequired && provider.requiresKeyId)
       title = `${provider.name}: ${keySetupRequirement(provider.requiresKeyId)}`;
     else if (provider.error) title = `${provider.name}: ${provider.error}`;
@@ -41,16 +92,16 @@ function presentProviders(state) {
       id: provider.id,
       label: provider.label,
       title,
-      active: provider.on === true,
+      active: on,
       disabled: false,
       state: keyRequired
         ? 'error'
-        : provider.loading
+        : on && provider.loading
           ? 'loading'
-          : provider.on
+          : on
             ? 'active'
             : 'idle',
-      busy: provider.loading === true,
+      busy: on && provider.loading === true,
     };
   });
 }
@@ -78,7 +129,7 @@ function presentViewer(state) {
 }
 
 function presentMeta(state) {
-  if (!state.enabled) return '';
+  if (!state.enabled) return 'Switch a provider on to draw its coverage.';
   if (state.sequence.selectedId)
     return state.sequence.loading
       ? 'Loading this sequence…'
@@ -90,9 +141,10 @@ function presentMeta(state) {
 
 /**
  * @param {object} state Snapshot from the layer's `getUIState()`.
+ * @param {{now?: number}} [options] Clock for the SINCE readout (tests pin it).
  * @returns {object} Everything the panel needs, already worded.
  */
-export function presentStreetLevelPanel(state) {
+export function presentStreetLevelPanel(state, { now = Date.now() } = {}) {
   const enabled = state.enabled === true;
   const keyRequired = state.keyRequired === true;
   const filter = state.filter || { pano: 'all', sinceDays: 0 };
@@ -101,13 +153,10 @@ export function presentStreetLevelPanel(state) {
     keyRequired,
     status: presentStatus(state),
     controlsDisabled: keyRequired,
-    enableButton: {
-      text: enabled ? 'STREET LEVEL ON' : 'STREET LEVEL OFF',
-      pressed: enabled,
-    },
     providers: presentProviders(state),
     error: state.street.error || state.coverage.error || null,
     filter: { pano: filter.pano, sinceDays: Number(filter.sinceDays) || 0 },
+    since: presentSince(filter.sinceDays, now),
     legend: state.legend || [],
     viewer: presentViewer(state),
     meta: presentMeta(state),

@@ -54,11 +54,15 @@ test('the panel is registered with panel chrome, cockpit entry and the right rai
     /for \(const panel of \[[\s\S]*?this\._streetLevelPanel,[\s\S]*?\]\) \{[\s\S]*?stack\.insertBefore\(panel, globalContextPanel\)/,
   );
   for (const rule of [
-    '#right-context-rail > #street-level-panel',
-    '#right-context-rail #street-level-panel.collapsed',
-    '#right-context-rail.layout-focus > #street-level-panel:not(.collapsed)',
+    '#right-context-rail > #street-level-panel:not(.panel-floating)',
+    '#right-context-rail #street-level-panel.collapsed:not(.panel-floating)',
   ])
     assert.ok(css.includes(rule), `layers.css names ${rule}`);
+  // Rail placement never applies to the panel once it floats as a window.
+  assert.match(
+    css,
+    /#right-context-rail\.layout-focus\s*>\s*#street-level-panel:not\(\.collapsed\):not\(\.panel-floating\)/,
+  );
 });
 
 test('panel styles stay inside GEV conventions: no !important, no fixed panel', () => {
@@ -79,11 +83,23 @@ test('the keyless state gates the controls rather than leaving dead buttons', ()
   );
   assert.match(html, /<fieldset id="sl-controls"/);
   assert.match(html, /<div id="sl-provider-chips" class="sl-chips"><\/div>/);
-  assert.match(html, /<select id="sl-since"[\s\S]*?value="3652"/);
-  assert.doesNotMatch(html, /value="year:/);
+  assert.match(
+    html,
+    /<input id="sl-since" class="sl-range" type="range" min="0" max="8" step="1"/,
+  );
+  assert.match(html, /<output id="sl-since-label"/);
+  assert.doesNotMatch(html, /<select id="sl-since"|value="year:/);
   assert.match(html, /<ul id="sl-legend"/);
   assert.match(html, /id="sl-error"[^>]*role="alert"/);
-  assert.match(html, /id="sl-status"[^>]*role="status"/);
+  // The header pill is the layer's on/off switch, not just a readout.
+  assert.match(
+    html,
+    /<button id="sl-status" class="sl-status" type="button" aria-pressed="false"/,
+  );
+  assert.match(
+    controls,
+    /this\.listen\(el\.status, 'click', \(\) => this\._toggleEnabled\(\)\)/,
+  );
 });
 
 test('the expanded viewer is a modal dialog that restores focus', () => {
@@ -94,13 +110,58 @@ test('the expanded viewer is a modal dialog that restores focus', () => {
 
 test('labels say what the buttons do', () => {
   for (const label of [
-    'OPEN NEAREST PHOTO',
-    'CAMERA FOLLOWS VIEW',
+    'aria-label="Camera follows view"',
     'PROVIDERS',
+    'SINCE',
   ])
     assert.ok(html.includes(label), label);
+  // The provider chips are the on/off switch; no separate buttons.
   assert.doesNotMatch(
     html,
-    /LOOK HERE|STREET COCKPIT|>FRAME<|ZOOM TO RESULTS|ASK IN PLAIN ENGLISH/,
+    /OPEN NEAREST PHOTO|STREET LEVEL OFF|sl-enable-btn|sl-look-btn|LOOK HERE|STREET COCKPIT|>FRAME<|ZOOM TO RESULTS|ASK IN PLAIN ENGLISH/,
+  );
+});
+
+test('the viewer comes first and the panel is a portable, resizable window', () => {
+  const controlsBlock = html.slice(html.indexOf('<fieldset id="sl-controls"'));
+  assert.ok(
+    controlsBlock.indexOf('id="sl-viewer-wrap"') <
+      controlsBlock.indexOf('class="sl-settings"'),
+    'imagery sits above the settings, visible without scrolling',
+  );
+  assert.match(
+    controlsBlock.slice(0, controlsBlock.indexOf('id="sl-viewer"')),
+    /id="sl-follow-btn"/,
+    'follow lives in the viewer toolbar',
+  );
+  const position = read('src/ui/panelPositionControls.js');
+  assert.match(
+    position,
+    /id: 'street-level-panel',[\s\S]*?portable: true,[\s\S]*?min: \{ width: 320, height: 280 \}/,
+  );
+  assert.match(
+    panelCss,
+    /\.panel-floating\[style\*='height'\] \.sl-settings \{[^}]*overflow-y: auto/,
+  );
+  // Shrinking docks it back at its default size rather than leaving a
+  // window over the globe: collapsing a floating panel, or SHRINK / Esc on
+  // the expanded viewer.
+  assert.match(
+    position,
+    /id: 'street-level-panel',[\s\S]*?dockOnCollapse: true/,
+  );
+  assert.match(
+    read('src/ui/panelChrome.js'),
+    /classList\.toggle\('collapsed', nextCollapsed\);\s*this\._panelPosition\?\.onPanelCollapsed\?\.\(panelId, nextCollapsed\)/,
+  );
+  assert.match(
+    controls,
+    /setViewerExpanded\(!this\.isViewerExpanded\(\), \{ dock: true \}\)/,
+  );
+  assert.match(controls, /this\.setViewerExpanded\(false, \{ dock: true \}\)/);
+  assert.match(controls, /if \(!on && dock\) this\.actions\.dockPanel\?\.\(\)/);
+  assert.match(
+    read('src/ui/applicationShell.js'),
+    /panelId === 'street-level-panel'\)\s*this\._streetLevelControls\?\.onPanelResized\(\)/,
   );
 });

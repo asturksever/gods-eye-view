@@ -1,5 +1,8 @@
 import { syncChipGroup } from './chipGroup.js';
-import { presentStreetLevelPanel } from './streetLevelPresentation.js';
+import {
+  presentStreetLevelPanel,
+  SINCE_STOPS,
+} from './streetLevelPresentation.js';
 
 const RENDER_MODE_KEY = 'gev:street-level:render-mode';
 /** Key the panel used before it became provider-neutral. */
@@ -37,12 +40,11 @@ export class StreetLevelControls {
     return {
       status: byId('sl-status'),
       controls: byId('sl-controls'),
-      enableBtn: byId('sl-enable-btn'),
-      lookBtn: byId('sl-look-btn'),
       providerChips: byId('sl-provider-chips'),
       error: byId('sl-error'),
       errorText: byId('sl-error-text'),
-      sinceSelect: byId('sl-since'),
+      sinceRange: byId('sl-since'),
+      sinceLabel: byId('sl-since-label'),
       legend: byId('sl-legend'),
       followBtn: byId('sl-follow-btn'),
       viewerWrap: byId('sl-viewer-wrap'),
@@ -69,39 +71,35 @@ export class StreetLevelControls {
     if (!this.root) return;
     this.layer.attachViewerHost?.(el.viewer);
 
-    this.listen(el.enableBtn, 'click', () => this._toggleEnabled());
-    this.listen(el.lookBtn, 'click', async () => {
-      if (!(await this._ensureEnabled())) return;
-      this.layer.openNearest?.();
-    });
+    this.listen(el.status, 'click', () => this._toggleEnabled());
     // One delegated listener; chips are re-synced in place on every render.
-    this.listen(el.providerChips, 'click', async (event) => {
+    this.listen(el.providerChips, 'click', (event) => {
       const button = event.target?.closest?.('.data-toggle-chip');
       if (!button || button.disabled) return;
-      const chip = this._view?.providers.find(
-        (entry) => entry.id === button.dataset.chipId,
-      );
-      if (!chip) return;
-      const next = !chip.active;
-      if (next && !(await this._ensureEnabled())) return;
-      this.layer.setProviderEnabled?.(chip.id, next);
+      this._toggleProvider(button.dataset.chipId);
     });
     for (const button of this.root.querySelectorAll('[data-sl-pano]')) {
       this.listen(button, 'click', () =>
         this.layer.setCoverageFilter?.({ pano: button.dataset.slPano }),
       );
     }
-    this.listen(el.sinceSelect, 'change', () => {
-      this.layer.setCoverageFilter?.({
-        sinceDays: Number(el.sinceSelect.value) || 0,
-      });
+    // The readout follows the thumb; coverage is rebuilt once, on release.
+    const sinceDays = () =>
+      SINCE_STOPS[Number(el.sinceRange?.value) || 0]?.days ?? 0;
+    this.listen(el.sinceRange, 'input', () => {
+      const label = SINCE_STOPS[Number(el.sinceRange.value) || 0].label;
+      if (el.sinceLabel) el.sinceLabel.textContent = label;
+      el.sinceRange.setAttribute('aria-valuetext', label);
     });
+    this.listen(el.sinceRange, 'change', () =>
+      this.layer.setCoverageFilter?.({ sinceDays: sinceDays() }),
+    );
     this.listen(el.followBtn, 'click', () => {
       this.layer.setFollow?.(!(this._state?.street?.follow === true));
     });
     this.listen(el.viewerClose, 'click', () => this.layer.closeViewer?.());
     this.listen(el.viewerExpand, 'click', () =>
-      this.setViewerExpanded(!this.isViewerExpanded()),
+      this.setViewerExpanded(!this.isViewerExpanded(), { dock: true }),
     );
     for (const button of this.root.querySelectorAll('[data-sl-render]')) {
       this.listen(button, 'click', () => {
@@ -162,12 +160,44 @@ export class StreetLevelControls {
     }
   }
 
+  /**
+   * A provider chip is the layer's switch: lighting one turns the layer on
+   * with that provider; darkening the last lit one turns the layer off (the
+   * provider stays switched on, so the layer comes back with it).
+   */
+  async _toggleProvider(providerId) {
+    const chip = this._view?.providers.find((entry) => entry.id === providerId);
+    if (!chip) return;
+    if (!chip.active) {
+      this.layer.setProviderEnabled?.(providerId, true);
+      await this._ensureEnabled();
+      return;
+    }
+    const othersLit = this._view.providers.some(
+      (entry) => entry.id !== providerId && entry.active,
+    );
+    if (othersLit) {
+      this.layer.setProviderEnabled?.(providerId, false);
+      return;
+    }
+    try {
+      await this.actions.setEnabled?.(false);
+    } catch (error) {
+      this.actions.showToast?.(error?.message || 'Street Level toggle failed');
+    }
+  }
+
   connect() {
     this._unsubscribe?.();
     this._unsubscribe = null;
     if (this.destroyed || !this.root) return;
     this._unsubscribe = this.layer.subscribe?.((state) => this.render(state));
     if (this.layer.getUIState) this.render(this.layer.getUIState());
+  }
+
+  /** The panel window was resized or docked again: refit the viewer. */
+  onPanelResized() {
+    requestAnimationFrame(() => this.layer.resizeViewer?.());
   }
 
   /** Ask the shell to open (or close) the rail panel. */
@@ -184,8 +214,12 @@ export class StreetLevelControls {
     );
   }
 
-  /** Grow the street-level viewer to most of the screen, or shrink it back. */
-  setViewerExpanded(expanded) {
+  /**
+   * Grow the street-level viewer to most of the screen, or shrink it back.
+   * A user's shrink (`dock`) also returns a floating panel to its rail at its
+   * default size, so the viewer does not land in a window over the globe.
+   */
+  setViewerExpanded(expanded, { dock = false } = {}) {
     const wrap = this._elements.viewerWrap;
     if (!wrap) return;
     const on = expanded === true;
@@ -226,6 +260,7 @@ export class StreetLevelControls {
       button.setAttribute('aria-pressed', String(on));
       button.setAttribute('aria-label', on ? 'Shrink' : 'Expand');
     }
+    if (!on && dock) this.actions.dockPanel?.();
     requestAnimationFrame(() => this.layer.resizeViewer?.());
   }
 
@@ -234,7 +269,7 @@ export class StreetLevelControls {
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
-      this.setViewerExpanded(false);
+      this.setViewerExpanded(false, { dock: true });
       return;
     }
     if (event.key !== 'Tab') return;
@@ -278,13 +313,8 @@ export class StreetLevelControls {
     if (el.status) {
       el.status.textContent = view.status.text;
       el.status.className = `sl-status${view.status.tone ? ` is-${view.status.tone}` : ''}`;
-    }
-    if (el.enableBtn) {
-      el.enableBtn.textContent = view.enableButton.text;
-      el.enableBtn.setAttribute(
-        'aria-pressed',
-        String(view.enableButton.pressed),
-      );
+      el.status.setAttribute('aria-pressed', String(view.status.pressed));
+      el.status.title = view.status.title;
     }
   }
 
@@ -311,13 +341,11 @@ export class StreetLevelControls {
       button.classList.toggle('is-active', active);
       button.setAttribute('aria-checked', String(active));
     }
-    if (el.sinceSelect) {
-      const value = String(view.filter.sinceDays);
-      if (
-        el.sinceSelect.value !== value &&
-        [...el.sinceSelect.options].some((option) => option.value === value)
-      )
-        el.sinceSelect.value = value;
+    if (el.sinceRange && document.activeElement !== el.sinceRange) {
+      const index = String(view.since.index);
+      if (el.sinceRange.value !== index) el.sinceRange.value = index;
+      if (el.sinceLabel) el.sinceLabel.textContent = view.since.label;
+      el.sinceRange.setAttribute('aria-valuetext', view.since.label);
     }
     if (el.legend && el.legend.childElementCount !== view.legend.length) {
       el.legend.replaceChildren(

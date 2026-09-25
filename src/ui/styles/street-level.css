@@ -54,6 +54,25 @@
   white-space: nowrap;
 }
 
+button.sl-status {
+  background: transparent;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--sl-text-small);
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+button.sl-status:hover,
+button.sl-status:focus-visible {
+  color: var(--text-primary);
+  border-color: var(--accent);
+  outline: none;
+}
+
 .sl-status.is-on {
   color: var(--sl-green);
   border-color: rgba(5, 203, 99, 0.55);
@@ -95,6 +114,15 @@
 .sl-controls:disabled {
   opacity: 0.45;
   pointer-events: none;
+}
+
+/* Everything but the viewer. Docked, the whole panel scrolls; in a resized
+   window the viewer keeps its room and only this block scrolls. */
+.sl-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
 }
 
 /* ── Providers ───────────────────────────────────────────────────────────── */
@@ -159,19 +187,33 @@
   color: var(--text-primary);
 }
 
-.sl-select {
-  font-family: var(--font-mono);
-  font-size: var(--sl-text-small);
-  letter-spacing: 0.06em;
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--glass-border-hover);
-  background: rgba(0, 0, 0, 0.35);
-  color: var(--text-primary);
+/* SINCE: a stepped slider, oldest window left, newest right. */
+.sl-since {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 10px;
 }
 
-.sl-select option {
-  background: #0a0a0f;
+.sl-range {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--sl-green);
+  cursor: pointer;
+}
+
+.sl-range:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.sl-since-label {
+  grid-column: 2;
+  font-family: var(--font-mono);
+  font-size: var(--sl-text-small);
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
 }
 
 .sl-legend {
@@ -217,6 +259,15 @@
   display: none;
 }
 
+/* The image stage: the viewer and its loading veil, nothing on top of it,
+   so the provider's own controls (sequence bar, zoom, bearing) stay clear. */
+.sl-viewer-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+}
+
 .sl-viewer {
   width: 100%;
   aspect-ratio: 16 / 10;
@@ -225,7 +276,7 @@
 
 .sl-viewer-placeholder {
   position: absolute;
-  inset: 0 0 26px;
+  inset: 0;
   display: grid;
   place-items: center;
   z-index: 3;
@@ -252,26 +303,23 @@
   }
 }
 
+/* Our tools live in a bar above the image rather than over it. */
+.sl-viewer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 6px;
+  background: rgba(10, 10, 15, 0.85);
+  border-bottom: 1px solid var(--glass-border);
+}
+
 .sl-viewer-tools {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  /* Above MapillaryJS's overlays (z 10); its sequence bar is top-centre and
-     bearing/zoom/attribution bottom-right, so the top corners are free. */
-  z-index: 12;
   display: flex;
   align-items: center;
   gap: 4px;
-  pointer-events: none;
-}
-
-.sl-viewer-tools > * {
-  pointer-events: auto;
-}
-
-.sl-viewer-tools.sl-viewer-tools-right {
-  left: auto;
-  right: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .sl-viewer-tools .scene-btn {
@@ -296,8 +344,9 @@
 }
 
 .sl-viewer-x {
-  width: 30px;
-  height: 30px;
+  flex: none;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: rgba(10, 10, 15, 0.8);
@@ -326,24 +375,28 @@
   color: var(--text-secondary);
   background: rgba(0, 0, 0, 0.7);
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: 2px 10px;
   min-height: 26px;
 }
 
 .sl-image-by {
   color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   min-width: 0;
+}
+
+.sl-image-by:empty {
+  display: none;
 }
 
 .sl-image-right {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  margin-left: auto;
   white-space: nowrap;
 }
 
@@ -372,6 +425,44 @@
   display: none;
 }
 
+/* ── Floating window ─────────────────────────────────────────────────────── */
+/* A resized window (PanelPositionControls writes an inline height) hands the
+   spare height to the viewer, so the image never needs scrolling to. */
+.panel-floating[style*='height'] > .street-level-panel-inner {
+  box-sizing: border-box;
+  height: 100%;
+  max-height: none;
+  overflow: hidden;
+}
+
+.panel-floating[style*='height'] .sl-body,
+.panel-floating[style*='height'] .sl-controls {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.panel-floating[style*='height'] .sl-viewer-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.panel-floating[style*='height'] .sl-viewer-stage {
+  flex: 1 1 auto;
+  min-height: 140px;
+}
+
+.panel-floating[style*='height'] .sl-viewer {
+  flex: 1 1 auto;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
+.panel-floating[style*='height'] .sl-settings {
+  flex: 0 1 auto;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
 /* ── Expanded viewer ─────────────────────────────────────────────────────── */
 /* The panel inner's backdrop-filter makes it the containing block for fixed
    descendants, so the expanded viewer is re-parented to <body>. z-index sits
@@ -391,6 +482,11 @@
   outline: none;
 }
 
+.sl-viewer-wrap-expanded .sl-viewer-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .sl-viewer-wrap-expanded .sl-viewer {
   flex: 1 1 auto;
   min-height: 0;
@@ -402,14 +498,8 @@
   padding: 10px 14px;
 }
 
-.sl-viewer-wrap-expanded .sl-viewer-tools {
-  top: 10px;
-  left: 10px;
-}
-
-.sl-viewer-wrap-expanded .sl-viewer-tools.sl-viewer-tools-right {
-  left: auto;
-  right: 10px;
+.sl-viewer-wrap-expanded .sl-viewer-bar {
+  padding: 8px 10px;
 }
 
 .sl-viewer-wrap-expanded .sl-viewer-tools .scene-btn {
@@ -427,9 +517,9 @@
 }
 
 .sl-viewer-wrap-expanded .sl-viewer-x {
-  width: 40px;
-  height: 40px;
-  font-size: 1.5rem;
+  width: 34px;
+  height: 34px;
+  font-size: 1.3rem;
 }
 
 /* ── Short viewports ─────────────────────────────────────────────────────── */

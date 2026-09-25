@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
  * Browser QA for the Street Level layer against a running dev
- * server: the panel's place in the right rail, the provider chips, the
- * keyless gate, coverage and its credit, switching a provider off and on,
- * the imagery filter, the embedded viewer and its expanded dialog. Run with `npm run qa:street-level -- --url http://localhost:4173`.
+ * server: the panel's place in the right rail, the provider chips (which
+ * switch the layer), the keyless gate, coverage and its credit, the imagery
+ * filter and SINCE slider, the viewer (visible without scrolling, expanded
+ * dialog, close) and the panel as a floating, resizable window. Run with `npm run qa:street-level -- --url http://localhost:4173`.
  * Without MAPILLARY_CLIENT_TOKEN on the server only the keyless steps run.
  */
 import assert from 'node:assert/strict';
@@ -228,47 +229,98 @@ async function main() {
           .get('street-level')
           .module.getUIState(),
       );
+    const chip = '#sl-provider-chips [data-chip-id="mapillary"]';
+    let firstImageId = null;
     await step(
-      'switching the provider chip off clears its coverage and credit',
+      'the header ON/OFF pill switches the layer off and on',
       async () => {
-        await page.click('#sl-provider-chips [data-chip-id="mapillary"]');
+        assert.equal(
+          await page.$eval('#sl-status', (node) =>
+            [
+              node.tagName,
+              node.textContent,
+              node.getAttribute('aria-pressed'),
+            ].join(':'),
+          ),
+          'BUTTON:ON:true',
+        );
+        await page.click('#sl-status');
+        await page.waitForFunction(
+          () => !window.__godsEyeView.dataManager.isEnabled('street-level'),
+          { timeout: 15_000 },
+        );
+        await page.waitForFunction(
+          () => document.getElementById('sl-status').textContent === 'OFF',
+          { timeout: 5_000 },
+        );
+        assert.equal((await ui()).coverage.count, 0);
+        await page.click('#sl-status');
+        await page.waitForFunction(
+          () => {
+            const dm = window.__godsEyeView.dataManager;
+            const u = dm.layers.get('street-level').module.getUIState();
+            return (
+              dm.isEnabled('street-level') &&
+              u.coverage.count > 0 &&
+              !u.coverage.loading
+            );
+          },
+          { timeout: 90_000 },
+        );
+        assert.equal(
+          await page.$eval('#sl-status', (node) =>
+            node.getAttribute('aria-pressed'),
+          ),
+          'true',
+        );
+      },
+    );
+    await step(
+      'the only lit provider chip switches the whole layer off, credit and all',
+      async () => {
+        await page.click(chip);
         await page.waitForFunction(
           () =>
+            !window.__godsEyeView.dataManager.isEnabled('street-level') &&
             window.__godsEyeView.dataManager.layers
               .get('street-level')
               .module.getUIState().coverage.count === 0,
           { timeout: 15_000 },
         );
-        const state = await ui();
-        assert.equal(state.providers[0].on, false);
-        assert.deepEqual(state.legend, [], 'no active provider, no legend');
         await page.waitForFunction(
           () => !document.body.innerHTML.includes('Mapillary</a> contributors'),
           { timeout: 15_000 },
         );
-        assert.deepEqual(
-          await page.evaluate(() =>
-            window.__godsEyeView.dataManager.layers
-              .get('street-level')
-              .module.getParams(),
-          ),
-          { mapillary: false, pano: 'all', sinceDays: 0 },
+        assert.equal(
+          await page.$eval(chip, (node) => node.getAttribute('aria-pressed')),
+          'false',
+        );
+        // The provider stays switched on, so the layer comes back with it.
+        assert.equal((await ui()).providers[0].on, true);
+      },
+    );
+    await step(
+      'lighting the chip turns the layer back on with coverage',
+      async () => {
+        await page.click(chip);
+        await page.waitForFunction(
+          () => {
+            const dm = window.__godsEyeView.dataManager;
+            const u = dm.layers.get('street-level').module.getUIState();
+            return (
+              dm.isEnabled('street-level') &&
+              u.coverage.count > 0 &&
+              !u.coverage.loading
+            );
+          },
+          { timeout: 90_000 },
+        );
+        assert.equal(
+          await page.$eval(chip, (node) => node.getAttribute('aria-pressed')),
+          'true',
         );
       },
     );
-    await step('switching it back on restores coverage', async () => {
-      await page.click('#sl-provider-chips [data-chip-id="mapillary"]');
-      await page.waitForFunction(
-        () => {
-          const u = window.__godsEyeView.dataManager.layers
-            .get('street-level')
-            .module.getUIState();
-          return u.coverage.count > 0 && !u.coverage.loading;
-        },
-        { timeout: 90_000 },
-      );
-      assert.equal((await ui()).providers[0].on, true);
-    });
     await step(
       'the 360° filter keeps at most the unfiltered sequence count',
       async () => {
@@ -281,6 +333,41 @@ async function main() {
         await page.click('[data-sl-pano="all"]');
         await sleep(600);
         assert.equal((await ui()).coverage.count, before);
+      },
+    );
+    await step(
+      'the SINCE slider narrows coverage and names its cut-off date',
+      async () => {
+        const before = (await ui()).coverage.count;
+        const setStop = (index) =>
+          page.$eval(
+            '#sl-since',
+            (input, value) => {
+              input.value = String(value);
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+              input.dispatchEvent(new Event('change', { bubbles: true }));
+            },
+            index,
+          );
+        await setStop(5);
+        await sleep(600);
+        const narrowed = await ui();
+        assert.equal(narrowed.filter.sinceDays, 365);
+        assert.ok(
+          narrowed.coverage.count <= before,
+          `${narrowed.coverage.count} ≤ ${before}`,
+        );
+        assert.match(
+          await page.$eval('#sl-since-label', (node) => node.textContent),
+          /^LAST YEAR · SINCE \d{4}-\d{2}-\d{2}$/,
+        );
+        await setStop(0);
+        await sleep(600);
+        assert.equal((await ui()).filter.sinceDays, 0);
+        assert.equal(
+          await page.$eval('#sl-since-label', (node) => node.textContent),
+          'ANY DATE',
+        );
       },
     );
     await step(
@@ -347,7 +434,29 @@ async function main() {
         assert.ok(view.width > 200);
         assert.ok(view.when.length > 0, 'caption shows the capture date');
         assert.equal(street.providerId, 'mapillary');
+        firstImageId = street.imageId;
         assert.equal(view.link, 'MAPILLARY ↗');
+        const fit = await page.evaluate(() => {
+          const inner = document.querySelector('.street-level-panel-inner');
+          const box = inner.getBoundingClientRect();
+          const wrap = document
+            .getElementById('sl-viewer-wrap')
+            .getBoundingClientRect();
+          return {
+            scrollTop: inner.scrollTop,
+            top: wrap.top - box.top,
+            overflowBottom: wrap.bottom - box.bottom,
+          };
+        });
+        assert.equal(fit.scrollTop, 0, 'panel not scrolled');
+        assert.ok(
+          fit.top >= 0 && fit.top < 80,
+          `viewer right under the header (${fit.top}px)`,
+        );
+        assert.ok(
+          fit.overflowBottom <= 1,
+          `whole viewer visible (${fit.overflowBottom}px cut)`,
+        );
         assert.match(view.href, /mapillary\.com\/app\/\?pKey=/);
       },
     );
@@ -396,6 +505,122 @@ async function main() {
       assert.equal(after.open, false);
       assert.equal(after.sequence, null);
     });
+    const floating = () =>
+      page.$eval('#street-level-panel', (node) =>
+        node.classList.contains('panel-floating'),
+      );
+    const center = (selector) =>
+      page.$eval(selector, (node) => {
+        const r = node.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      });
+    const floatPanel = async () => {
+      const title = await center('#street-level-panel .panel-title');
+      await page.mouse.move(title.x, title.y);
+      await page.mouse.down();
+      await page.mouse.move(title.x - 200, title.y + 40, { steps: 8 });
+      await page.mouse.move(title.x - 400, title.y + 80, { steps: 8 });
+      await page.mouse.up();
+      await sleep(400);
+      assert.equal(
+        await floating(),
+        true,
+        'a header drag lifts the panel out of the rail',
+      );
+    };
+    await step(
+      'the panel floats on a header drag, resizes, and the viewer takes the room',
+      async () => {
+        await page.evaluate((id) => {
+          void window.__godsEyeView.dataManager.layers
+            .get('street-level')
+            .module.openImage('mapillary', id);
+        }, firstImageId);
+        await page.waitForFunction(
+          () => {
+            const s = window.__godsEyeView.dataManager.layers
+              .get('street-level')
+              .module.getUIState().street;
+            return (s.imageId && !s.loading) || s.error;
+          },
+          { timeout: 90_000 },
+        );
+        assert.equal((await ui()).street.error, null);
+        await floatPanel();
+        const viewerHeight = () =>
+          page.$eval('#sl-viewer', (node) =>
+            Math.round(node.getBoundingClientRect().height),
+          );
+        const before = await viewerHeight();
+        const grip = await center('#street-level-panel .panel-resize-grip');
+        await page.mouse.move(grip.x, grip.y);
+        await page.mouse.down();
+        await page.mouse.move(grip.x + 120, grip.y + 160, { steps: 10 });
+        await page.mouse.up();
+        await sleep(600);
+        const after = await viewerHeight();
+        assert.ok(
+          after > before + 60,
+          `viewer grew with the window (${before} → ${after}px)`,
+        );
+        assert.equal(
+          await page.$eval(
+            '.sl-settings',
+            (node) => getComputedStyle(node).overflowY,
+          ),
+          'auto',
+          'only the settings block scrolls',
+        );
+      },
+    );
+    await step(
+      'SHRINK after EXPAND docks the window back in the rail at its default size',
+      async () => {
+        await page.click('#sl-viewer-expand');
+        await sleep(500);
+        await page.click('#sl-viewer-expand');
+        await sleep(600);
+        assert.equal(await floating(), false, 'docked again');
+        const style = await page.$eval('#street-level-panel', (node) => ({
+          width: node.style.width,
+          height: node.style.height,
+          parent: node.parentElement.id,
+        }));
+        assert.deepEqual(style, {
+          width: '',
+          height: '',
+          parent: 'right-context-rail',
+        });
+      },
+    );
+    await step('a header double-click docks a floating window', async () => {
+      await floatPanel();
+      const title = await center('#street-level-panel .panel-title');
+      await page.mouse.click(title.x, title.y, { clickCount: 1 });
+      await page.mouse.click(title.x, title.y, { clickCount: 2 });
+      await sleep(400);
+      assert.equal(await floating(), false, 'docked again');
+    });
+    await step(
+      'collapsing a floating window docks it as the rail strip',
+      async () => {
+        await floatPanel();
+        await page.click(
+          '.panel-collapse-btn[data-collapse-target="street-level-panel"]',
+        );
+        await sleep(600);
+        const state = await page.$eval('#street-level-panel', (node) => ({
+          floating: node.classList.contains('panel-floating'),
+          collapsed: node.classList.contains('collapsed'),
+          height: node.style.height,
+        }));
+        assert.deepEqual(state, {
+          floating: false,
+          collapsed: true,
+          height: '',
+        });
+      },
+    );
     await step('no page errors', () => {
       assert.deepEqual(errors, []);
     });
