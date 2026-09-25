@@ -19,6 +19,8 @@ export function createState({ services }) {
       host: null,
       open: false,
       follow: false,
+      /** Whether the active map stack allows following (Google 3D only). */
+      followAvailable: false,
       providerId: null,
       providerName: null,
       providerLabel: null,

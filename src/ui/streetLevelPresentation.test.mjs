@@ -286,6 +286,7 @@ test('viewer caption reads "Image by" left, date right, and links to the provide
         isPano: true,
         externalUrl:
           'https://www.mapillary.com/app/?pKey=1814275685699406&focus=photo',
+        followAvailable: true,
       },
     }),
   );
@@ -310,4 +311,25 @@ test('an image without a creator name leaves the left caption empty', () => {
   assert.equal(view.viewer.captionRight, '2024-01-02');
   assert.equal(view.viewer.link, null);
   assert.equal(view.viewer.linkLabel, '');
+});
+
+test('FOLLOW is disabled off Google 3D and says where to switch', () => {
+  const open = { open: true, imageId: '1' };
+  const off3d = presentStreetLevelPanel(
+    snapshot({ street: { ...open, followAvailable: false } }),
+  );
+  assert.equal(off3d.viewer.follow.disabled, true);
+  assert.match(
+    off3d.viewer.follow.title,
+    /needs the Google 3D map.*MAP SOURCE/,
+  );
+  const on3d = presentStreetLevelPanel(
+    snapshot({ street: { ...open, followAvailable: true } }),
+  );
+  assert.equal(on3d.viewer.follow.disabled, false);
+  assert.match(on3d.viewer.follow.title, /^Camera follows view/);
+  const closed = presentStreetLevelPanel(
+    snapshot({ street: { open: false, followAvailable: true } }),
+  );
+  assert.equal(closed.viewer.follow.disabled, true, 'nothing to follow');
 });

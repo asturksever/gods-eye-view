@@ -2792,7 +2792,11 @@ one provider it is the layer switch too, and with several, darkening the last
 lit chip turns the layer off while leaving that provider switched on. The
 viewer sits first, under the header, with its tools (EXPAND, FIT/FILL, FOLLOW,
 close) in a bar above the image so the provider's own overlays stay clear;
-the settings follow. SINCE is a stepped range input (any date, 10, 5, 3, 2 and
+the settings follow. FOLLOW is offered only while the map stack is Google 3D
+(`photoreal`): the layer takes the application map stack controller through
+`attachMapStackController`, subscribes to stack switches, disables the button
+with a MAP SOURCE hint on other stacks, and stops following when the stack
+leaves Google 3D. SINCE is a stepped range input (any date, 10, 5, 3, 2 and
 1 years, 6, 3 and 1 months) whose readout names the cut-off date. The panel is
 portable (`street-level-panel` spec in `PanelPositionControls`, minimum
 320 × 280, `dockOnCollapse`): in a resized window the viewer takes the spare

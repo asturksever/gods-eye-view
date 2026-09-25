@@ -408,8 +408,16 @@ async function main() {
             const u = window.__godsEyeView.dataManager.layers
               .get('street-level')
               .module.getUIState();
+            // Force one more render: a caption that fills now means an update
+            // was missed; one that stays empty means the render path is wrong.
+            u.street.renderMode &&
+              window.__godsEyeView.dataManager.layers
+                .get('street-level')
+                .module.setViewerRenderMode(u.street.renderMode);
             return {
               street: u.street,
+              captionNodes: document.querySelectorAll('#sl-image-when').length,
+              captionNow: document.getElementById('sl-image-when').textContent,
               wrapHidden: document.getElementById('sl-viewer-wrap').hidden,
               collapsed: document
                 .getElementById('street-level-panel')
@@ -460,6 +468,55 @@ async function main() {
         assert.match(view.href, /mapillary\.com\/app\/\?pKey=/);
       },
     );
+    await step('FOLLOW is offered only on the Google 3D map', async () => {
+      const stacks = () => window.__godsEyeView.mapStackController;
+      const follow = () =>
+        page.$eval('#sl-follow-btn', (node) => ({
+          disabled: node.disabled,
+          pressed: node.getAttribute('aria-pressed'),
+          title: node.title,
+        }));
+      const setStack = async (id) => {
+        await page.evaluate(
+          (stackId) =>
+            window.__godsEyeView.mapStackController.setStack(stackId),
+          id,
+        );
+        await sleep(800);
+      };
+      const original = await page.evaluate(() =>
+        window.__godsEyeView.mapStackController.getActiveId(),
+      );
+      await setStack('esri-imagery');
+      let state = await follow();
+      assert.equal(state.disabled, true, 'disabled on Esri');
+      assert.match(state.title, /needs the Google 3D map/);
+      const photoreal = await page.evaluate(() =>
+        window.__godsEyeView.mapStackController.isStackAvailable('photoreal'),
+      );
+      if (photoreal) {
+        await setStack('photoreal');
+        state = await follow();
+        assert.equal(state.disabled, false, 'enabled on Google 3D');
+        await page.click('#sl-follow-btn');
+        await sleep(300);
+        assert.equal((await follow()).pressed, 'true');
+        await setStack('esri-imagery');
+        state = await follow();
+        assert.equal(
+          state.pressed,
+          'false',
+          'leaving Google 3D stops following',
+        );
+        assert.equal(state.disabled, true);
+      } else {
+        console.log(
+          '  (Google 3D unavailable here: only the disabled path ran)',
+        );
+      }
+      await setStack(original);
+      void stacks;
+    });
     await step(
       'EXPAND opens a modal dialog and Esc returns focus to the button',
       async () => {
@@ -624,12 +681,8 @@ async function main() {
     await step(
       'on a phone the whole photo fits in the docked panel',
       async () => {
-        await page.setViewport({
-          width: 390,
-          height: 844,
-          isMobile: true,
-          hasTouch: true,
-        });
+        // Width alone drives the phone layout; toggling isMobile would reload.
+        await page.setViewport({ width: 390, height: 844 });
         await sleep(800);
         if (
           await page.$eval('#street-level-panel', (node) =>

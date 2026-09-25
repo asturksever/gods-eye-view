@@ -68,7 +68,7 @@ export function createCameraFollow({ state }) {
   }
 
   function setFollow(enabled) {
-    state.street.follow = enabled === true;
+    state.street.follow = enabled === true && state.street.followAvailable;
     if (state.street.follow) followCamera();
     state.notify?.();
   }

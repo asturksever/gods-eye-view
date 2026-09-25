@@ -889,5 +889,6 @@
   "src/layers/streetLevel/providers/mapillary/provider.test.mjs",
   "src/layers/streetLevel/providers/mapillary/decode.test.mjs",
   "src/ui/panelDock.test.mjs",
-  "src/layers/streetLevel/viewerHost.test.mjs"
+  "src/layers/streetLevel/viewerHost.test.mjs",
+  "src/layers/streetLevel/index.test.mjs"
 ]

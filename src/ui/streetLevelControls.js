@@ -380,6 +380,7 @@ export class StreetLevelControls {
     if (el.followBtn) {
       el.followBtn.setAttribute('aria-pressed', String(viewer.follow.pressed));
       el.followBtn.disabled = viewer.follow.disabled;
+      el.followBtn.title = viewer.follow.title;
     }
     for (const button of this.root.querySelectorAll('[data-sl-render]')) {
       const active = button.dataset.slRender === viewer.renderMode;

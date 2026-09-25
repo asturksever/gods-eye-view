@@ -123,7 +123,11 @@ function presentViewer(state) {
     linkLabel: street.providerLabel ? `${street.providerLabel} ↗` : '',
     follow: {
       pressed: street.follow === true,
-      disabled: street.open !== true,
+      disabled: street.open !== true || street.followAvailable !== true,
+      title:
+        street.followAvailable === true
+          ? 'Camera follows view: move the globe camera wherever the street-level view looks'
+          : 'Camera follow needs the Google 3D map: choose Google 3D under MAP SOURCE',
     },
   };
 }

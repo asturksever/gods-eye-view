@@ -90,6 +90,8 @@ export function createSelection({ state, parts }) {
   }
 
   function uninstall() {
+    // Nothing to undo for a layer that was never enabled.
+    if (!state.clickHandler) return;
     if (hoverCursor && state.viewer?.scene?.canvas) {
       state.viewer.scene.canvas.style.cursor = '';
       hoverCursor = false;

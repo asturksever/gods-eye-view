@@ -11,6 +11,7 @@ import { decodeParams, encodeParams } from './params.js';
 import { composeUIState, summarizeCoverage } from './uiState.js';
 import { viewCentre } from './view.js';
 import {
+  FOLLOW_MAP_STACK_ID,
   NEAREST_RADIUS_M,
   POSITION_PICK_ID,
   STREET_LEVEL_LAYER_ID,
@@ -97,6 +98,18 @@ export function createStreetLevelLayer({
     const entry = { def, instance: null, on: true, status: null };
     entry.instance = def.create(providerContext(entry));
     state.providers.set(def.id, entry);
+  }
+
+  let mapStack = null;
+  let unsubscribeMapStack = null;
+
+  /** Follow is offered only on the Google 3D stack; leaving it stops following. */
+  function syncFollowAvailability() {
+    const available = mapStack?.getActiveId?.() === FOLLOW_MAP_STACK_ID;
+    if (available === state.street.followAvailable) return;
+    state.street.followAvailable = available;
+    if (!available && state.street.follow) parts.follow.setFollow(false);
+    notify();
   }
 
   const activeEntries = () =>
@@ -256,6 +269,9 @@ export function createStreetLevelLayer({
       for (const entry of state.providers.values())
         entry.instance.destroy(viewer);
       parts.marker.destroy(viewer);
+      unsubscribeMapStack?.();
+      unsubscribeMapStack = null;
+      mapStack = null;
       state.listeners.clear();
       state.viewer = null;
       state.initialized = false;
@@ -277,6 +293,15 @@ export function createStreetLevelLayer({
         error: coverage.keyRequired ? 'KEY REQUIRED' : coverage.error,
         loadingLabel,
       };
+    },
+
+    /** The application map stack; FOLLOW is available only on Google 3D. */
+    attachMapStackController(controller) {
+      unsubscribeMapStack?.();
+      mapStack = controller || null;
+      unsubscribeMapStack =
+        mapStack?.subscribe?.(() => syncFollowAvailability()) || null;
+      syncFollowAvailability();
     },
 
     /** Share-link and stored state: provider switches plus the filter. */
