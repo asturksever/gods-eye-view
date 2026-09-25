@@ -1,12 +1,14 @@
 import * as Cesium from 'cesium';
 import { imageConeGlyph } from '../../glyphs.js';
-import { passesImageryFilter } from './coverage.js';
+import { passesImageryFilter } from '../../filter.js';
 import {
   COLORS,
   IMAGE_CONE_MIN_SPACING_M,
   IMAGE_CONE_SIZE_PX,
   PICK_PREFIX,
 } from './policy.js';
+
+const SPRITE_ID = 'street-level:mapillary-cones';
 
 /** How many recently viewed sequences keep their image list in memory. */
 const SEQUENCE_CACHE_SIZE = 40;
@@ -20,7 +22,7 @@ function metresBetween(a, b) {
 }
 
 /** Normalize a graph image record into the shape the cones use. */
-function normalizeSequenceImage(record) {
+export function normalizeSequenceImage(record) {
   const coordinates = record?.geometry?.coordinates;
   if (!Array.isArray(coordinates) || coordinates.length < 2) return null;
   return {
@@ -37,7 +39,7 @@ function normalizeSequenceImage(record) {
 }
 
 /** Drop images closer than the spacing to the previous kept one. */
-function thinImages(images, spacingM = IMAGE_CONE_MIN_SPACING_M) {
+export function thinImages(images, spacingM = IMAGE_CONE_MIN_SPACING_M) {
   const kept = [];
   let last = null;
   for (const image of images) {
@@ -49,7 +51,7 @@ function thinImages(images, spacingM = IMAGE_CONE_MIN_SPACING_M) {
   return kept;
 }
 
-/** Image cones for one selected sequence, plus the viewer position marker. */
+/** Image cones for one selected sequence. */
 export function createSequences({ state, source, parts }) {
   const { render, sprites } = state.services;
 
@@ -57,27 +59,17 @@ export function createSequences({ state, source, parts }) {
     render?.governorRequestRender?.('mapillary-sequence');
   }
 
+  function notify() {
+    state.context.notify();
+  }
+
   function ensureCollections(viewer) {
-    if (!state.sequence.collection) {
-      state.sequence.collection = new Cesium.BillboardCollection({
-        scene: viewer.scene,
-      });
-      viewer.scene.primitives.add(state.sequence.collection);
-      sprites?.registerSpriteCollection?.(
-        'street-level:mapillary-cones',
-        state.sequence.collection,
-      );
-    }
-    if (!state.street.markerCollection) {
-      state.street.markerCollection = new Cesium.BillboardCollection({
-        scene: viewer.scene,
-      });
-      viewer.scene.primitives.add(state.street.markerCollection);
-      sprites?.registerSpriteCollection?.(
-        'street-level:marker',
-        state.street.markerCollection,
-      );
-    }
+    if (state.sequence.collection) return;
+    state.sequence.collection = new Cesium.BillboardCollection({
+      scene: viewer.scene,
+    });
+    viewer.scene.primitives.add(state.sequence.collection);
+    sprites?.registerSpriteCollection?.(SPRITE_ID, state.sequence.collection);
   }
 
   function clearCones() {
@@ -92,7 +84,7 @@ export function createSequences({ state, source, parts }) {
     const cone = imageConeGlyph({ size: 32, color: COLORS.image });
     const ring = imageConeGlyph({ size: 32, color: COLORS.pano, pano: true });
     for (const image of images) {
-      if (!passesImageryFilter(image, state.coverage.filter)) continue;
+      if (!passesImageryFilter(image, state.filter)) continue;
       collection.add({
         id: `${PICK_PREFIX.image}${image.id}`,
         position: Cesium.Cartesian3.fromDegrees(image.lon, image.lat),
@@ -138,13 +130,13 @@ export function createSequences({ state, source, parts }) {
       state.sequence.loading = false;
       state.sequence.images = cached;
       renderCones(cached);
-      state.notify?.();
+      notify();
       return;
     }
     const controller = new AbortController();
     state.sequence.abort = controller;
     state.sequence.loading = true;
-    state.notify?.();
+    notify();
     try {
       const records = await source.getSequenceImages(sequenceId, {
         signal: controller.signal,
@@ -161,13 +153,15 @@ export function createSequences({ state, source, parts }) {
       renderCones(images);
     } catch (error) {
       if (!controller.signal.aborted)
-        state.street.error = error?.message || 'Sequence images unavailable';
+        state.context.actions.reportError(
+          error?.message || 'Sequence images unavailable',
+        );
     } finally {
       if (state.sequence.abort === controller) {
         state.sequence.loading = false;
         state.sequence.abort = null;
       }
-      state.notify?.();
+      notify();
     }
   }
 
@@ -180,39 +174,7 @@ export function createSequences({ state, source, parts }) {
     state.sequence.loading = false;
     clearCones();
     requestRender();
-    state.notify?.();
-  }
-
-  /** Move (or create) the viewer position marker. */
-  function setMarker(position, bearing) {
-    const collection = state.street.markerCollection;
-    if (!collection) return;
-    if (!position) {
-      collection.removeAll();
-      state.street.marker = null;
-      requestRender();
-      return;
-    }
-    const cartesian = Cesium.Cartesian3.fromDegrees(position.lon, position.lat);
-    if (!state.street.marker) {
-      state.street.marker = collection.add({
-        id: PICK_PREFIX.position,
-        position: cartesian,
-        image: (id) =>
-          import('../../glyphs.js').then((m) =>
-            m.positionMarkerGlyph({ color: COLORS.position }),
-          ),
-        imageId: 'mly-position',
-        width: 40,
-        height: 40,
-        alignedAxis: Cesium.Cartesian3.UNIT_Z,
-        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        verticalOrigin: Cesium.VerticalOrigin.CENTER,
-      });
-    } else state.street.marker.position = cartesian;
-    state.street.marker.rotation = -Cesium.Math.toRadians(bearing || 0);
-    requestRender();
+    notify();
   }
 
   /** Re-draw the current sequence's cones (after an imagery filter change). */
@@ -220,34 +182,18 @@ export function createSequences({ state, source, parts }) {
     if (state.sequence.images.length) renderCones(state.sequence.images);
   }
 
-  function hide(visible) {
+  function setVisible(visible) {
     if (state.sequence.collection) state.sequence.collection.show = visible;
-    if (state.street.markerCollection)
-      state.street.markerCollection.show = visible;
     requestRender();
   }
 
   function destroy(viewer) {
     state.sequence.abort?.abort();
-    for (const key of ['collection']) {
-      const collection = state.sequence[key];
-      if (collection) {
-        sprites?.unregisterSpriteCollection?.(
-          'street-level:mapillary-cones',
-          collection,
-        );
-        viewer?.scene?.primitives?.remove(collection);
-        state.sequence[key] = null;
-      }
-    }
-    if (state.street.markerCollection) {
-      sprites?.unregisterSpriteCollection?.(
-        'street-level:marker',
-        state.street.markerCollection,
-      );
-      viewer?.scene?.primitives?.remove(state.street.markerCollection);
-      state.street.markerCollection = null;
-      state.street.marker = null;
+    const collection = state.sequence.collection;
+    if (collection) {
+      sprites?.unregisterSpriteCollection?.(SPRITE_ID, collection);
+      viewer?.scene?.primitives?.remove(collection);
+      state.sequence.collection = null;
     }
     state.sequence.images = [];
     state.sequence.selectedId = null;
@@ -257,9 +203,8 @@ export function createSequences({ state, source, parts }) {
     ensureCollections,
     select,
     clearSelection,
-    setMarker,
     rerender,
-    setVisible: hide,
+    setVisible,
     destroy,
   };
 }

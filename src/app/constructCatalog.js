@@ -156,7 +156,10 @@ export function createApplicationCatalog({
           source: sources['fire-perimeters'],
         }),
         createApplicationAlpr({ surface, source: sources.alpr }),
-        createApplicationStreetLevel({ surface, source: sources.mapillary }),
+        createApplicationStreetLevel({
+          surface,
+          sources: { mapillary: sources.mapillary },
+        }),
         satellites,
         createApplicationLaunches({ source: sources.launches, satellites }),
         createApplicationTraffic({ source: sources.traffic }),

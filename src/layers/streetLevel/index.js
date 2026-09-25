@@ -1,58 +1,55 @@
 import { createState } from './state.js';
-import { createCoverage, visibleBbox } from './providers/mapillary/coverage.js';
-import { createSequences } from './providers/mapillary/sequences.js';
-import { createViewerBridge } from './providers/mapillary/viewer.js';
+import { createMarker } from './marker.js';
+import { createCameraFollow } from './cameraFollow.js';
+import { createCredits } from './credits.js';
+import { createPickRouter } from './pickRouter.js';
 import { createSelection } from './selection.js';
-import * as Cesium from 'cesium';
+import { createViewerHost } from './viewerHost.js';
+import { requiresKeyIdFor, validateProviders } from './registry.js';
+import { normalizeFilter, resolveFilter, sameFilter } from './filter.js';
+import { decodeParams, encodeParams } from './params.js';
+import { composeUIState } from './uiState.js';
+import { viewCentre } from './view.js';
 import {
-  COLORS,
-  COVERAGE_RECENT_DAYS,
-  MAPILLARY_CREDIT_HTML,
-  MAPILLARY_KEY_ID,
-  STREET_LEVEL_LAYER_ID,
-  NEAREST_LIMIT,
   NEAREST_RADIUS_M,
-} from './providers/mapillary/policy.js';
+  POSITION_PICK_ID,
+  STREET_LEVEL_LAYER_ID,
+} from './policy.js';
 
-export { STREET_LEVEL_LAYER_ID } from './providers/mapillary/policy.js';
-
-const SOURCE_METHODS = [
-  'getStatus',
-  'getTile',
-  'getImage',
-  'getSequenceImages',
-  'nearestImages',
-];
+export { STREET_LEVEL_LAYER_ID } from './policy.js';
 
 /**
- * Construct the Mapillary street-level layer: camera-driven coverage,
- * per-sequence image cones and the embedded viewer. Application services
- * are injected; nothing here reads the DOM except the viewer host the UI
- * hands over.
+ * Construct the Street Level layer from a list of imagery providers (see
+ * registry.js for the contract). The core owns what every provider shares:
+ * the enable state and per-provider switches, the imagery filter, one click
+ * handler, one viewer host, the position marker, camera follow, credits and
+ * share-link parameters. Providers own their coverage, sequences and viewer.
+ * @param {{providers: Array<import('./registry.js').StreetLevelProvider>, services?: object}} options
  */
-export function createStreetLevelLayer({ source, services = {} }) {
-  if (!SOURCE_METHODS.every((method) => typeof source?.[method] === 'function'))
-    throw new TypeError('A Mapillary source is required');
+export function createStreetLevelLayer({
+  providers: definitions,
+  services = {},
+}) {
+  const definitionsFrozen = validateProviders(definitions);
   const state = createState({ services });
   const parts = {};
-  const context = { state, source, parts };
-  parts.coverage = createCoverage(context);
-  parts.sequences = createSequences(context);
-  parts.viewer = createViewerBridge(context);
-  parts.selection = createSelection(context);
-
-  // Street-level actions shared by clicks and the UI.
-  parts.street = {
-    async openImage(imageId) {
-      const host = state.street.host;
-      if (!host) {
-        state.street.error = 'Open the Street Level panel to view imagery';
-        notify();
-        return;
-      }
-      await parts.viewer.open(imageId, host);
-    },
+  const context = { state, parts };
+  parts.credits = createCredits();
+  parts.marker = createMarker(context);
+  parts.follow = createCameraFollow(context);
+  parts.router = createPickRouter(() => state.providers.values(), {
+    positionId: POSITION_PICK_ID,
+  });
+  parts.viewerHost = createViewerHost(context);
+  parts.hasSelectedSequence = () =>
+    [...state.providers.values()].some(
+      (entry) => entry.instance.sequenceStats?.()?.selectedId,
+    );
+  parts.clearSequences = () => {
+    for (const entry of state.providers.values())
+      entry.instance.clearSequence?.();
   };
+  parts.selection = createSelection(context);
 
   /** Run low-priority work when the browser is idle (or soon, headless). */
   function scheduleIdle(task) {
@@ -79,140 +76,175 @@ export function createStreetLevelLayer({ source, services = {} }) {
   }
   state.notify = notify;
 
-  async function refreshStatus() {
+  function providerContext(entry) {
+    return Object.freeze({
+      services: state.services,
+      getViewer: () => state.viewer,
+      getFilter: () => resolveFilter(state.filter),
+      isActive: () => state.enabled && entry.on,
+      notify,
+      actions: {
+        openImage: (imageId) => openImage(entry.def.id, imageId),
+        reportError: (message) => {
+          state.street.error = message || null;
+          notify();
+        },
+      },
+    });
+  }
+
+  for (const def of definitionsFrozen) {
+    const entry = { def, instance: null, on: true, status: null };
+    entry.instance = def.create(providerContext(entry));
+    state.providers.set(def.id, entry);
+  }
+
+  const activeEntries = () =>
+    [...state.providers.values()].filter((entry) => entry.on);
+
+  async function refreshStatus(entry) {
     try {
-      state.status = await source.getStatus();
-      state.statusError = null;
-      state.keyRequired = state.status?.configured !== true;
-    } catch (error) {
-      state.statusError = error?.message || 'status unavailable';
-      state.keyRequired = !source.hasToken();
+      entry.status = await entry.instance.status();
+    } catch {
+      entry.status = null;
     }
     notify();
   }
 
-  /** Colour key for the coverage web, in the order the panel lists it. */
-  function coverageLegend() {
-    const years = Math.round(COVERAGE_RECENT_DAYS / 365);
-    return [
-      { key: 'recent', label: `Recent (≤${years} yr)`, color: COLORS.coverage },
-      { key: 'older', label: 'Older', color: COLORS.coverageOld },
-      { key: 'pano', label: '360°', color: COLORS.pano },
-      { key: 'selected', label: 'Selected', color: COLORS.selected },
-    ];
+  function activate(entry) {
+    if (!state.viewer) return;
+    entry.instance.activate(state.viewer);
+    parts.credits.show(state.viewer, entry.def);
+    if (!entry.status) refreshStatus(entry);
+    scheduleIdle(() => parts.viewerHost.prewarm([entry]));
   }
 
-  /** CC BY-SA attribution shown on the globe while the layer is on. */
-  function presentCredit(viewer) {
-    if (state.credit || !viewer?.creditDisplay) return;
-    try {
-      state.credit = new Cesium.Credit(MAPILLARY_CREDIT_HTML, true);
-      viewer.creditDisplay.addStaticCredit(state.credit);
-    } catch {
-      state.credit = null;
+  function deactivate(entry) {
+    if (state.street.providerId === entry.def.id) parts.viewerHost.unmount();
+    entry.instance.deactivate();
+    parts.credits.hide(state.viewer, entry.def);
+  }
+
+  function openImage(providerId, imageId) {
+    return parts.viewerHost.open(providerId, imageId);
+  }
+
+  function setProviderEnabled(providerId, on) {
+    const entry = state.providers.get(providerId);
+    if (!entry) return false;
+    const next = on !== false;
+    if (entry.on === next) return true;
+    entry.on = next;
+    if (state.enabled) {
+      if (next) activate(entry);
+      else deactivate(entry);
     }
+    notify();
+    return true;
   }
 
-  function hideCredit(viewer) {
-    if (!state.credit) return;
-    try {
-      viewer?.creditDisplay?.removeStaticCredit?.(state.credit);
-    } catch {
-      /* credit display already torn down */
+  function setCoverageFilter(next) {
+    const filter = normalizeFilter(next, state.filter);
+    if (sameFilter(filter, state.filter)) return;
+    state.filter = filter;
+    const resolved = resolveFilter(filter);
+    for (const entry of state.providers.values())
+      entry.instance.setFilter(resolved);
+    notify();
+  }
+
+  function providerSnapshots() {
+    return [...state.providers.values()].map((entry) => {
+      const stats = entry.instance.coverageStats();
+      return {
+        id: entry.def.id,
+        name: entry.def.name,
+        label: entry.def.label,
+        on: entry.on,
+        configured: entry.status ? entry.status.configured === true : null,
+        keyRequired: stats.keyRequired === true,
+        requiresKeyId: entry.def.requiresKeyId || null,
+        loading: stats.loading === true,
+        count: stats.count || 0,
+        hint: stats.hint || '',
+        error: stats.error || null,
+        legend: entry.def.legend,
+      };
+    });
+  }
+
+  function sequenceSnapshot() {
+    const owner = state.providers.get(state.street.providerId);
+    const candidates = owner
+      ? [owner, ...state.providers.values()]
+      : [...state.providers.values()];
+    for (const entry of candidates) {
+      const stats = entry.instance.sequenceStats?.();
+      if (stats?.selectedId || stats?.loading)
+        return {
+          providerId: entry.def.id,
+          selectedId: stats.selectedId || null,
+          images: stats.images || 0,
+          loading: stats.loading === true,
+        };
     }
-    state.credit = null;
-  }
-
-  /** Centre of the visible ground, or the camera's own footprint. */
-  function viewCentre() {
-    const viewer = state.viewer;
-    if (!viewer) return null;
-    const bbox = visibleBbox(viewer);
-    if (bbox)
-      return { lat: (bbox[1] + bbox[3]) / 2, lon: (bbox[0] + bbox[2]) / 2 };
-    const carto = viewer.camera.positionCartographic;
-    return {
-      lat: Cesium.Math.toDegrees(carto.latitude),
-      lon: Cesium.Math.toDegrees(carto.longitude),
-    };
+    return { providerId: null, selectedId: null, images: 0, loading: false };
   }
 
   function getUIState() {
-    return {
+    const { host, ...street } = state.street;
+    return composeUIState({
       enabled: state.enabled,
-      keyRequired: state.keyRequired,
-      coverage: {
-        zoom: state.coverage.zoom,
-        kind: state.coverage.kind,
-        filter: { ...state.coverage.filter },
-        legend: coverageLegend(),
-        loading: state.coverage.loading > 0,
-        sequences: parts.coverage.sequenceCount(),
-        hint: state.coverage.hint,
-        error: state.coverage.lastError,
-      },
-      sequence: {
-        selectedId: state.sequence.selectedId,
-        images: state.sequence.images.length,
-        loading: state.sequence.loading,
-      },
-      street: {
-        open: state.street.open,
-        follow: state.street.follow,
-        loading: state.street.loading,
-        error: state.street.error,
-        imageId: state.street.imageId,
-        position: state.street.position ? { ...state.street.position } : null,
-        bearing: state.street.bearing,
-        isPano: state.street.isPano,
-        capturedAt: state.street.capturedAt,
-        sequenceId: state.street.sequenceId,
-        creator: state.street.creator || null,
-        renderMode: state.street.renderMode,
-      },
-    };
+      filter: state.filter,
+      providers: providerSnapshots(),
+      street,
+      sequence: sequenceSnapshot(),
+    });
   }
 
   const layer = {
     id: STREET_LEVEL_LAYER_ID,
     name: 'Street Level',
     icon: '📷',
-    source: 'Mapillary',
+    source: definitionsFrozen.map((def) => def.name).join(' · '),
     updateInterval: 0,
     statsRefreshInterval: 1000,
-    requiresKeyId: MAPILLARY_KEY_ID,
+    requiresKeyId: requiresKeyIdFor(definitionsFrozen),
+    /** Registered providers, in chip order. */
+    providerIds: definitionsFrozen.map((def) => def.id),
 
     init(viewer) {
       if (state.initialized)
         throw new Error('Street Level layer is already initialized');
       state.viewer = viewer;
       state.initialized = true;
-      parts.sequences.ensureCollections(viewer);
-      parts.sequences.setVisible(false);
-      refreshStatus();
+      parts.marker.ensure(viewer);
+      parts.marker.setVisible(false);
+      for (const entry of state.providers.values()) {
+        entry.instance.init(viewer);
+        refreshStatus(entry);
+      }
       console.log('[Data:StreetLevel] Initialized');
     },
 
     enable(viewer) {
       state.enabled = true;
-      presentCredit(viewer);
-      parts.sequences.setVisible(true);
+      state.viewer = viewer;
+      parts.marker.setVisible(true);
       parts.selection.install(viewer);
-      parts.coverage.attach(viewer);
-      if (!state.status) refreshStatus();
-      scheduleIdle(() => parts.viewer.prewarm());
+      for (const entry of activeEntries()) activate(entry);
       notify();
     },
 
     disable() {
       state.enabled = false;
-      hideCredit(state.viewer);
-      parts.coverage.detach();
-      parts.coverage.clear();
-      parts.sequences.clearSelection();
+      parts.viewerHost.unmount();
+      for (const entry of state.providers.values()) {
+        entry.instance.deactivate();
+        parts.credits.hide(state.viewer, entry.def);
+      }
       parts.selection.uninstall();
-      parts.viewer.destroy();
-      parts.sequences.setVisible(false);
+      parts.marker.setVisible(false);
       notify();
     },
 
@@ -222,7 +254,9 @@ export function createStreetLevelLayer({ source, services = {} }) {
 
     destroy(viewer = state.viewer) {
       layer.disable();
-      parts.sequences.destroy(viewer);
+      for (const entry of state.providers.values())
+        entry.instance.destroy(viewer);
+      parts.marker.destroy(viewer);
       state.listeners.clear();
       state.viewer = null;
       state.initialized = false;
@@ -230,19 +264,38 @@ export function createStreetLevelLayer({ source, services = {} }) {
     },
 
     getStats() {
+      const ui = getUIState();
       let loadingLabel = '';
-      if (state.keyRequired) loadingLabel = 'KEY REQUIRED';
-      else if (state.coverage.loading > 0) loadingLabel = 'loading coverage...';
-      else if (state.coverage.hint && state.enabled)
-        loadingLabel = state.coverage.hint;
+      if (ui.keyRequired) loadingLabel = 'KEY REQUIRED';
+      else if (ui.coverage.loading) loadingLabel = 'loading coverage...';
+      else if (ui.coverage.hint && state.enabled)
+        loadingLabel = ui.coverage.hint;
       return {
-        count: parts.coverage.sequenceCount(),
-        sequences: parts.coverage.sequenceCount(),
-        loading: state.coverage.loading > 0,
-        keyRequired: state.keyRequired,
-        error: state.keyRequired ? 'KEY REQUIRED' : state.coverage.lastError,
+        count: ui.coverage.count,
+        sequences: ui.coverage.count,
+        loading: ui.coverage.loading,
+        keyRequired: ui.keyRequired,
+        error: ui.keyRequired ? 'KEY REQUIRED' : ui.coverage.error,
         loadingLabel,
       };
+    },
+
+    /** Share-link and stored state: provider switches plus the filter. */
+    getParams() {
+      return encodeParams({
+        providers: [...state.providers].map(([id, entry]) => [id, entry.on]),
+        filter: state.filter,
+      });
+    },
+
+    setParams(params = {}) {
+      const decoded = decodeParams(params, {
+        providerIds: state.providers.keys(),
+        filter: state.filter,
+      });
+      for (const [id, on] of decoded.providers) setProviderEnabled(id, on);
+      setCoverageFilter(decoded.filter);
+      return true;
     },
 
     // ── Public surface used by the panel ────────────────────────────────
@@ -252,40 +305,39 @@ export function createStreetLevelLayer({ source, services = {} }) {
       return () => state.listeners.delete(listener);
     },
     getUIState,
-    /** The DOM element the MapillaryJS viewer renders into. */
+    /** The DOM element provider viewers render into. */
     attachViewerHost(element) {
-      state.street.host = element || null;
-      if (element && state.street.open) parts.viewer.resize();
+      parts.viewerHost.attach(element);
       if (element && state.enabled)
-        scheduleIdle(() => parts.viewer.prewarm(element));
+        scheduleIdle(() => parts.viewerHost.prewarm(activeEntries()));
     },
+    setProviderEnabled,
+    isProviderEnabled: (id) => state.providers.get(id)?.on === true,
     /** Imagery filter for coverage, cones and nearest-image lookups. */
-    setCoverageFilter(next) {
-      parts.coverage.setFilter(next);
-      parts.sequences.rerender();
-    },
-    getCoverageFilter: () => ({ ...state.coverage.filter }),
-    openImage: (imageId) => parts.street.openImage(imageId),
+    setCoverageFilter,
+    getCoverageFilter: () => ({ ...state.filter }),
+    openImage,
+    /** Open the nearest image any active provider has around a point. */
     async openNearest(point) {
-      const view = point || viewCentre();
+      const view = point || viewCentre(state.viewer);
       if (!Number.isFinite(view?.lat) || !Number.isFinite(view?.lon))
         return false;
       state.street.loading = true;
       state.street.error = null;
       notify();
       try {
-        const images = await source.nearestImages({
-          lat: view.lat,
-          lon: view.lon,
-          radius: NEAREST_RADIUS_M,
-          limit: NEAREST_LIMIT,
-        });
-        if (!images.length)
-          throw new Error(
-            `No Mapillary imagery within ${NEAREST_RADIUS_M} m of the view centre`,
-          );
-        await parts.street.openImage(images[0].id);
-        return true;
+        for (const entry of activeEntries()) {
+          const imageId = await entry.instance.nearestImage({
+            lat: view.lat,
+            lon: view.lon,
+          });
+          if (!imageId) continue;
+          await openImage(entry.def.id, imageId);
+          return true;
+        }
+        throw new Error(
+          `No street-level imagery within ${NEAREST_RADIUS_M} m of the view centre`,
+        );
       } catch (error) {
         state.street.error = error?.message || 'Nearest image unavailable';
         state.street.loading = false;
@@ -293,21 +345,27 @@ export function createStreetLevelLayer({ source, services = {} }) {
         return false;
       }
     },
-    /**
-     * Close the image and deselect it everywhere on the map: position
-     * marker, highlighted sequence and its cones.
-     */
+    /** Close the image and deselect it everywhere on the map. */
     closeViewer() {
-      parts.viewer.close();
-      parts.sequences.clearSelection();
+      parts.viewerHost.close();
+      parts.clearSequences();
     },
-    setViewerRenderMode: (mode) => parts.viewer.setRenderMode(mode),
-    setFollow: (enabled) => parts.viewer.setFollow(enabled),
-    lookAtImage: () => parts.viewer.lookAtPosition(),
-    resizeViewer: () => parts.viewer.resize(),
-    selectSequence: (id) => parts.sequences.select(id),
-    clearSequence: () => parts.sequences.clearSelection(),
-    refreshCoverage: () => parts.coverage.refresh(),
+    setViewerRenderMode: (mode) => parts.viewerHost.setRenderMode(mode),
+    setFollow: (enabled) => parts.follow.setFollow(enabled),
+    lookAtImage: () => parts.follow.lookAtPosition(),
+    resizeViewer: () => parts.viewerHost.resize(),
+    selectSequence(
+      sequenceId,
+      providerId = state.providers.keys().next().value,
+    ) {
+      return state.providers
+        .get(providerId)
+        ?.instance.selectSequence?.(sequenceId);
+    },
+    clearSequence: () => parts.clearSequences(),
+    refreshCoverage() {
+      for (const entry of activeEntries()) entry.instance.refreshCoverage();
+    },
   };
   return layer;
 }

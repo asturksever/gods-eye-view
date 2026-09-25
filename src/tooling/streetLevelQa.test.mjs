@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import {
+  EXPECTED_PROVIDERS,
   isCollapsed,
   RAIL_ORDER,
   VIEWPORTS,
@@ -12,6 +13,10 @@ test('the QA harness exercises both review viewports', () => {
     VIEWPORTS.map((v) => `${v.width}x${v.height}`),
     ['1440x900', '1280x800'],
   );
+});
+
+test('the harness expects exactly the registered providers', () => {
+  assert.deepEqual(EXPECTED_PROVIDERS, ['mapillary']);
 });
 
 test('rail order puts Street Level between CCTV and Context', () => {

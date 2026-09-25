@@ -1,21 +1,23 @@
-import * as Cesium from 'cesium';
-
-/** Eye height above the sampled ground when the globe camera follows the viewer. */
-const FOLLOW_EYE_HEIGHT_M = 2.4;
+import { MAPILLARY_PROVIDER_ID, mapillaryImageUrl } from './policy.js';
 
 /**
- * Own the embedded MapillaryJS viewer: lazy-load the library, open images,
- * mirror its pose onto the globe, and optionally drive the Cesium camera
- * from it ("street cockpit").
+ * The Mapillary viewer adapter: lazy-load MapillaryJS, mount it in the host
+ * the core hands over, open images, and emit a provider-neutral pose for
+ * every image, point-of-view or position change.
+ * @returns {import('../../registry.js').ViewerAdapter}
  */
-export function createViewerBridge({ state, source, parts }) {
-  const { render } = state.services;
+export function createMapillaryViewer({ source, render } = {}) {
   let viewer = null;
   let Library = null;
+  let container = null;
   let pendingOpen = null;
   let prewarming = false;
   /** In-flight viewer construction, so pre-warm and open never build two. */
   let creating = null;
+  let renderMode = 'letterbox';
+  /** Metadata of the image on screen; pov/position events reuse it. */
+  let current = null;
+  const listeners = new Set();
 
   function requestRender() {
     render?.governorRequestRender?.('mapillary-viewer');
@@ -34,67 +36,30 @@ export function createViewerBridge({ state, source, parts }) {
     return Library;
   }
 
-  function groundHeightAt(lon, lat, fallback) {
-    const scene = state.viewer?.scene;
-    const carto = Cesium.Cartographic.fromDegrees(lon, lat);
-    let height = null;
-    try {
-      if (scene?.sampleHeightSupported) height = scene.sampleHeight(carto);
-    } catch {
-      /* not sampleable yet */
+  function emit(pose) {
+    for (const listener of [...listeners]) {
+      try {
+        listener(pose);
+      } catch {
+        /* listener errors are the core's to log */
+      }
     }
-    if (!Number.isFinite(height)) height = scene?.globe?.getHeight?.(carto);
-    if (!Number.isFinite(height)) height = fallback;
-    return Number.isFinite(height) ? height : 0;
   }
 
-  /** Put the Cesium camera where the street-level camera is. */
-  function followCamera() {
-    const { position, bearing, tilt } = state.street;
-    if (!state.street.follow || !position || !state.viewer) return;
-    const ground = groundHeightAt(
-      position.lon,
-      position.lat,
-      state.street.altitude,
-    );
-    state.viewer.camera.setView({
-      destination: Cesium.Cartesian3.fromDegrees(
-        position.lon,
-        position.lat,
-        ground + FOLLOW_EYE_HEIGHT_M,
-      ),
-      orientation: {
-        heading: Cesium.Math.toRadians(bearing || 0),
-        pitch: Cesium.Math.toRadians(Number.isFinite(tilt) ? tilt : 0),
-        roll: 0,
-      },
-    });
-    requestRender();
-  }
-
-  /** Frame the current image from a short distance behind it. */
-  function lookAtPosition() {
-    const { position, bearing } = state.street;
-    if (!position || !state.viewer) return;
-    const ground = groundHeightAt(
-      position.lon,
-      position.lat,
-      state.street.altitude,
-    );
-    state.viewer.camera.flyToBoundingSphere(
-      new Cesium.BoundingSphere(
-        Cesium.Cartesian3.fromDegrees(position.lon, position.lat, ground + 2),
-        4,
-      ),
-      {
-        offset: new Cesium.HeadingPitchRange(
-          Cesium.Math.toRadians(bearing || 0),
-          Cesium.Math.toRadians(-32),
-          140,
-        ),
-        duration: 1.6,
-      },
-    );
+  /** Read MapillaryJS image metadata into the neutral pose shape. */
+  function describe(image) {
+    return {
+      imageId: String(image.id),
+      isPano: image.cameraType === 'spherical',
+      capturedAt: image.capturedAt ?? null,
+      sequenceId: image.sequenceId ?? null,
+      altitude: Number.isFinite(image.computedAltitude)
+        ? image.computedAltitude
+        : Number.isFinite(image.originalAltitude)
+          ? image.originalAltitude
+          : null,
+      creator: image.creatorUsername || null,
+    };
   }
 
   async function publishPose(image) {
@@ -104,74 +69,38 @@ export function createViewerBridge({ state, source, parts }) {
         viewer.getPosition(),
         viewer.getPointOfView(),
       ]);
-      state.street.position = { lon: lngLat.lng, lat: lngLat.lat };
-      state.street.bearing = pov?.bearing ?? state.street.bearing;
-      state.street.tilt = pov?.tilt ?? 0;
-      if (image) {
-        state.street.imageId = image.id;
-        state.street.isPano = image.merged
-          ? image.cameraType === 'spherical'
-          : image.cameraType === 'spherical';
-        state.street.capturedAt = image.capturedAt ?? null;
-        state.street.sequenceId = image.sequenceId ?? null;
-        state.street.altitude = Number.isFinite(image.computedAltitude)
-          ? image.computedAltitude
-          : Number.isFinite(image.originalAltitude)
-            ? image.originalAltitude
-            : null;
-        state.street.creator = image.creatorUsername || null;
-        // mapillary.com highlights the selected image's sequence on the map;
-        // mirror that once the image itself is on screen, so the sequence
-        // lookup never competes with the image download.
-        if (!state.street.loading) selectCurrentSequence();
-      }
-      parts.sequences.setMarker(state.street.position, state.street.bearing);
-      followCamera();
-      state.notify?.();
+      if (image) current = describe(image);
+      if (!current || !viewer) return;
+      emit({
+        providerId: MAPILLARY_PROVIDER_ID,
+        ...current,
+        position: { lon: lngLat.lng, lat: lngLat.lat },
+        bearing: Number.isFinite(pov?.bearing) ? pov.bearing : null,
+        tilt: Number.isFinite(pov?.tilt) ? pov.tilt : 0,
+        externalUrl: mapillaryImageUrl(current.imageId),
+      });
+      requestRender();
     } catch {
       /* viewer torn down mid-flight */
     }
   }
 
-  function selectCurrentSequence() {
-    const { sequenceId } = state.street;
-    if (sequenceId && state.enabled && sequenceId !== state.sequence.selectedId)
-      parts.sequences.select(sequenceId);
-  }
-
-  /**
-   * Load the library and stand the viewer up ahead of the first image, so
-   * opening one only costs the image download. Safe to call repeatedly.
-   */
-  async function prewarm(container = state.street.host) {
-    if (prewarming || !state.enabled) return;
-    prewarming = true;
-    try {
-      await ensureLibrary();
-      if (container && state.enabled && !viewer) await ensureViewer(container);
-    } catch {
-      /* the real open reports errors */
-    } finally {
-      prewarming = false;
-    }
-  }
-
-  function ensureViewer(container) {
-    if (viewer && state.street.container === container) return viewer;
-    if (creating?.container === container) return creating.promise;
-    const promise = createViewer(container).finally(() => {
+  function ensureViewer(host) {
+    if (viewer && container === host) return viewer;
+    if (creating?.container === host) return creating.promise;
+    const promise = createViewer(host).finally(() => {
       if (creating?.promise === promise) creating = null;
     });
-    creating = { container, promise };
+    creating = { container: host, promise };
     return promise;
   }
 
-  async function createViewer(container) {
+  async function createViewer(host) {
     destroyViewer();
     const { Viewer } = await ensureLibrary();
     viewer = new Viewer({
       accessToken: source.token,
-      container,
+      container: host,
       component: {
         cover: false,
         bearing: true,
@@ -179,68 +108,13 @@ export function createViewerBridge({ state, source, parts }) {
         attribution: true,
       },
       trackResize: true,
-      renderMode: libraryRenderMode(state.street.renderMode),
+      renderMode: libraryRenderMode(renderMode),
     });
-    state.street.container = container;
+    container = host;
     viewer.on('image', (event) => publishPose(event.image));
     viewer.on('pov', () => publishPose(null));
     viewer.on('position', () => publishPose(null));
     return viewer;
-  }
-
-  /**
-   * Open an image in the viewer inside `container`. Returns once the first
-   * image has loaded; the pose then streams through `state.street`.
-   */
-  async function open(imageId, container, { frame = true } = {}) {
-    if (!imageId || !container) return;
-    const id = String(imageId);
-    state.street.loading = true;
-    state.street.error = null;
-    state.street.open = true;
-    state.notify?.();
-    pendingOpen = id;
-    try {
-      const instance = await ensureViewer(container);
-      if (pendingOpen !== id) return;
-      const image = await instance.moveTo(id);
-      if (pendingOpen !== id) return;
-      await publishPose(image);
-      if (frame && !state.street.follow) lookAtPosition();
-    } catch (error) {
-      if (pendingOpen === id)
-        state.street.error = error?.message || 'Image could not be opened';
-    } finally {
-      if (pendingOpen === id) state.street.loading = false;
-      state.notify?.();
-    }
-    if (pendingOpen === id && !state.street.error) selectCurrentSequence();
-  }
-
-  /** Switch between showing the whole image ('letterbox') and cropping ('fill'). */
-  function setRenderMode(mode) {
-    state.street.renderMode = mode === 'fill' ? 'fill' : 'letterbox';
-    try {
-      const value = libraryRenderMode(state.street.renderMode);
-      if (viewer && value !== undefined) viewer.setRenderMode(value);
-    } catch {
-      /* viewer not ready */
-    }
-    state.notify?.();
-  }
-
-  function setFollow(enabled) {
-    state.street.follow = enabled === true;
-    if (state.street.follow) followCamera();
-    state.notify?.();
-  }
-
-  function resize() {
-    try {
-      viewer?.resize();
-    } catch {
-      /* no-op */
-    }
   }
 
   function destroyViewer() {
@@ -252,38 +126,77 @@ export function createViewerBridge({ state, source, parts }) {
       }
     }
     viewer = null;
-    state.street.container = null;
-  }
-
-  /** Close the image. The viewer instance is kept warm for the next open. */
-  function close() {
-    pendingOpen = null;
-    Object.assign(state.street, {
-      open: false,
-      follow: false,
-      imageId: null,
-      sequenceId: null,
-      position: null,
-      bearing: null,
-      tilt: null,
-      loading: false,
-      error: null,
-    });
-    parts.sequences.setMarker(null);
-    state.notify?.();
+    container = null;
+    current = null;
   }
 
   return {
-    open,
-    close,
-    setFollow,
-    setRenderMode,
-    resize,
-    prewarm,
-    lookAtPosition,
-    destroy() {
-      close();
+    async mount(host) {
+      if (!host) throw new Error('Street Level viewer has no host element');
+      await ensureViewer(host);
+    },
+
+    /** Resolves once the image is on screen and its first pose was emitted. */
+    async open(imageId) {
+      const id = String(imageId);
+      if (!container) throw new Error('Mapillary viewer is not mounted');
+      pendingOpen = id;
+      const instance = await ensureViewer(container);
+      if (pendingOpen !== id) return;
+      const image = await instance.moveTo(id);
+      if (pendingOpen !== id) return;
+      await publishPose(image);
+    },
+
+    close() {
+      pendingOpen = null;
+      current = null;
+    },
+
+    unmount() {
+      pendingOpen = null;
       destroyViewer();
+    },
+
+    resize() {
+      try {
+        viewer?.resize();
+      } catch {
+        /* no-op */
+      }
+    },
+
+    /**
+     * Load the library and stand the viewer up ahead of the first image, so
+     * opening one only costs the image download. Safe to call repeatedly.
+     */
+    async prewarm(host) {
+      if (prewarming || !host) return;
+      prewarming = true;
+      try {
+        await ensureLibrary();
+        if (!viewer) await ensureViewer(host);
+      } catch {
+        /* the real open reports errors */
+      } finally {
+        prewarming = false;
+      }
+    },
+
+    /** Show the whole image ('letterbox') or crop it to the frame ('fill'). */
+    setRenderMode(mode) {
+      renderMode = mode === 'fill' ? 'fill' : 'letterbox';
+      try {
+        const value = libraryRenderMode(renderMode);
+        if (viewer && value !== undefined) viewer.setRenderMode(value);
+      } catch {
+        /* viewer not ready */
+      }
+    },
+
+    onPose(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
   };
 }

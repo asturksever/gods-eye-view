@@ -26,7 +26,12 @@ test('Street Level is an ordinary collapsible GEV panel that starts collapsed', 
     /<button class="panel-collapse-btn" data-collapse-target="street-level-panel"/,
   );
   assert.match(html, /<span class="panel-title">STREET LEVEL<\/span>/);
-  assert.match(html, /<svg class="sl-mark"/);
+  // Provider-neutral header: no vendor mark; the inner restores its scroll.
+  assert.doesNotMatch(html, /sl-mark|mly-mark/);
+  assert.match(
+    html,
+    /<div class="street-level-panel-inner" data-rail-scroller>/,
+  );
   assert.doesNotMatch(
     html,
     /mapillary-dock|sl-minimized|sl-3d-btn|sl-photoreal-btn/,
@@ -73,6 +78,9 @@ test('the keyless state gates the controls rather than leaving dead buttons', ()
     /sl-keyless|sl-query|sl-results|data-sl-suggestion/,
   );
   assert.match(html, /<fieldset id="sl-controls"/);
+  assert.match(html, /<div id="sl-provider-chips" class="sl-chips"><\/div>/);
+  assert.match(html, /<select id="sl-since"[\s\S]*?value="3652"/);
+  assert.doesNotMatch(html, /value="year:/);
   assert.match(html, /<ul id="sl-legend"/);
   assert.match(html, /id="sl-error"[^>]*role="alert"/);
   assert.match(html, /id="sl-status"[^>]*role="status"/);
@@ -85,7 +93,11 @@ test('the expanded viewer is a modal dialog that restores focus', () => {
 });
 
 test('labels say what the buttons do', () => {
-  for (const label of ['OPEN NEAREST PHOTO', 'CAMERA FOLLOWS VIEW'])
+  for (const label of [
+    'OPEN NEAREST PHOTO',
+    'CAMERA FOLLOWS VIEW',
+    'PROVIDERS',
+  ])
     assert.ok(html.includes(label), label);
   assert.doesNotMatch(
     html,

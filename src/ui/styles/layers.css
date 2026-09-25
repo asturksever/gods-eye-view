@@ -341,6 +341,9 @@
   > .cctv-panel-inner,
 #right-context-rail[data-rail-measuring]
   > [data-panel-id]:not(.collapsed)
+  > .street-level-panel-inner,
+#right-context-rail[data-rail-measuring]
+  > [data-panel-id]:not(.collapsed)
   > .weather-panel-inner,
 #right-context-rail[data-rail-measuring]
   > [data-panel-id]:not(.collapsed)

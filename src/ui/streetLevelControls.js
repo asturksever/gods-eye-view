@@ -1,3 +1,4 @@
+import { syncChipGroup } from './chipGroup.js';
 import { presentStreetLevelPanel } from './streetLevelPresentation.js';
 
 const RENDER_MODE_KEY = 'gev:street-level:render-mode';
@@ -7,8 +8,8 @@ const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
- * Own the Street Level panel: the imagery filters, the legend and the
- * embedded street-level viewer. The panel itself is
+ * Own the Street Level panel: the provider chips, the imagery filters, the
+ * legend and the embedded street-level viewer. The panel itself is
  * ordinary GEV chrome (collapse button, rail layout, persistence) driven by
  * the application shell; this class only fills the body and asks the shell
  * to open the panel when something worth seeing arrives.
@@ -38,6 +39,7 @@ export class StreetLevelControls {
       controls: byId('sl-controls'),
       enableBtn: byId('sl-enable-btn'),
       lookBtn: byId('sl-look-btn'),
+      providerChips: byId('sl-provider-chips'),
       error: byId('sl-error'),
       errorText: byId('sl-error-text'),
       sinceSelect: byId('sl-since'),
@@ -72,19 +74,27 @@ export class StreetLevelControls {
       if (!(await this._ensureEnabled())) return;
       this.layer.openNearest?.();
     });
+    // One delegated listener; chips are re-synced in place on every render.
+    this.listen(el.providerChips, 'click', async (event) => {
+      const button = event.target?.closest?.('.data-toggle-chip');
+      if (!button || button.disabled) return;
+      const chip = this._view?.providers.find(
+        (entry) => entry.id === button.dataset.chipId,
+      );
+      if (!chip) return;
+      const next = !chip.active;
+      if (next && !(await this._ensureEnabled())) return;
+      this.layer.setProviderEnabled?.(chip.id, next);
+    });
     for (const button of this.root.querySelectorAll('[data-sl-pano]')) {
       this.listen(button, 'click', () =>
         this.layer.setCoverageFilter?.({ pano: button.dataset.slPano }),
       );
     }
     this.listen(el.sinceSelect, 'change', () => {
-      const value = String(el.sinceSelect.value || '0');
-      let sinceMs = null;
-      if (value.startsWith('year:'))
-        sinceMs = Date.UTC(Number(value.slice(5)), 0, 1);
-      else if (Number(value) > 0)
-        sinceMs = Date.now() - Number(value) * 86_400_000;
-      this.layer.setCoverageFilter?.({ sinceMs });
+      this.layer.setCoverageFilter?.({
+        sinceDays: Number(el.sinceSelect.value) || 0,
+      });
     });
     this.listen(el.followBtn, 'click', () => {
       this.layer.setFollow?.(!(this._state?.street?.follow === true));
@@ -254,6 +264,7 @@ export class StreetLevelControls {
     this._view = view;
     this._renderHeader(view);
     this._renderGate(view);
+    this._renderProviders(view);
     this._renderError(view);
     this._renderFilters(view);
     this._renderViewer(view, state);
@@ -282,6 +293,10 @@ export class StreetLevelControls {
     if (el.controls) el.controls.disabled = view.controlsDisabled;
   }
 
+  _renderProviders(view) {
+    syncChipGroup(this._elements.providerChips, view.providers);
+  }
+
   _renderError(view) {
     const el = this._elements;
     if (!el.error) return;
@@ -295,6 +310,14 @@ export class StreetLevelControls {
       const active = button.dataset.slPano === view.filter.pano;
       button.classList.toggle('is-active', active);
       button.setAttribute('aria-checked', String(active));
+    }
+    if (el.sinceSelect) {
+      const value = String(view.filter.sinceDays);
+      if (
+        el.sinceSelect.value !== value &&
+        [...el.sinceSelect.options].some((option) => option.value === value)
+      )
+        el.sinceSelect.value = value;
     }
     if (el.legend && el.legend.childElementCount !== view.legend.length) {
       el.legend.replaceChildren(
@@ -333,6 +356,7 @@ export class StreetLevelControls {
     if (el.imageLink) {
       el.imageLink.hidden = !viewer.link;
       if (viewer.link) el.imageLink.href = viewer.link;
+      if (viewer.linkLabel) el.imageLink.textContent = viewer.linkLabel;
     }
     if (state.street.open) this.layer.resizeViewer?.();
   }

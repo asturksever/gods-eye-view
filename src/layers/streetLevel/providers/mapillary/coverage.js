@@ -1,5 +1,7 @@
 import * as Cesium from 'cesium';
 import { decodeCoverageTile } from './decode.js';
+import { passesImageryFilter } from '../../filter.js';
+import { cameraHeightAboveGround, visibleBbox } from '../../view.js';
 import {
   coverageZoomForHeight,
   overviewZoomForHeight,
@@ -42,92 +44,6 @@ function sequenceColor(sequence, { selected = false, now = Date.now() } = {}) {
 }
 
 /**
- * Whether one capture passes the imagery filter: panorama mode
- * ('all' | 'pano' | 'flat') and an optional earliest capture time.
- */
-export function passesImageryFilter(record, filter) {
-  if (!filter) return true;
-  if (filter.pano === 'pano' && !record.isPano) return false;
-  if (filter.pano === 'flat' && record.isPano) return false;
-  if (
-    Number.isFinite(filter.sinceMs) &&
-    filter.sinceMs > 0 &&
-    (record.capturedAt || 0) < filter.sinceMs
-  )
-    return false;
-  return true;
-}
-
-/**
- * Camera height above the surface under the camera, in metres. Falls back to
- * the ellipsoidal height when the globe has no height sample yet.
- */
-function cameraHeightAboveGround(viewer) {
-  const carto = viewer?.camera?.positionCartographic;
-  if (!carto) return null;
-  const ground = viewer.scene?.globe?.getHeight?.(carto);
-  return carto.height - (Number.isFinite(ground) ? ground : 0);
-}
-
-/**
- * Visible bbox as [west, south, east, north] degrees, or null when the camera
- * does not see the ground. A grid of screen rays is cast onto the ellipsoid
- * and only the rays that hit count, so a view that includes the horizon (or a
- * canvas whose frustum is stale) cannot inflate the box to the whole world;
- * `computeViewRectangle` is the fallback when too few rays land.
- */
-export function visibleBbox(viewer, { grid = 5 } = {}) {
-  const scene = viewer?.scene;
-  const camera = viewer?.camera;
-  if (!scene || !camera) return null;
-  const width = scene.canvas?.clientWidth || scene.canvas?.width || 0;
-  const height = scene.canvas?.clientHeight || scene.canvas?.height || 0;
-  const hits = [];
-  if (width > 0 && height > 0) {
-    const ellipsoid = scene.globe?.ellipsoid || Cesium.Ellipsoid.WGS84;
-    const point = new Cesium.Cartesian2();
-    for (let i = 0; i <= grid; i++) {
-      for (let j = 0; j <= grid; j++) {
-        point.x = (width * i) / grid;
-        point.y = (height * j) / grid;
-        let cartesian = null;
-        try {
-          cartesian = camera.pickEllipsoid(point, ellipsoid);
-        } catch {
-          cartesian = null;
-        }
-        if (!cartesian) continue;
-        const carto = Cesium.Cartographic.fromCartesian(cartesian, ellipsoid);
-        if (carto) hits.push(carto);
-      }
-    }
-  }
-  if (hits.length >= 4) {
-    let west = Infinity;
-    let south = Infinity;
-    let east = -Infinity;
-    let north = -Infinity;
-    for (const carto of hits) {
-      const lon = Cesium.Math.toDegrees(carto.longitude);
-      const lat = Cesium.Math.toDegrees(carto.latitude);
-      west = Math.min(west, lon);
-      east = Math.max(east, lon);
-      south = Math.min(south, lat);
-      north = Math.max(north, lat);
-    }
-    if (east - west > 0 && north - south > 0) return [west, south, east, north];
-  }
-  const rectangle = camera.computeViewRectangle?.(scene.globe?.ellipsoid);
-  if (!rectangle) return null;
-  return [
-    Cesium.Math.toDegrees(rectangle.west),
-    Cesium.Math.toDegrees(rectangle.south),
-    Cesium.Math.toDegrees(rectangle.east),
-    Cesium.Math.toDegrees(rectangle.north),
-  ];
-}
-
-/**
  * Camera-driven coverage: z0–5 `overview` points from orbit down to 60 km,
  * then z11–14 sequence polylines clamped to terrain and 3D tiles. Decoded
  * tiles are kept so the imagery filter can rebuild without refetching.
@@ -149,7 +65,7 @@ export function createCoverage({ state, source }) {
   }
 
   function filter() {
-    return state.coverage.filter;
+    return state.filter;
   }
 
   /** One or more ground primitives for a tile's sequences, in draw batches. */
@@ -264,7 +180,7 @@ export function createCoverage({ state, source }) {
     state.coverage.tiles.delete(key);
   }
 
-  async function loadTile(tile, generation, kind) {
+  async function loadTile(tile, kind) {
     const key = tileKey(tile);
     if (state.coverage.tiles.has(key) || state.coverage.pending.has(key))
       return;
@@ -348,13 +264,13 @@ export function createCoverage({ state, source }) {
   }
 
   function notify() {
-    state.notify?.();
+    state.context.notify();
   }
 
   /** Recompute the tile set for the current camera and reconcile primitives. */
   function refresh() {
     const viewer = state.viewer;
-    if (!viewer || !state.enabled || state.keyRequired) return;
+    if (!viewer || !state.context.isActive() || state.keyRequired) return;
     const height = cameraHeightAboveGround(viewer);
     const sequenceZoom = coverageZoomForHeight(height);
     const overviewZoom = sequenceZoom ? null : overviewZoomForHeight(height);
@@ -365,7 +281,7 @@ export function createCoverage({ state, source }) {
       bbox = [-180, -85, 180, 85];
     if (!zoom || !bbox) {
       state.coverage.hint =
-        'Point the camera at the globe for Mapillary coverage';
+        'Point the camera at the globe for street-level coverage';
       clear();
       notify();
       return;
@@ -376,8 +292,6 @@ export function createCoverage({ state, source }) {
       state.coverage.zoom = zoom;
       state.coverage.kind = kind;
     }
-    state.coverage.generation++;
-    const generation = state.coverage.generation;
     const { tiles } = tilesForBbox(bbox, zoom, {
       limit:
         kind === 'sequence' ? COVERAGE_MAX_TILES : COVERAGE_OVERVIEW_MAX_TILES,
@@ -390,7 +304,7 @@ export function createCoverage({ state, source }) {
         controller.abort();
         state.coverage.pending.delete(key);
       }
-    for (const tile of tiles) loadTile(tile, generation, kind);
+    for (const tile of tiles) loadTile(tile, kind);
     notify();
   }
 
@@ -421,7 +335,6 @@ export function createCoverage({ state, source }) {
   }
 
   function clear() {
-    state.coverage.generation++;
     for (const controller of state.coverage.pending.values())
       controller.abort();
     state.coverage.pending.clear();
@@ -433,20 +346,8 @@ export function createCoverage({ state, source }) {
     requestRender();
   }
 
-  /** Apply a new imagery filter and rebuild every loaded tile from its cache. */
-  function setFilter(next) {
-    const current = state.coverage.filter;
-    const pano = ['all', 'pano', 'flat'].includes(next?.pano)
-      ? next.pano
-      : current.pano;
-    const sinceMs =
-      next && 'sinceMs' in next
-        ? Number.isFinite(next.sinceMs) && next.sinceMs > 0
-          ? next.sinceMs
-          : null
-        : current.sinceMs;
-    if (pano === current.pano && sinceMs === current.sinceMs) return;
-    state.coverage.filter = { pano, sinceMs };
+  /** Rebuild every loaded tile from its decoded cache (after a filter change). */
+  function rebuild() {
     purgeStale();
     for (const entry of state.coverage.tiles.values()) {
       detachPrimitive(entry);
@@ -500,9 +401,9 @@ export function createCoverage({ state, source }) {
     detach,
     refresh,
     clear,
+    rebuild,
     findSequence,
     recolorSequence,
     sequenceCount,
-    setFilter,
   };
 }

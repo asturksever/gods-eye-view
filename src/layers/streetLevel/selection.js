@@ -1,18 +1,12 @@
 import * as Cesium from 'cesium';
-import {
-  STREET_LEVEL_LAYER_ID,
-  PICK_PREFIX,
-} from './providers/mapillary/policy.js';
+import { STREET_LEVEL_LAYER_ID } from './policy.js';
 
-/** Click handling for coverage lines and image cones. */
+/** One click/hover handler for every provider's coverage and image cones. */
 export function createSelection({ state, parts }) {
   const { picking, input } = state.services;
 
   function ownsPick(pickedId) {
-    return (
-      typeof pickedId === 'string' &&
-      Object.values(PICK_PREFIX).some((prefix) => pickedId.startsWith(prefix))
-    );
+    return parts.router.ownsPick(pickedId);
   }
 
   function onClick(click) {
@@ -23,12 +17,11 @@ export function createSelection({ state, parts }) {
     const id = picking?.resolvePickId
       ? picking.resolvePickId(picked)
       : picked?.id;
-    if (!ownsPick(id)) return;
-    if (id.startsWith(PICK_PREFIX.sequence)) {
-      parts.sequences.select(id.slice(PICK_PREFIX.sequence.length));
-    } else if (id.startsWith(PICK_PREFIX.image)) {
-      parts.street.openImage(id.slice(PICK_PREFIX.image.length));
-    }
+    const route = parts.router.resolve(id);
+    if (!route?.instance) return;
+    const entry = state.providers.get(route.providerId);
+    if (!entry?.on) return;
+    route.instance.handlePick(route.id);
   }
 
   /**
@@ -43,9 +36,9 @@ export function createSelection({ state, parts }) {
       )
     )
       return;
-    if (!state.sequence.selectedId) return;
+    if (!parts.hasSelectedSequence()) return;
     event.preventDefault();
-    parts.sequences.clearSelection();
+    parts.clearSequences();
   }
 
   let hoverQueued = false;

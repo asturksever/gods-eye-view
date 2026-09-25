@@ -1,13 +1,17 @@
-/** Identity and tuning for the Mapillary street-level layer. */
-export const STREET_LEVEL_LAYER_ID = 'street-level';
+import { COLORS as SHARED_COLORS } from '../../policy.js';
+
+/** Identity and tuning for the Mapillary street-level provider. */
+export const MAPILLARY_PROVIDER_ID = 'mapillary';
+export const MAPILLARY_NAME = 'Mapillary';
+export const MAPILLARY_LABEL = 'MAPILLARY';
 export const MAPILLARY_KEY_ID = 'mapillary';
 export const MAPILLARY_GRAPH_HOST = 'https://graph.mapillary.com';
 
-/** Stable id prefixes for picked primitives. */
+/** Stable id prefixes for picked primitives; every one starts with `mly:`. */
 export const PICK_PREFIX = Object.freeze({
+  root: 'mly:',
   sequence: 'mly:seq:',
   image: 'mly:img:',
-  position: 'mly:pos',
 });
 
 /** Brand green for coverage; panoramas get a distinct hue; selection is GEV cyan. */
@@ -15,9 +19,8 @@ export const COLORS = Object.freeze({
   coverage: '#05cb63',
   coverageOld: '#2e7d5b',
   pano: '#ff4fd8',
-  selected: '#00d4ff',
+  selected: SHARED_COLORS.selected,
   image: '#e8eaed',
-  position: '#ffb300',
 });
 
 /** Camera-driven coverage refresh. */
@@ -41,11 +44,29 @@ export const NEAREST_RADIUS_M = 50;
 export const NEAREST_LIMIT = 8;
 
 /**
- * On-globe credit shown while the layer is enabled. Mapillary imagery and
+ * On-globe credit shown while the provider is active. Mapillary imagery and
  * derived data are CC BY-SA 4.0 and require visible attribution.
  */
 export const MAPILLARY_CREDIT_HTML =
   'Street Level: imagery © <a href="https://www.mapillary.com" target="_blank" rel="noopener">Mapillary</a> contributors, CC BY-SA 4.0';
+
+/** Coverage colour key, in the order the panel lists it. */
+export const MAPILLARY_LEGEND = Object.freeze([
+  Object.freeze({
+    key: 'recent',
+    label: `Recent (≤${Math.round(COVERAGE_RECENT_DAYS / 365)} yr)`,
+    color: COLORS.coverage,
+  }),
+  Object.freeze({ key: 'older', label: 'Older', color: COLORS.coverageOld }),
+  Object.freeze({ key: 'pano', label: '360°', color: COLORS.pano }),
+]);
+
+/** Deep link to an image on mapillary.com, as the web app shares them. */
+export function mapillaryImageUrl(imageId) {
+  const id = String(imageId || '').trim();
+  if (!id) return 'https://www.mapillary.com/app/';
+  return `https://www.mapillary.com/app/?pKey=${encodeURIComponent(id)}&focus=photo`;
+}
 
 /** Fields requested from the graph API. */
 export const IMAGE_FIELDS =

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * Browser QA for the Street Level layer against a running dev
- * server: the panel's place in the right rail, the keyless gate, coverage,
- * the embedded viewer and its expanded dialog. Run with `npm run qa:street-level -- --url http://localhost:4173`.
+ * server: the panel's place in the right rail, the provider chips, the
+ * keyless gate, coverage and its credit, switching a provider off and on,
+ * the imagery filter, the embedded viewer and its expanded dialog. Run with `npm run qa:street-level -- --url http://localhost:4173`.
  * Without MAPILLARY_CLIENT_TOKEN on the server only the keyless steps run.
  */
 import assert from 'node:assert/strict';
@@ -13,6 +14,9 @@ export const VIEWPORTS = Object.freeze([
   { width: 1440, height: 900 },
   { width: 1280, height: 800 },
 ]);
+
+/** Provider chips the panel must show, in order (one per registered provider). */
+export const EXPECTED_PROVIDERS = Object.freeze(['mapillary']);
 
 /** Expected right-rail order once the layout controller has run. */
 export const RAIL_ORDER = Object.freeze([
@@ -119,11 +123,19 @@ async function main() {
     );
     await sleep(500);
     await step(
-      'expanding the strip shows the body and the four-swatch legend',
+      'expanding the strip shows the body, one chip per provider and the legend',
       async () => {
         const info = await panel();
         assert.ok(!isCollapsed(info.classes));
         assert.equal(info.bodyDisplay, 'flex');
+        const chips = await page.evaluate(() =>
+          [
+            ...document.querySelectorAll(
+              '#sl-provider-chips .data-toggle-chip',
+            ),
+          ].map((chip) => chip.dataset.chipId),
+        );
+        assert.deepEqual(chips, EXPECTED_PROVIDERS);
         assert.equal(
           await page.evaluate(
             () => document.querySelectorAll('#sl-legend li').length,
@@ -145,6 +157,15 @@ async function main() {
           const info = await panel();
           assert.equal(info.controlsDisabled, true);
           assert.equal(info.status, 'KEY REQUIRED');
+          assert.equal(
+            await page.evaluate(() =>
+              document
+                .querySelector('#sl-provider-chips [data-chip-id="mapillary"]')
+                .classList.contains('chip-error'),
+            ),
+            true,
+            'the keyless provider chip reads as an error',
+          );
         },
       );
       console.log(
@@ -188,7 +209,7 @@ async function main() {
             const u = window.__godsEyeView.dataManager.layers
               .get('street-level')
               .module.getUIState();
-            return u.coverage.sequences > 0 && !u.coverage.loading;
+            return u.coverage.count > 0 && !u.coverage.loading;
           },
           { timeout: 90_000 },
         );
@@ -201,14 +222,76 @@ async function main() {
         );
       },
     );
+    const ui = () =>
+      page.evaluate(() =>
+        window.__godsEyeView.dataManager.layers
+          .get('street-level')
+          .module.getUIState(),
+      );
+    await step(
+      'switching the provider chip off clears its coverage and credit',
+      async () => {
+        await page.click('#sl-provider-chips [data-chip-id="mapillary"]');
+        await page.waitForFunction(
+          () =>
+            window.__godsEyeView.dataManager.layers
+              .get('street-level')
+              .module.getUIState().coverage.count === 0,
+          { timeout: 15_000 },
+        );
+        const state = await ui();
+        assert.equal(state.providers[0].on, false);
+        assert.deepEqual(state.legend, [], 'no active provider, no legend');
+        await page.waitForFunction(
+          () => !document.body.innerHTML.includes('Mapillary</a> contributors'),
+          { timeout: 15_000 },
+        );
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.__godsEyeView.dataManager.layers
+              .get('street-level')
+              .module.getParams(),
+          ),
+          { mapillary: false, pano: 'all', sinceDays: 0 },
+        );
+      },
+    );
+    await step('switching it back on restores coverage', async () => {
+      await page.click('#sl-provider-chips [data-chip-id="mapillary"]');
+      await page.waitForFunction(
+        () => {
+          const u = window.__godsEyeView.dataManager.layers
+            .get('street-level')
+            .module.getUIState();
+          return u.coverage.count > 0 && !u.coverage.loading;
+        },
+        { timeout: 90_000 },
+      );
+      assert.equal((await ui()).providers[0].on, true);
+    });
+    await step(
+      'the 360° filter keeps at most the unfiltered sequence count',
+      async () => {
+        const before = (await ui()).coverage.count;
+        await page.click('[data-sl-pano="pano"]');
+        await sleep(600);
+        const after = (await ui()).coverage.count;
+        assert.ok(after <= before, `${after} ≤ ${before}`);
+        assert.equal((await ui()).filter.pano, 'pano');
+        await page.click('[data-sl-pano="all"]');
+        await sleep(600);
+        assert.equal((await ui()).coverage.count, before);
+      },
+    );
     await step(
       'opening the nearest image shows the viewer with a caption',
       async () => {
-        await page.evaluate(() =>
-          window.__godsEyeView.dataManager.layers
+        // Fire and forget: the open can outlive one CDP call, so poll instead.
+        await page.evaluate(() => {
+          void window.__godsEyeView.dataManager.layers
             .get('street-level')
-            .module.openNearest(),
-        );
+            .module.openNearest();
+        });
         await page.waitForFunction(
           () => {
             const s = window.__godsEyeView.dataManager.layers
@@ -254,6 +337,8 @@ async function main() {
         const view = await page.evaluate(() => ({
           hidden: document.getElementById('sl-viewer-wrap').hidden,
           when: document.getElementById('sl-image-when').textContent.trim(),
+          link: document.getElementById('sl-image-link').textContent.trim(),
+          href: document.getElementById('sl-image-link').href,
           width: Math.round(
             document.getElementById('sl-viewer').getBoundingClientRect().width,
           ),
@@ -261,6 +346,9 @@ async function main() {
         assert.equal(view.hidden, false);
         assert.ok(view.width > 200);
         assert.ok(view.when.length > 0, 'caption shows the capture date');
+        assert.equal(street.providerId, 'mapillary');
+        assert.equal(view.link, 'MAPILLARY ↗');
+        assert.match(view.href, /mapillary\.com\/app\/\?pKey=/);
       },
     );
     await step(

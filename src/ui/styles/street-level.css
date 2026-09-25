@@ -43,19 +43,6 @@
   gap: 8px;
 }
 
-.sl-mark {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  color: var(--text-dim);
-  transition: color var(--transition-fast);
-}
-
-#street-level-panel[data-sl-enabled='true'] .sl-mark {
-  color: var(--sl-green);
-  filter: drop-shadow(0 0 6px rgba(5, 203, 99, 0.7));
-}
-
 .sl-status {
   font-family: var(--font-mono);
   font-size: var(--sl-text-small);
@@ -108,6 +95,25 @@
 .sl-controls:disabled {
   opacity: 0.45;
   pointer-events: none;
+}
+
+/* ── Providers ───────────────────────────────────────────────────────────── */
+.sl-providers {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.sl-chips .data-toggle-chip.chip-error {
+  color: #ffb300;
+  border-color: rgba(255, 179, 0, 0.55);
 }
 
 /* ── Errors ──────────────────────────────────────────────────────────────── */

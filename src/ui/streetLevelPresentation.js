@@ -1,7 +1,18 @@
+import { keySetupRequirement } from '../keySetupCore.mjs';
+
 /**
  * Turn the Street Level layer's UI state into the strings and flags the panel
  * renders. Pure: no DOM, no layer calls, so every wording decision is testable.
  */
+
+/** Relative "captured since" windows the panel offers, in days. */
+export const SINCE_OPTIONS = Object.freeze([
+  Object.freeze({ days: 0, label: 'any date' }),
+  Object.freeze({ days: 365, label: 'last year' }),
+  Object.freeze({ days: 730, label: '2 years' }),
+  Object.freeze({ days: 1826, label: '5 years' }),
+  Object.freeze({ days: 3652, label: '10 years' }),
+]);
 
 function formatDate(ms) {
   if (!Number.isFinite(ms)) return '';
@@ -12,17 +23,36 @@ function formatDate(ms) {
   }
 }
 
-/** Deep link to an image on mapillary.com, as the web app shares them. */
-export function mapillaryImageUrl(imageId) {
-  const id = String(imageId || '').trim();
-  if (!id) return 'https://www.mapillary.com/app/';
-  return `https://www.mapillary.com/app/?pKey=${encodeURIComponent(id)}&focus=photo`;
-}
-
 function presentStatus(state) {
   if (state.keyRequired) return { text: 'KEY REQUIRED', tone: 'warn' };
   if (state.coverage.loading) return { text: 'LOADING', tone: 'busy' };
   return state.enabled ? { text: 'ON', tone: 'on' } : { text: 'OFF', tone: '' };
+}
+
+/** One chip per registered provider; a keyless provider reads as an error chip. */
+function presentProviders(state) {
+  return (state.providers || []).map((provider) => {
+    const keyRequired = provider.keyRequired === true;
+    let title = `${provider.name} imagery ${provider.on ? 'on' : 'off'}`;
+    if (keyRequired && provider.requiresKeyId)
+      title = `${provider.name}: ${keySetupRequirement(provider.requiresKeyId)}`;
+    else if (provider.error) title = `${provider.name}: ${provider.error}`;
+    return {
+      id: provider.id,
+      label: provider.label,
+      title,
+      active: provider.on === true,
+      disabled: false,
+      state: keyRequired
+        ? 'error'
+        : provider.loading
+          ? 'loading'
+          : provider.on
+            ? 'active'
+            : 'idle',
+      busy: provider.loading === true,
+    };
+  });
 }
 
 function presentViewer(state) {
@@ -38,7 +68,8 @@ function presentViewer(state) {
     renderMode: street.renderMode === 'fill' ? 'fill' : 'letterbox',
     captionLeft: street.creator ? `Image by ${street.creator}` : '',
     captionRight: right.join(' · '),
-    link: street.imageId ? mapillaryImageUrl(street.imageId) : null,
+    link: street.externalUrl || null,
+    linkLabel: street.providerLabel ? `${street.providerLabel} ↗` : '',
     follow: {
       pressed: street.follow === true,
       disabled: street.open !== true,
@@ -52,8 +83,8 @@ function presentMeta(state) {
     return state.sequence.loading
       ? 'Loading this sequence…'
       : `${state.sequence.images.toLocaleString()} images in this sequence · Esc clears`;
-  if (state.coverage.zoom && state.coverage.sequences > 0)
-    return `${state.coverage.sequences.toLocaleString()} sequences in view · click a line for its photos`;
+  if (state.coverage.count > 0)
+    return `${state.coverage.count.toLocaleString()} sequences in view · click a line for its photos`;
   return state.coverage.hint || '';
 }
 
@@ -64,6 +95,7 @@ function presentMeta(state) {
 export function presentStreetLevelPanel(state) {
   const enabled = state.enabled === true;
   const keyRequired = state.keyRequired === true;
+  const filter = state.filter || { pano: 'all', sinceDays: 0 };
   return {
     enabled,
     keyRequired,
@@ -73,9 +105,10 @@ export function presentStreetLevelPanel(state) {
       text: enabled ? 'STREET LEVEL ON' : 'STREET LEVEL OFF',
       pressed: enabled,
     },
+    providers: presentProviders(state),
     error: state.street.error || state.coverage.error || null,
-    filter: state.coverage.filter || { pano: 'all', sinceMs: null },
-    legend: state.coverage.legend || [],
+    filter: { pano: filter.pano, sinceDays: Number(filter.sinceDays) || 0 },
+    legend: state.legend || [],
     viewer: presentViewer(state),
     meta: presentMeta(state),
     /** The panel opens itself when an image opens (a native panel stays put otherwise). */
