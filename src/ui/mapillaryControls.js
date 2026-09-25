@@ -36,8 +36,6 @@ export class MapillaryControls {
     const byId = (id) => this.root?.querySelector(`#${id}`) || null;
     return {
       status: byId('mly-status'),
-      keyless: byId('mly-keyless'),
-      keylessBtn: byId('mly-keyless-btn'),
       controls: byId('mly-controls'),
       enableBtn: byId('mly-enable-btn'),
       lookBtn: byId('mly-look-btn'),
@@ -82,7 +80,6 @@ export class MapillaryControls {
     if (!this.root) return;
     this.mapillary.attachViewerHost?.(el.viewer);
 
-    this.listen(el.keylessBtn, 'click', () => this.actions.openKeySetup?.());
     this.listen(el.enableBtn, 'click', () => this._toggleEnabled());
     this.listen(el.lookBtn, 'click', async () => {
       if (!(await this._ensureEnabled())) return;
@@ -306,7 +303,7 @@ export class MapillaryControls {
     const view = presentMapillaryPanel(state);
     this._view = view;
     this._renderHeader(view);
-    this._renderEmptyState(view);
+    this._renderGate(view);
     this._renderQuery(view);
     this._renderResults(view);
     this._renderFilters(view);
@@ -331,9 +328,8 @@ export class MapillaryControls {
     }
   }
 
-  _renderEmptyState(view) {
+  _renderGate(view) {
     const el = this._elements;
-    if (el.keyless) el.keyless.hidden = !view.keyless.visible;
     if (el.controls) el.controls.disabled = view.controlsDisabled;
   }
 

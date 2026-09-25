@@ -108,7 +108,7 @@ async function main() {
           classes: [...el.classList],
           width: Math.round(box.width),
           right: Math.round(box.right),
-          keyless: !document.getElementById('mly-keyless').hidden,
+          status: document.getElementById('mly-status').textContent,
           controlsDisabled: document.getElementById('mly-controls').disabled,
           bodyDisplay: getComputedStyle(document.getElementById('mly-body'))
             .display,
@@ -152,7 +152,7 @@ async function main() {
     );
     if (!status.configured) {
       await step(
-        'keyless install gates the controls and names the token',
+        'keyless install gates the controls and reports KEY REQUIRED',
         async () => {
           await page.evaluate(() =>
             window.__godsEyeView.dataManager.setEnabled('mapillary', true, {
@@ -161,14 +161,8 @@ async function main() {
           );
           await sleep(800);
           const info = await panel();
-          assert.equal(info.keyless, true);
           assert.equal(info.controlsDisabled, true);
-          assert.match(
-            await page.evaluate(
-              () => document.getElementById('mly-keyless').textContent,
-            ),
-            /MAPILLARY_CLIENT_TOKEN/,
-          );
+          assert.equal(info.status, 'KEY REQUIRED');
         },
       );
       console.log(
@@ -217,7 +211,7 @@ async function main() {
           { timeout: 90_000 },
         );
         const info = await panel();
-        assert.equal(info.keyless, false);
+        assert.equal(info.controlsDisabled, false);
         // Cesium paints on-screen credits a frame or two after they register.
         await page.waitForFunction(
           () => document.body.innerHTML.includes('Mapillary</a> contributors'),

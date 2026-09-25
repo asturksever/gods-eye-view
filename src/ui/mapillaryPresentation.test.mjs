@@ -86,10 +86,8 @@ function deepMerge(target, source) {
   return out;
 }
 
-test('a missing Mapillary token gates every control and names the variable', () => {
+test('a missing Mapillary token gates every control and flags KEY REQUIRED', () => {
   const view = presentMapillaryPanel(snapshot({ keyRequired: true }));
-  assert.equal(view.keyless.visible, true);
-  assert.match(view.keyless.text, /MAPILLARY_CLIENT_TOKEN/);
   assert.equal(view.controlsDisabled, true);
   assert.deepEqual(view.status, { text: 'KEY REQUIRED', tone: 'warn' });
 });
@@ -103,8 +101,14 @@ test('without an Anthropic key the query box explains itself and stays disabled'
   assert.equal(view.query.hintWarn, true);
   assert.match(view.query.hint, /Anthropic key/);
   assert.ok(view.query.placeholder.length < 40, 'placeholder fits the field');
-  assert.equal(view.keyless.visible, false);
   assert.equal(view.controlsDisabled, false);
+});
+
+test('before the status call answers the query box does not claim a missing key', () => {
+  const view = presentMapillaryPanel(snapshot({ planner: null }));
+  assert.equal(view.query.inputDisabled, false);
+  assert.equal(view.query.hintWarn, false);
+  assert.doesNotMatch(view.query.placeholder, /Anthropic/);
 });
 
 test('a running query turns ASK into STOP and shows indeterminate progress per stage', () => {

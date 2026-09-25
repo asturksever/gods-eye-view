@@ -330,6 +330,13 @@ _The Space Missions layer replaying a Falcon 9 ascent — labeled `RECONSTRUCTED
 
 > Needs a free **Mapillary client token**; the plain-English query box additionally needs an **Anthropic key**. Both go in POWER UP.
 
+**Getting the keys**
+
+1. **Mapillary client token (required, free).** Sign in at [mapillary.com/dashboard/developers](https://www.mapillary.com/dashboard/developers), choose **Register application**, give it any name and website, tick **Read** access, and copy the **Client Token** (it starts with `MLY|`). Paste it into **POWER UP → Mapillary**, or set `MAPILLARY_CLIENT_TOKEN` in `.env` and restart `npm run dev`.
+2. **Anthropic key (optional).** Create one at [console.anthropic.com](https://console.anthropic.com/settings/keys) and add it in **POWER UP → Anthropic** or as `ANTHROPIC_API_KEY` in `.env`. It stays on the server; only the plain-English query box uses it.
+
+Without the Mapillary token the STREET LEVEL panel reads **KEY REQUIRED** and its controls stay greyed out; without the Anthropic key everything except the query box works.
+
 Turn on **Street Level (Mapillary)** under DATA LAYERS → Cameras, or open the STREET LEVEL strip in the right rail. Mapillary's coverage draws as ground-hugging lines (recent captures bright green, older ones dim, 360° panoramas magenta); click a line for its image cones and a cone to open the photo in the embedded MapillaryJS viewer. **EXPAND** grows the viewer to most of the screen and **CAMERA FOLLOWS VIEW** drives the globe camera from the panorama. With an Anthropic key, type a request such as _"stop signs in downtown Detroit"_ and the matching detections stream onto the globe tile by tile with Mapillary's own icons; click one to see the photo with the detection outlined. Mapillary blurs faces and licence plates before publishing imagery, and the globe credits "© Mapillary contributors, CC BY-SA 4.0" while the layer is on.
 
 ## 🎖️ Field Missions

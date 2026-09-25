@@ -900,7 +900,6 @@ export class StyleManager extends ShellFacade {
           }),
         setPanelCollapsed: (collapsed, options) =>
           this.setPanelCollapsed('mapillary-panel', collapsed, options),
-        openKeySetup: () => document.getElementById('key-setup-chip')?.click(),
         showToast: (message) => this._showToast(message),
       },
     });

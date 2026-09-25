@@ -2697,7 +2697,8 @@ its criteria cannot be silently ignored.
 
 Street Level (Mapillary) lives in the right context rail next to CCTV as an
 ordinary collapsible panel and starts collapsed. Without `MAPILLARY_CLIENT_TOKEN`
-the panel shows a gated empty state naming the variable; with it, coverage
+the header status reads KEY REQUIRED and the controls stay disabled (key setup
+is documented in the README's Street Level section); with it, coverage
 draws as ground-clamped sequence lines (z0–5 overview points from orbit,
 z11–14 sequences below 60 km) and the proxy strips the unused `image` point
 layer from z14 tiles in transit (12 MB → ~80 KB). The plain-English query box

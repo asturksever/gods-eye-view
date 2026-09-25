@@ -180,7 +180,8 @@ export function createMapillaryLayer({ source, services = {} }) {
     return {
       enabled: state.enabled,
       keyRequired: state.keyRequired,
-      planner: state.status?.planner === true,
+      // null until the status call answers (the layer initialises lazily).
+      planner: state.status ? state.status.planner === true : null,
       plannerModel: state.status?.plannerModel || null,
       coverage: {
         zoom: state.coverage.zoom,

@@ -153,7 +153,9 @@ function presentMeta(state) {
 export function presentMapillaryPanel(state) {
   const enabled = state.enabled === true;
   const keyRequired = state.keyRequired === true;
-  const planner = state.planner === true;
+  // Unknown (status not fetched yet) reads as available: the server answers
+  // a missing key with its own error, and the panel must not claim one is missing.
+  const planner = state.planner !== false;
   const busy = state.query.busy === true;
   const error = state.query.error || state.street.error || null;
   let answer = state.query.answer || '';
@@ -167,10 +169,6 @@ export function presentMapillaryPanel(state) {
     enabled,
     keyRequired,
     status: presentStatus(state),
-    keyless: {
-      visible: keyRequired,
-      text: 'Street Level needs a free Mapillary client token (MAPILLARY_CLIENT_TOKEN). Coverage, photos and queries stay off until one is added.',
-    },
     controlsDisabled: keyRequired,
     enableButton: {
       text: enabled ? 'STREET LEVEL ON' : 'STREET LEVEL OFF',

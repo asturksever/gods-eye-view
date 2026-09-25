@@ -63,9 +63,9 @@ test('panel styles stay inside GEV conventions: no !important, no fixed panel', 
   assert.deepEqual(fixed, ['.mly-viewer-wrap-expanded']);
 });
 
-test('keyless and no-planner states are real, gated UI rather than dead buttons', () => {
-  assert.match(html, /id="mly-keyless"[^>]*hidden/);
-  assert.match(html, /MAPILLARY_CLIENT_TOKEN/);
+test('keyless and no-planner states gate the controls rather than leave dead buttons', () => {
+  // The key requirement is documented (README, .env.example), not repeated in the panel.
+  assert.doesNotMatch(html, /mly-keyless/);
   assert.match(html, /<fieldset id="mly-controls"/);
   assert.match(html, /<ul id="mly-legend"/);
   assert.match(html, /id="mly-error"[^>]*role="alert"/);
