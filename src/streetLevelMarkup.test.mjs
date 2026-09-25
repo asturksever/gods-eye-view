@@ -152,7 +152,7 @@ test('the viewer comes first and the panel is a portable, resizable window', () 
   );
   assert.match(
     read('src/ui/panelChrome.js'),
-    /classList\.toggle\('collapsed', nextCollapsed\);\s*this\._panelPosition\?\.onPanelCollapsed\?\.\(panelId, nextCollapsed\)/,
+    /classList\.toggle\('collapsed', nextCollapsed\);[\s\S]{0,200}?if \(explicit && !restore\)\s*this\._panelPosition\?\.onPanelCollapsed\?\.\(panelId, nextCollapsed\)/,
   );
   assert.match(
     controls,

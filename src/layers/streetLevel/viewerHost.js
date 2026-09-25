@@ -6,6 +6,8 @@
 export function createViewerHost({ state, parts }) {
   /** @type {{id: string, adapter: object, unsubscribe: () => void}|null} */
   let active = null;
+  /** @type {{id: string, promise: Promise<object>}|null} */
+  let mounting = null;
   let openSeq = 0;
 
   function notify() {
@@ -51,20 +53,50 @@ export function createViewerHost({ state, parts }) {
     if (current !== sequenceId) entry.instance.selectSequence(sequenceId);
   }
 
-  async function mount(entry) {
-    if (active?.id === entry.def.id) return active.adapter;
+  /**
+   * Mount a provider's viewer adapter in the host. The adapter becomes
+   * `active` only once its mount succeeded, so a failed mount (a library
+   * that did not load) is retried on the next open; concurrent opens for the
+   * same provider share one mount.
+   */
+  function mount(entry) {
+    if (active?.id === entry.def.id) return Promise.resolve(active.adapter);
+    if (mounting?.id === entry.def.id) return mounting.promise;
     if (active) {
       active.adapter.close();
       active.unsubscribe();
       active.adapter.unmount();
       active = null;
     }
-    const { adapter } = { adapter: entry.instance.viewer };
-    const unsubscribe = adapter.onPose(applyPose);
-    active = { id: entry.def.id, adapter, unsubscribe };
-    await adapter.mount(state.street.host);
-    adapter.setRenderMode?.(state.street.renderMode);
-    return adapter;
+    const adapter = entry.instance.viewer;
+    const promise = (async () => {
+      const unsubscribe = adapter.onPose(applyPose);
+      try {
+        await adapter.mount(state.street.host);
+      } catch (error) {
+        unsubscribe();
+        throw error;
+      }
+      if (mounting?.promise !== promise) {
+        // Unmounted (layer off, provider switched) while loading.
+        unsubscribe();
+        adapter.unmount();
+        throw new Error('Street-level viewer was closed');
+      }
+      active = { id: entry.def.id, adapter, unsubscribe };
+      adapter.setRenderMode?.(state.street.renderMode);
+      return adapter;
+    })();
+    mounting = { id: entry.def.id, promise };
+    promise.then(
+      () => {
+        if (mounting?.promise === promise) mounting = null;
+      },
+      () => {
+        if (mounting?.promise === promise) mounting = null;
+      },
+    );
+    return promise;
   }
 
   /**
@@ -172,6 +204,7 @@ export function createViewerHost({ state, parts }) {
   /** Tear the mounted adapter down (layer disabled or destroyed). */
   function unmount() {
     close();
+    mounting = null;
     if (!active) return;
     active.unsubscribe();
     active.adapter.unmount();

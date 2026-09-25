@@ -35,5 +35,5 @@ export function createCredits() {
     for (const id of [...shown.keys()]) hide(viewer, { id });
   }
 
-  return { show, hide, hideAll, has: (id) => shown.has(id) };
+  return { show, hide, hideAll };
 }

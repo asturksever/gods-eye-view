@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { composeUIState } from './uiState.js';
+import { composeUIState, summarizeCoverage } from './uiState.js';
 
 const provider = (overrides = {}) => ({
   id: 'mapillary',
@@ -101,4 +101,22 @@ test('hint and error come from the first active provider that has one', () => {
   assert.equal(ui.coverage.error, 'boom');
   assert.deepEqual(ui.filter, base.filter);
   assert.notEqual(ui.filter, base.filter, 'snapshot copies the filter');
+});
+
+test('summarizeCoverage is what getStats reports, without building a snapshot', () => {
+  assert.deepEqual(
+    summarizeCoverage([
+      provider({ count: 4, hint: 'Look down' }),
+      provider({ id: 'b', name: 'B', count: 6, loading: true, error: 'boom' }),
+      provider({ id: 'c', name: 'C', count: 99, on: false, keyRequired: true }),
+    ]),
+    {
+      count: 10,
+      loading: true,
+      hint: 'Look down',
+      error: 'boom',
+      keyRequired: false,
+    },
+  );
+  assert.equal(summarizeCoverage([]).keyRequired, false);
 });

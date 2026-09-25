@@ -430,6 +430,8 @@ export class PanelChrome {
         if (
           peer !== panelEl &&
           peer.matches('[data-panel-id]') &&
+          // A floating window is not part of the rail's accordion.
+          !peer.classList.contains('panel-floating') &&
           !peer.hidden
         ) {
           this.setPanelCollapsed(peer.id, true, {
@@ -557,7 +559,10 @@ export class PanelChrome {
       }
     }
     panelEl.classList.toggle('collapsed', nextCollapsed);
-    this._panelPosition?.onPanelCollapsed?.(panelId, nextCollapsed);
+    // Only a user's own collapse docks a floating window; cockpit entry,
+    // restores and accordion peers must not discard where they put it.
+    if (explicit && !restore)
+      this._panelPosition?.onPanelCollapsed?.(panelId, nextCollapsed);
     if (
       nextCollapsed &&
       this.cockpitView?.active &&

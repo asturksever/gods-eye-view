@@ -17,6 +17,23 @@ import { COLORS } from './policy.js';
  */
 
 /**
+ * What the switched-on providers add up to: summed counts, any loading, the
+ * first hint and error, and whether every one of them lacks its key.
+ * @param {Array<ProviderSnapshot>} providers
+ */
+export function summarizeCoverage(providers) {
+  const active = providers.filter((p) => p.on);
+  return {
+    count: active.reduce((sum, p) => sum + (p.count || 0), 0),
+    loading: active.some((p) => p.loading),
+    hint: active.find((p) => p.hint)?.hint || '',
+    error: active.find((p) => p.error)?.error || null,
+    keyRequired:
+      active.length > 0 && active.every((p) => p.keyRequired === true),
+  };
+}
+
+/**
  * Compose the snapshot the panel renders from the core state and one
  * snapshot per registered provider. Pure, so the merge rules are testable:
  * counts add up across active providers, the layer is key-gated only when
@@ -33,8 +50,7 @@ export function composeUIState({
   sequence,
 }) {
   const active = providers.filter((p) => p.on);
-  const keyRequired =
-    active.length > 0 && active.every((p) => p.keyRequired === true);
+  const { keyRequired, ...coverage } = summarizeCoverage(providers);
   const legend = [];
   for (const provider of active)
     for (const entry of provider.legend)
@@ -53,12 +69,7 @@ export function composeUIState({
     keyRequired,
     filter: { ...filter },
     providers: providers.map((p) => ({ ...p, legend: [...p.legend] })),
-    coverage: {
-      loading: active.some((p) => p.loading),
-      count: active.reduce((sum, p) => sum + (p.count || 0), 0),
-      hint: active.find((p) => p.hint)?.hint || '',
-      error: active.find((p) => p.error)?.error || null,
-    },
+    coverage,
     legend,
     sequence: { ...sequence },
     street: { ...street },

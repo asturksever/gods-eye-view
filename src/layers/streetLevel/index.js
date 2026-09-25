@@ -8,7 +8,7 @@ import { createViewerHost } from './viewerHost.js';
 import { requiresKeyIdFor, validateProviders } from './registry.js';
 import { normalizeFilter, resolveFilter, sameFilter } from './filter.js';
 import { decodeParams, encodeParams } from './params.js';
-import { composeUIState } from './uiState.js';
+import { composeUIState, summarizeCoverage } from './uiState.js';
 import { viewCentre } from './view.js';
 import {
   NEAREST_RADIUS_M,
@@ -174,9 +174,10 @@ export function createStreetLevelLayer({
   }
 
   function sequenceSnapshot() {
+    // The provider showing the open image answers first.
     const owner = state.providers.get(state.street.providerId);
     const candidates = owner
-      ? [owner, ...state.providers.values()]
+      ? [owner, ...[...state.providers.values()].filter((e) => e !== owner)]
       : [...state.providers.values()];
     for (const entry of candidates) {
       const stats = entry.instance.sequenceStats?.();
@@ -239,10 +240,8 @@ export function createStreetLevelLayer({
     disable() {
       state.enabled = false;
       parts.viewerHost.unmount();
-      for (const entry of state.providers.values()) {
-        entry.instance.deactivate();
-        parts.credits.hide(state.viewer, entry.def);
-      }
+      for (const entry of state.providers.values()) entry.instance.deactivate();
+      parts.credits.hideAll(state.viewer);
       parts.selection.uninstall();
       parts.marker.setVisible(false);
       notify();
@@ -264,18 +263,18 @@ export function createStreetLevelLayer({
     },
 
     getStats() {
-      const ui = getUIState();
+      // The lifecycle polls this every second: summarise, don't snapshot.
+      const coverage = summarizeCoverage(providerSnapshots());
       let loadingLabel = '';
-      if (ui.keyRequired) loadingLabel = 'KEY REQUIRED';
-      else if (ui.coverage.loading) loadingLabel = 'loading coverage...';
-      else if (ui.coverage.hint && state.enabled)
-        loadingLabel = ui.coverage.hint;
+      if (coverage.keyRequired) loadingLabel = 'KEY REQUIRED';
+      else if (coverage.loading) loadingLabel = 'loading coverage...';
+      else if (coverage.hint && state.enabled) loadingLabel = coverage.hint;
       return {
-        count: ui.coverage.count,
-        sequences: ui.coverage.count,
-        loading: ui.coverage.loading,
-        keyRequired: ui.keyRequired,
-        error: ui.keyRequired ? 'KEY REQUIRED' : ui.coverage.error,
+        count: coverage.count,
+        sequences: coverage.count,
+        loading: coverage.loading,
+        keyRequired: coverage.keyRequired,
+        error: coverage.keyRequired ? 'KEY REQUIRED' : coverage.error,
         loadingLabel,
       };
     },
@@ -325,25 +324,29 @@ export function createStreetLevelLayer({
       state.street.loading = true;
       state.street.error = null;
       notify();
-      try {
-        for (const entry of activeEntries()) {
-          const imageId = await entry.instance.nearestImage({
+      let lastError = null;
+      for (const entry of activeEntries()) {
+        let imageId = null;
+        try {
+          imageId = await entry.instance.nearestImage({
             lat: view.lat,
             lon: view.lon,
           });
-          if (!imageId) continue;
-          await openImage(entry.def.id, imageId);
-          return true;
+        } catch (error) {
+          // One provider failing (no key, offline) must not hide the others.
+          lastError = error;
+          continue;
         }
-        throw new Error(
-          `No street-level imagery within ${NEAREST_RADIUS_M} m of the view centre`,
-        );
-      } catch (error) {
-        state.street.error = error?.message || 'Nearest image unavailable';
-        state.street.loading = false;
-        notify();
-        return false;
+        if (!imageId) continue;
+        await openImage(entry.def.id, imageId);
+        return true;
       }
+      state.street.error =
+        lastError?.message ||
+        `No street-level imagery within ${NEAREST_RADIUS_M} m of the view centre`;
+      state.street.loading = false;
+      notify();
+      return false;
     },
     /** Close the image and deselect it everywhere on the map. */
     closeViewer() {

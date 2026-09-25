@@ -341,11 +341,19 @@ export class StreetLevelControls {
       button.classList.toggle('is-active', active);
       button.setAttribute('aria-checked', String(active));
     }
-    if (el.sinceRange && document.activeElement !== el.sinceRange) {
+    if (el.sinceRange) {
+      // Never move the thumb under the user's hand; once the committed value
+      // matches the thumb, show the full readout with its cut-off date.
       const index = String(view.since.index);
-      if (el.sinceRange.value !== index) el.sinceRange.value = index;
-      if (el.sinceLabel) el.sinceLabel.textContent = view.since.label;
-      el.sinceRange.setAttribute('aria-valuetext', view.since.label);
+      if (
+        document.activeElement !== el.sinceRange &&
+        el.sinceRange.value !== index
+      )
+        el.sinceRange.value = index;
+      if (el.sinceRange.value === index) {
+        if (el.sinceLabel) el.sinceLabel.textContent = view.since.label;
+        el.sinceRange.setAttribute('aria-valuetext', view.since.label);
+      }
     }
     if (el.legend && el.legend.childElementCount !== view.legend.length) {
       el.legend.replaceChildren(

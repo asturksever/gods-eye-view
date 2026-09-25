@@ -426,6 +426,14 @@ button.sl-status:focus-visible {
 }
 
 /* ── Floating window ─────────────────────────────────────────────────────── */
+/* A window that was only dragged keeps its natural height; bound it to the
+   viewport so nothing runs off-screen (the rail rule's max-height: 100% does
+   not bind an auto-height parent). Id-qualified to outrank that rule. */
+#right-context-rail > #street-level-panel.panel-floating > .street-level-panel-inner {
+  max-height: calc(100vh - 12px);
+  overflow-y: auto;
+}
+
 /* A resized window (PanelPositionControls writes an inline height) hands the
    spare height to the viewer, so the image never needs scrolling to. */
 .panel-floating[style*='height'] > .street-level-panel-inner {
