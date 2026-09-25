@@ -1,5 +1,4 @@
 import * as Cesium from 'cesium';
-import { decodeDetectionPolygons } from './decode.js';
 
 /** Eye height above the sampled ground when the globe camera follows the viewer. */
 const FOLLOW_EYE_HEIGHT_M = 2.4;
@@ -109,8 +108,6 @@ export function createViewerBridge({ state, source, parts }) {
       state.street.bearing = pov?.bearing ?? state.street.bearing;
       state.street.tilt = pov?.tilt ?? 0;
       if (image) {
-        if (state.street.imageId && state.street.imageId !== image.id)
-          clearHighlight();
         state.street.imageId = image.id;
         state.street.isPano = image.merged
           ? image.cameraType === 'spherical'
@@ -180,7 +177,6 @@ export function createViewerBridge({ state, source, parts }) {
         bearing: true,
         zoom: true,
         attribution: true,
-        tag: true,
       },
       trackResize: true,
       renderMode: libraryRenderMode(state.street.renderMode),
@@ -219,70 +215,6 @@ export function createViewerBridge({ state, source, parts }) {
       state.notify?.();
     }
     if (pendingOpen === id && !state.street.error) selectCurrentSequence();
-  }
-
-  function clearHighlight() {
-    if (!state.street.highlight) return;
-    state.street.highlight = null;
-    try {
-      viewer?.getComponent('tag')?.removeAll();
-    } catch {
-      /* component not ready */
-    }
-  }
-
-  /**
-   * Outline every detection of `value` inside the current image using the
-   * MapillaryJS tag component. Detections are per image on the Graph API;
-   * their geometry is a small vector tile in image-normalized coordinates.
-   */
-  async function highlightDetections(imageId, value, label) {
-    if (!viewer || !imageId) return 0;
-    const { OutlineTag, PolygonGeometry } = Library || {};
-    let component;
-    try {
-      component = viewer.getComponent('tag');
-      component.removeAll();
-    } catch {
-      return 0;
-    }
-    state.street.highlight = { value, count: 0, loading: true };
-    state.notify?.();
-    let detections = [];
-    try {
-      detections = await source.getImageDetections(imageId);
-    } catch {
-      detections = [];
-    }
-    if (pendingOpen !== String(imageId) || !viewer) return 0;
-    const tags = [];
-    for (const detection of detections) {
-      if (value && detection.value !== value) continue;
-      decodeDetectionPolygons(detection.geometry).forEach((polygon, index) => {
-        try {
-          tags.push(
-            new OutlineTag(
-              `mly-det-${detection.id}-${index}`,
-              new PolygonGeometry(polygon),
-              {
-                lineColor: 0x00d4ff,
-                lineWidth: 3,
-                fillColor: 0x00d4ff,
-                fillOpacity: 0.22,
-                text: tags.length === 0 ? label || undefined : undefined,
-                textColor: 0xffffff,
-              },
-            ),
-          );
-        } catch {
-          /* degenerate polygon */
-        }
-      });
-    }
-    if (tags.length) component.add(tags);
-    state.street.highlight = { value, count: tags.length, loading: false };
-    state.notify?.();
-    return tags.length;
   }
 
   /** Switch between showing the whole image ('letterbox') and cropping ('fill'). */
@@ -326,7 +258,6 @@ export function createViewerBridge({ state, source, parts }) {
   /** Close the image. The viewer instance is kept warm for the next open. */
   function close() {
     pendingOpen = null;
-    clearHighlight();
     Object.assign(state.street, {
       open: false,
       follow: false,
@@ -337,8 +268,6 @@ export function createViewerBridge({ state, source, parts }) {
       tilt: null,
       loading: false,
       error: null,
-      highlight: null,
-      feature: null,
     });
     parts.sequences.setMarker(null);
     state.notify?.();
@@ -352,7 +281,6 @@ export function createViewerBridge({ state, source, parts }) {
     resize,
     prewarm,
     lookAtPosition,
-    highlightDetections,
     destroy() {
       close();
       destroyViewer();

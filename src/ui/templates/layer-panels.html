@@ -92,33 +92,7 @@
             <button id="mly-enable-btn" class="scene-btn" type="button" aria-pressed="false" title="Turn the Street Level layer on or off">STREET LEVEL OFF</button>
             <button id="mly-look-btn" class="scene-btn" type="button" title="Open the nearest Mapillary photo to the view centre">OPEN NEAREST PHOTO</button>
           </div>
-          <form id="mly-query-form" class="mly-query" autocomplete="off">
-            <label for="mly-query-input" class="cctv-summary-label">ASK IN PLAIN ENGLISH</label>
-            <div class="mly-query-row">
-              <input id="mly-query-input" type="text" maxlength="600" spellcheck="false" placeholder="Ask about objects, signs or a place" aria-label="Ask about objects, signs or a place" />
-              <button id="mly-query-run" class="scene-btn mly-ask" type="submit">ASK</button>
-            </div>
-            <p id="mly-ai-hint" class="mly-hint">Objects, traffic signs, coverage or a street view of any place. Follow-ups refine the last answer.</p>
-            <div class="mly-suggestions" role="group" aria-label="Example queries">
-              <button type="button" class="mly-suggestion" data-mly-suggestion="show me all fire hydrants in Sacramento">Hydrants · Sacramento</button>
-              <button type="button" class="mly-suggestion" data-mly-suggestion="stop signs in downtown Detroit">Stop signs · Detroit</button>
-              <button type="button" class="mly-suggestion" data-mly-suggestion="cctv cameras in London">CCTV cameras · London</button>
-              <button type="button" class="mly-suggestion" data-mly-suggestion="show me a 360 street view here">360° view · here</button>
-            </div>
-          </form>
-          <div id="mly-answer" class="mly-answer" role="status" aria-live="polite"></div>
           <div id="mly-error" class="mly-error" role="alert" hidden><span aria-hidden="true">⚠</span> <span id="mly-error-text"></span></div>
-          <div id="mly-progress" class="mly-progress" hidden>
-            <div id="mly-progress-fill" class="mly-progress-fill"></div>
-            <span id="mly-progress-label" class="mly-progress-label"></span>
-          </div>
-          <div id="mly-results" class="mly-results" hidden>
-            <div id="mly-result-chips" class="mly-chips"></div>
-            <div class="cctv-controls">
-              <button id="mly-frame-btn" class="scene-btn" type="button" title="Fly the camera to the result area">ZOOM TO RESULTS</button>
-              <button id="mly-clear-btn" class="scene-btn" type="button" title="Remove the results from the globe">CLEAR</button>
-            </div>
-          </div>
           <div class="mly-filters" role="group" aria-label="Imagery filters">
             <span class="cctv-summary-label">IMAGERY</span>
             <div class="mly-seg" role="radiogroup" aria-label="Panorama filter">

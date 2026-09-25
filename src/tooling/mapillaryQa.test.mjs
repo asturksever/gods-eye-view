@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import {
-  hydrantPlan,
   isCollapsed,
   RAIL_ORDER,
   VIEWPORTS,
@@ -13,14 +12,6 @@ test('the QA harness exercises both review viewports', () => {
     VIEWPORTS.map((v) => `${v.width}x${v.height}`),
     ['1440x900', '1280x800'],
   );
-});
-
-test('the ready-made plan is executable without the planner', () => {
-  const plan = hydrantPlan();
-  assert.equal(plan.intent, 'map_features');
-  assert.equal(plan.layer, 'points');
-  assert.equal(plan.use_current_view, true);
-  assert.deepEqual(plan.values, ['object--fire-hydrant']);
 });
 
 test('rail order puts Street Level between CCTV and Context', () => {

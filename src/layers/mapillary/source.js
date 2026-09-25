@@ -1,6 +1,4 @@
-import { readNdjsonResponse } from './ndjson.js';
 import {
-  FEATURE_FIELDS,
   IMAGE_FIELDS,
   MAPILLARY_GRAPH_HOST,
   NEAREST_LIMIT,
@@ -38,10 +36,10 @@ async function readJsonOrThrow(response, label) {
 }
 
 /**
- * Every network path the Mapillary layer uses. Tiles, the feature stream,
- * the planner and sprites go through the local dev-server proxy; entity
- * lookups go straight to graph.mapillary.com with the client token, exactly
- * as the embedded MapillaryJS viewer does.
+ * Every network path the Mapillary layer uses. Coverage tiles go through the
+ * local dev-server proxy (which adds the token and caches them); image and
+ * sequence lookups go straight to graph.mapillary.com with the client token,
+ * exactly as the embedded MapillaryJS viewer does.
  * @param {{token?: string, fetchImpl?: Function, endpoints?: object}} options
  */
 export function createMapillarySource({
@@ -52,10 +50,6 @@ export function createMapillarySource({
   const urls = {
     status: '/api/mapillary/status',
     tiles: '/api/mapillary/tiles',
-    features: '/api/mapillary/features',
-    plan: '/api/mapillary/plan',
-    sprite: '/api/mapillary/sprite',
-    geocode: '/api/geocode',
     graph: MAPILLARY_GRAPH_HOST,
     ...endpoints,
   };
@@ -114,51 +108,6 @@ export function createMapillarySource({
       return new Uint8Array(await response.arrayBuffer());
     },
 
-    /**
-     * Stream a feature query. `onEvent` receives each NDJSON record
-     * ({type:'start'|'tile'|'done'}); resolves with the done record.
-     */
-    async queryFeatures(body, onEvent, { signal } = {}) {
-      const response = await fetchImpl(urls.features, {
-        method: 'POST',
-        signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) await readJsonOrThrow(response, 'Feature query');
-      let done = null;
-      await readNdjsonResponse(
-        response,
-        (record) => {
-          if (record?.type === 'done') done = record;
-          onEvent?.(record);
-        },
-        { signal },
-      );
-      return done;
-    },
-
-    /** Natural language → plan, via the server-side Claude planner. */
-    async plan(body, { signal } = {}) {
-      const response = await fetchImpl(urls.plan, {
-        method: 'POST',
-        signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      return readJsonOrThrow(response, 'Planner');
-    },
-
-    /** Place name → geocode results through the app's existing Nominatim route. */
-    async geocode(query, { signal } = {}) {
-      const response = await fetchImpl(
-        `${urls.geocode}?${new URLSearchParams({ q: query })}`,
-        { signal },
-      );
-      const payload = await readJsonOrThrow(response, 'Geocode');
-      return Array.isArray(payload?.results) ? payload.results : [];
-    },
-
     getImage(id, { signal, fields = IMAGE_FIELDS } = {}) {
       return graph(String(id), { fields }, { signal });
     },
@@ -195,39 +144,6 @@ export function createMapillarySource({
         { signal },
       );
       return Array.isArray(payload?.data) ? payload.data : [];
-    },
-
-    getMapFeature(id, { signal } = {}) {
-      return graph(String(id), { fields: FEATURE_FIELDS }, { signal });
-    },
-
-    /** Batched entity lookup (`/?ids=`), up to 50 ids per call. */
-    async getMapFeaturesBatch(
-      ids,
-      { signal, fields = 'id,object_value,aligned_direction' } = {},
-    ) {
-      const list = [...new Set((ids || []).map(String))].slice(0, 50);
-      if (!list.length) return {};
-      const payload = await graph(
-        '',
-        { ids: list.join(','), fields },
-        { signal },
-      );
-      return payload && typeof payload === 'object' ? payload : {};
-    },
-
-    /** Detections (segmentation polygons + values) inside one image. */
-    async getImageDetections(imageId, { signal } = {}) {
-      const payload = await graph(
-        `${String(imageId)}/detections`,
-        { fields: 'id,value,geometry,created_at' },
-        { signal },
-      );
-      return Array.isArray(payload?.data) ? payload.data : [];
-    },
-
-    spriteUrl(value) {
-      return `${urls.sprite}/${encodeURIComponent(value)}.svg`;
     },
   };
 }

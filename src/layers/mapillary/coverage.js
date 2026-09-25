@@ -228,16 +228,11 @@ export function createCoverage({ state, source }) {
       const { primitives, count } = buildSequencePrimitives(entry.sequenceList);
       entry.primitives = primitives;
       entry.count = count;
-      for (const primitive of primitives) {
-        primitive.show = !state.coverage.resting;
-        scene.groundPrimitives.add(primitive);
-      }
+      for (const primitive of primitives) scene.groundPrimitives.add(primitive);
     } else {
       const { collection, count } = buildOverviewCollection(entry.points);
       entry.primitive = collection;
       entry.count = count;
-      // Orbit-level points never rest: results are invisible at that scale.
-      collection.show = true;
       scene.primitives.add(collection);
     }
   }
@@ -494,16 +489,6 @@ export function createCoverage({ state, source }) {
     requestRender();
   }
 
-  /** Rest (hide) the street-level sequence web while results are shown; orbit points stay. */
-  function setResting(resting) {
-    state.coverage.resting = resting === true;
-    for (const entry of state.coverage.tiles.values())
-      if (entry.kind === 'sequence')
-        for (const primitive of entry.primitives || [])
-          primitive.show = !state.coverage.resting;
-    requestRender();
-  }
-
   function sequenceCount() {
     let count = 0;
     for (const entry of state.coverage.tiles.values()) count += entry.count;
@@ -518,7 +503,6 @@ export function createCoverage({ state, source }) {
     findSequence,
     recolorSequence,
     sequenceCount,
-    setResting,
     setFilter,
   };
 }

@@ -63,9 +63,12 @@ test('panel styles stay inside GEV conventions: no !important, no fixed panel', 
   assert.deepEqual(fixed, ['.mly-viewer-wrap-expanded']);
 });
 
-test('keyless and no-planner states gate the controls rather than leave dead buttons', () => {
+test('the keyless state gates the controls rather than leaving dead buttons', () => {
   // The key requirement is documented (README, .env.example), not repeated in the panel.
-  assert.doesNotMatch(html, /mly-keyless/);
+  assert.doesNotMatch(
+    html,
+    /mly-keyless|mly-query|mly-results|data-mly-suggestion/,
+  );
   assert.match(html, /<fieldset id="mly-controls"/);
   assert.match(html, /<ul id="mly-legend"/);
   assert.match(html, /id="mly-error"[^>]*role="alert"/);
@@ -76,18 +79,13 @@ test('the expanded viewer is a modal dialog that restores focus', () => {
   assert.match(controls, /setAttribute\('role', 'dialog'\)/);
   assert.match(controls, /setAttribute\('aria-modal', 'true'\)/);
   assert.match(controls, /_expandReturnFocus/);
-  assert.match(
-    controls,
-    /if \(event\.key !== 'Escape'\) event\.stopPropagation\(\);/,
-  );
 });
 
 test('labels say what the buttons do', () => {
-  for (const label of [
-    'OPEN NEAREST PHOTO',
-    'CAMERA FOLLOWS VIEW',
-    'ZOOM TO RESULTS',
-  ])
+  for (const label of ['OPEN NEAREST PHOTO', 'CAMERA FOLLOWS VIEW'])
     assert.ok(html.includes(label), label);
-  assert.doesNotMatch(html, /LOOK HERE|STREET COCKPIT|>FRAME</);
+  assert.doesNotMatch(
+    html,
+    /LOOK HERE|STREET COCKPIT|>FRAME<|ZOOM TO RESULTS|ASK IN PLAIN ENGLISH/,
+  );
 });

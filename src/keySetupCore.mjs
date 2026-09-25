@@ -102,20 +102,11 @@ export const KEY_SETUP_KEYS = Object.freeze([
     id: 'mapillary',
     title: 'MAPILLARY',
     unlocks:
-      'Street-level imagery, coverage, detected objects and traffic signs. Free: register an app in the Mapillary developer dashboard and paste its Client Token',
+      'Street-level imagery and coverage in the Street Level layer. Free: register an app in the Mapillary developer dashboard and paste its Client Token',
     getUrl: 'https://www.mapillary.com/dashboard/developers',
     envVars: Object.freeze(['MAPILLARY_CLIENT_TOKEN']),
     tier: 'free',
     clientExposed: true,
-  }),
-  Object.freeze({
-    id: 'anthropic',
-    title: 'ANTHROPIC',
-    unlocks:
-      'Street Level plain-English questions — type a request, get it drawn on the globe',
-    getUrl: 'https://console.anthropic.com/settings/keys',
-    envVars: Object.freeze(['ANTHROPIC_API_KEY']),
-    tier: 'metered',
   }),
   Object.freeze({
     id: 'launch-library',

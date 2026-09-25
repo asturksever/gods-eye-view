@@ -5,14 +5,6 @@ import test from 'node:test';
 import { PbfWriter } from 'pbf';
 import { mapillaryProxy } from 'gods-eye-view/server/providers/mapillary';
 import {
-  buildPlannerUserMessage,
-  finalizePlan,
-  planQuery,
-  PLANNER_SYSTEM_PROMPT,
-  reconcilePlanValues,
-} from '../../server/providers/mapillary/planner.js';
-import { normalizeFeatureQuery } from '../../server/providers/mapillary/features.js';
-import {
   listTileLayers,
   stripTileLayers,
 } from '../../server/providers/mapillary/trim.js';
@@ -22,7 +14,6 @@ import {
   TileRequestError,
   _resetTileMemoryForTest,
 } from '../../server/providers/mapillary/tiles.js';
-import { handleSprite } from '../../server/providers/mapillary/sprites.js';
 
 /** Mount the plugin and return a caller keyed by route. */
 function install(plugin, mode = 'configureServer') {
@@ -78,36 +69,25 @@ function install(plugin, mode = 'configureServer') {
 
 const json = (res) => JSON.parse(String(res.body));
 
-test('the plugin mounts the five Mapillary routes for dev and preview servers', () => {
+test('the plugin mounts the status and tile routes for dev and preview servers', () => {
   for (const mode of ['configureServer', 'configurePreviewServer']) {
     const { routes } = install(mapillaryProxy(), mode);
     assert.deepEqual([...routes.keys()].sort(), [
-      '/api/mapillary/features',
-      '/api/mapillary/plan',
-      '/api/mapillary/sprite',
       '/api/mapillary/status',
       '/api/mapillary/tiles',
     ]);
   }
 });
 
-test('status reports capabilities, never values, and rejects non-GET', async () => {
-  const saved = {
-    MAPILLARY_CLIENT_TOKEN: process.env.MAPILLARY_CLIENT_TOKEN,
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-  };
+test('status reports whether a token exists, never its value, and rejects non-GET', async () => {
+  const saved = { MAPILLARY_CLIENT_TOKEN: process.env.MAPILLARY_CLIENT_TOKEN };
   delete process.env.MAPILLARY_CLIENT_TOKEN;
-  delete process.env.ANTHROPIC_API_KEY;
   try {
     const { call } = install(mapillaryProxy());
     const res = await call('/api/mapillary/status');
     assert.equal(res.statusCode, 200);
-    const payload = json(res);
-    assert.equal(payload.configured, false);
-    assert.equal(payload.planner, false);
-    assert.equal(payload.plannerModel, null);
-    assert.equal(payload.limits.featureZoom, 14);
-    assert.doesNotMatch(String(res.body), /MLY\||sk-ant/);
+    assert.deepEqual(json(res), { configured: false });
+    assert.doesNotMatch(String(res.body), /MLY\||planner/);
     const post = await call('/api/mapillary/status', '/', 'POST');
     assert.equal(post.statusCode, 405);
   } finally {
@@ -124,6 +104,8 @@ test('tile route validates the path and refuses to proxy without a token', async
     const { call } = install(mapillaryProxy());
     const bad = await call('/api/mapillary/tiles', '/coverage/14/1/x');
     assert.equal(bad.statusCode, 400);
+    const signs = await call('/api/mapillary/tiles', '/signs/14/1/2');
+    assert.equal(signs.statusCode, 400, 'only coverage tiles are proxied');
     const noKey = await call('/api/mapillary/tiles', '/coverage/14/1/2');
     assert.equal(noKey.statusCode, 503);
     assert.deepEqual(json(noKey), { error: 'no_key', keyRequired: true });
@@ -145,13 +127,10 @@ test('normalizeTileAddress enforces layer names, zoom ranges and tile bounds', (
       .dropLayers,
     ['image'],
   );
-  assert.deepEqual(
-    normalizeTileAddress({ layer: 'points', z: 14, x: 5, y: 6 }).dropLayers,
-    [],
-  );
   for (const bad of [
     { layer: 'image', z: 14, x: 1, y: 1 },
-    { layer: 'points', z: 13, x: 1, y: 1 },
+    { layer: 'points', z: 14, x: 1, y: 1 },
+    { layer: 'signs', z: 14, x: 1, y: 1 },
     { layer: 'coverage', z: 15, x: 1, y: 1 },
     { layer: 'coverage', z: 2, x: 4, y: 0 },
     { layer: 'coverage', z: 2, x: 1.5, y: 0 },
@@ -221,238 +200,6 @@ test('fetchTile serves from memory after one upstream fetch and strips the image
     else process.env.MAPILLARY_CLIENT_TOKEN = savedToken;
     _resetTileMemoryForTest();
   }
-});
-
-test('sprite route only accepts taxonomy values, never paths', async () => {
-  const respond = async (url) => {
-    const headers = {};
-    const res = {
-      statusCode: 200,
-      setHeader: (k, v) => {
-        headers[k.toLowerCase()] = v;
-      },
-      end(body) {
-        this.body = body;
-      },
-    };
-    await handleSprite({ url }, res);
-    return { status: res.statusCode, headers, body: res.body };
-  };
-  for (const bad of [
-    '/..%2Fetc%2Fpasswd.svg',
-    '/../x.svg',
-    '/Object--Fire.svg',
-    '/a..b.svg',
-    '/a--.svg',
-    '/.svg',
-    '/x.png',
-  ])
-    assert.equal((await respond(bad)).status, 400, bad);
-  const savedFetch = globalThis.fetch;
-  globalThis.fetch = async (url) => {
-    assert.match(
-      String(url),
-      /package_objects\/object--fire-hydrant--zz-test\.svg$/,
-    );
-    return new Response('<svg xmlns="http://www.w3.org/2000/svg"></svg>', {
-      status: 200,
-    });
-  };
-  try {
-    const ok = await respond('/object--fire-hydrant--zz-test.svg');
-    assert.equal(ok.status, 200);
-    assert.match(ok.headers['content-type'], /image\/svg\+xml/);
-  } finally {
-    globalThis.fetch = savedFetch;
-  }
-});
-
-test('normalizeFeatureQuery caps values, normalises the bbox and rejects oversized areas', () => {
-  const missing = normalizeFeatureQuery({});
-  assert.equal(missing.ok, false);
-  assert.equal(missing.status, 400);
-  const ok = normalizeFeatureQuery({
-    bbox: [-121.5, 38.55, -121.45, 38.6],
-    layer: 'points',
-    values: ['object--fire-hydrant', '', 'object--bench'],
-    seenAfter: '2020-01-01',
-  });
-  assert.equal(ok.ok, true);
-  assert.deepEqual(ok.request.values.slice(0, 2), [
-    'object--fire-hydrant',
-    'object--bench',
-  ]);
-  assert.equal(ok.request.since, Date.parse('2020-01-01'));
-  assert.ok(ok.request.tiles.length > 0);
-  const huge = normalizeFeatureQuery({
-    bbox: [-125, 32, -114, 42],
-    layer: 'points',
-    values: ['object--bench'],
-  });
-  assert.equal(huge.ok, false);
-  assert.equal(huge.error, 'area_too_large');
-  assert.ok(huge.detail.tiles > huge.detail.limit);
-});
-
-// ── Planner (relocated from src/layers/mapillary/planner.test.mjs) ──────────
-const basePlan = {
-  intent: 'map_features',
-  place: 'Sacramento, California',
-  use_current_view: false,
-  values: ['object--fire-hydrant'],
-  seen_after: null,
-  seen_before: null,
-  prefer_pano: false,
-  visualise: 'icons',
-  title: 'Fire hydrants · Sacramento',
-  answer: 'Showing fire hydrants in Sacramento.',
-};
-
-test('the system prompt is frozen text carrying the taxonomy', () => {
-  assert.match(PLANNER_SYSTEM_PROMPT, /object--fire-hydrant/);
-  assert.match(PLANNER_SYSTEM_PROMPT, /regulatory--stop\b/);
-  assert.doesNotMatch(PLANNER_SYSTEM_PROMPT, /Today is/);
-});
-
-test('reconcilePlanValues keeps taxonomy values, expands families, drops junk', () => {
-  const result = reconcilePlanValues([
-    'object--fire-hydrant',
-    'regulatory--stop',
-    'regulatory--stop--*',
-    'object--unicorn',
-    'warning--nothing-like-this--*',
-  ]);
-  assert.deepEqual(result.values, [
-    'object--fire-hydrant',
-    'regulatory--stop--*',
-  ]);
-  assert.deepEqual(result.dropped, [
-    'object--unicorn',
-    'warning--nothing-like-this--*',
-  ]);
-});
-
-test('finalizePlan derives the tile layer from the values', () => {
-  assert.equal(finalizePlan(basePlan).layer, 'points');
-  const signs = finalizePlan({
-    ...basePlan,
-    intent: 'map_features',
-    values: ['regulatory--stop--*'],
-  });
-  assert.equal(signs.layer, 'signs');
-  assert.equal(signs.intent, 'traffic_signs');
-});
-
-test('finalizePlan downgrades to unsupported when nothing usable survives', () => {
-  const plan = finalizePlan({ ...basePlan, values: ['object--unicorn'] });
-  assert.equal(plan.intent, 'unsupported');
-  assert.match(plan.answer, /object--unicorn/);
-});
-
-test('finalizePlan keeps objects and reports signs on a mixed request', () => {
-  const plan = finalizePlan({
-    ...basePlan,
-    values: ['object--fire-hydrant', 'regulatory--stop--*'],
-  });
-  assert.equal(plan.layer, 'points');
-  assert.deepEqual(plan.values, ['object--fire-hydrant']);
-  assert.deepEqual(plan.dropped, ['regulatory--stop--*']);
-  assert.match(plan.answer, /different layers/);
-});
-
-test('buildPlannerUserMessage carries the date, view and previous plan', () => {
-  const text = buildPlannerUserMessage({
-    query: 'only after 2024',
-    today: '2026-09-15',
-    context: {
-      view: { lat: 38.58, lon: -121.49, heightM: 1234.6, label: 'Sacramento' },
-      previousPlan: basePlan,
-    },
-  });
-  assert.match(text, /Today is 2026-09-15/);
-  assert.match(
-    text,
-    /38\.5800, -121\.4900, camera 1235 m above ground, near Sacramento/,
-  );
-  assert.match(text, /Previous plan: \{"intent":"map_features"/);
-  assert.match(text, /Request: only after 2024$/);
-});
-
-test('planQuery sends a cached system block and structured output config', async () => {
-  const calls = [];
-  const anthropic = {
-    messages: {
-      async create(params) {
-        calls.push(params);
-        return {
-          stop_reason: 'end_turn',
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                ...basePlan,
-                values: ['object--fire-hydrant', 'bogus'],
-              }),
-            },
-          ],
-          usage: { input_tokens: 10, output_tokens: 5 },
-        };
-      },
-    },
-  };
-  const result = await planQuery(
-    { query: 'show me all fire hydrants in Sacramento', context: {} },
-    {
-      anthropic,
-      model: 'claude-opus-5',
-      now: new Date('2026-09-15T12:00:00Z'),
-    },
-  );
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].model, 'claude-opus-5');
-  assert.deepEqual(calls[0].system[0].cache_control, { type: 'ephemeral' });
-  assert.equal(calls[0].output_config.effort, 'low');
-  assert.equal(calls[0].output_config.format.type, 'json_schema');
-  assert.equal(calls[0].output_config.format.schema.type, 'object');
-  assert.ok(!('$schema' in calls[0].output_config.format.schema));
-  assert.ok(calls[0].output_config.format.schema.properties.intent);
-  assert.deepEqual(result.plan.values, ['object--fire-hydrant']);
-  assert.deepEqual(result.plan.dropped, ['bogus']);
-  assert.equal(result.plan.layer, 'points');
-});
-
-test('planQuery turns a refusal into an unsupported plan instead of throwing', async () => {
-  const anthropic = {
-    messages: {
-      async create() {
-        return { stop_reason: 'refusal', usage: null };
-      },
-    },
-  };
-  const result = await planQuery(
-    { query: 'x', context: {} },
-    { anthropic, model: 'm' },
-  );
-  assert.equal(result.plan.intent, 'unsupported');
-});
-
-test('normalizeFeatureQuery validates bbox, layer, values and the tile cap', () => {
-  const ok = normalizeFeatureQuery({
-    bbox: [-121.56, 38.44, -121.36, 38.69],
-    layer: 'points',
-    values: ['Object--Fire-Hydrant', ''],
-    seenAfter: '2024-01-01',
-  });
-  assert.equal(ok.ok, true);
-  assert.equal(ok.request.tiles.length, 160);
-  assert.deepEqual(ok.request.values, ['object--fire-hydrant']);
-  assert.equal(ok.request.since, Date.parse('2024-01-01'));
-  assert.equal(ok.request.until, null);
-  assert.equal(normalizeFeatureQuery({ bbox: 'nope' }).status, 400);
-  const huge = normalizeFeatureQuery({ bbox: [-125, 32, -114, 42] });
-  assert.equal(huge.ok, false);
-  assert.equal(huge.status, 413);
-  assert.equal(huge.error, 'area_too_large');
 });
 
 // ── Tile trimming (relocated from server/providers/mapillary/trim.test.mjs) ──

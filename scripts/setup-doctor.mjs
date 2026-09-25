@@ -35,7 +35,6 @@ export const CREDENTIALS = Object.freeze([
   },
   { name: 'LL2_API_TOKEN', label: 'Launch Library 2', keychain: [] },
   { name: 'MAPILLARY_CLIENT_TOKEN', label: 'Mapillary street level', keychain: [['mapillary', 'client-token'], ['mapillary', 'token']] },
-  { name: 'ANTHROPIC_API_KEY', label: 'Anthropic (street-level planner)', keychain: [['anthropic', 'api-key']] },
 ]);
 
 export function isConfiguredValue(value) {

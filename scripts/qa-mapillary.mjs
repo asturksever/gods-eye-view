@@ -2,8 +2,7 @@
 /**
  * Browser QA for the Street Level (Mapillary) layer against a running dev
  * server: the panel's place in the right rail, the keyless gate, coverage,
- * a ready-made feature plan (no LLM), the embedded viewer and its expanded
- * dialog. Run with `npm run qa:mapillary -- --url http://localhost:4173`.
+ * the embedded viewer and its expanded dialog. Run with `npm run qa:mapillary -- --url http://localhost:4173`.
  * Without MAPILLARY_CLIENT_TOKEN on the server only the keyless steps run.
  */
 import assert from 'node:assert/strict';
@@ -14,23 +13,6 @@ export const VIEWPORTS = Object.freeze([
   { width: 1440, height: 900 },
   { width: 1280, height: 800 },
 ]);
-
-/** A feature plan the executor can run without the planner. */
-export function hydrantPlan() {
-  return {
-    intent: 'map_features',
-    layer: 'points',
-    place: null,
-    use_current_view: true,
-    values: ['object--fire-hydrant'],
-    seen_after: null,
-    seen_before: null,
-    prefer_pano: false,
-    visualise: 'icons',
-    title: 'Fire hydrants · current view',
-    answer: 'Showing fire hydrants in the current view.',
-  };
-}
 
 /** Expected right-rail order once the layout controller has run. */
 export const RAIL_ORDER = Object.freeze([
@@ -217,40 +199,6 @@ async function main() {
           () => document.body.innerHTML.includes('Mapillary</a> contributors'),
           { timeout: 15_000 },
         );
-      },
-    );
-    await step(
-      'a ready-made plan streams results and fills the chips',
-      async () => {
-        // Fire and forget: the fan-out can outlive a CDP call, so poll instead.
-        await page.evaluate((plan) => {
-          void window.__godsEyeView.dataManager.layers
-            .get('mapillary')
-            .module.runPlan(plan, { prompt: 'fire hydrants here' });
-        }, hydrantPlan());
-        await sleep(500);
-        await page.waitForFunction(
-          () =>
-            !window.__godsEyeView.dataManager.layers
-              .get('mapillary')
-              .module.getUIState().query.busy,
-          { timeout: 120_000 },
-        );
-        const state = await page.evaluate(() => {
-          const u = window.__godsEyeView.dataManager.layers
-            .get('mapillary')
-            .module.getUIState();
-          return {
-            total: u.features.total,
-            answer: u.query.answer,
-            chips: document.querySelectorAll(
-              '#mly-result-chips .mly-value-chip',
-            ).length,
-          };
-        });
-        assert.ok(state.total > 0, 'hydrants found in view');
-        assert.match(state.answer, /fire hydrants?/i);
-        assert.ok(state.chips >= 1);
       },
     );
     await step(

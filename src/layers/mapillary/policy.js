@@ -7,8 +7,6 @@ export const MAPILLARY_GRAPH_HOST = 'https://graph.mapillary.com';
 export const PICK_PREFIX = Object.freeze({
   sequence: 'mly:seq:',
   image: 'mly:img:',
-  feature: 'mly:feat:',
-  object: 'mly:obj:',
   position: 'mly:pos',
 });
 
@@ -42,13 +40,6 @@ export const IMAGE_CONE_MIN_SPACING_M = 3;
 export const NEAREST_RADIUS_M = 50;
 export const NEAREST_LIMIT = 8;
 
-/** Query-result rendering: clamped icons up to this many features, unclamped
- * icons up to FEATURE_ICON_MAX, coloured points beyond. */
-export const FEATURE_ICON_LIMIT = 6000;
-export const FEATURE_ICON_MAX = 80_000;
-export const FEATURE_ICON_SIZE_PX = 30;
-export const FEATURE_POINT_SIZE_PX = 9;
-
 /**
  * On-globe credit shown while the layer is enabled. Mapillary imagery and
  * derived data are CC BY-SA 4.0 and require visible attribution.
@@ -61,5 +52,3 @@ export const IMAGE_FIELDS =
   'id,captured_at,compass_angle,computed_compass_angle,geometry,computed_geometry,computed_altitude,is_pano,sequence,thumb_256_url,creator,quality_score';
 export const SEQUENCE_IMAGE_FIELDS =
   'id,captured_at,compass_angle,geometry,is_pano,computed_altitude';
-export const FEATURE_FIELDS =
-  'id,object_value,geometry,first_seen_at,last_seen_at,images,aligned_direction';

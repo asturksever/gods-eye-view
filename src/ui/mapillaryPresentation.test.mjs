@@ -9,8 +9,6 @@ function snapshot(overrides = {}) {
   const base = {
     enabled: false,
     keyRequired: false,
-    planner: true,
-    plannerModel: 'claude-opus-5',
     coverage: {
       zoom: null,
       kind: null,
@@ -27,19 +25,6 @@ function snapshot(overrides = {}) {
       error: null,
     },
     sequence: { selectedId: null, images: 0, loading: false },
-    features: {
-      total: 0,
-      title: '',
-      loading: false,
-      progress: { done: 0, tiles: 0 },
-      counts: [],
-      truncated: false,
-      failed: 0,
-      iconMode: false,
-      hasBbox: false,
-      selectedId: null,
-      bbox: null,
-    },
     street: {
       open: false,
       follow: false,
@@ -53,19 +38,6 @@ function snapshot(overrides = {}) {
       sequenceId: null,
       creator: null,
       renderMode: 'letterbox',
-      feature: null,
-      highlight: null,
-    },
-    query: {
-      busy: false,
-      stage: 'idle',
-      prompt: '',
-      place: null,
-      answer: '',
-      error: null,
-      title: '',
-      usage: null,
-      history: [],
     },
   };
   return deepMerge(base, overrides);
@@ -92,90 +64,36 @@ test('a missing Mapillary token gates every control and flags KEY REQUIRED', () 
   assert.deepEqual(view.status, { text: 'KEY REQUIRED', tone: 'warn' });
 });
 
-test('without an Anthropic key the query box explains itself and stays disabled', () => {
-  const view = presentMapillaryPanel(
-    snapshot({ planner: false, enabled: true }),
-  );
-  assert.equal(view.query.inputDisabled, true);
-  assert.equal(view.query.suggestionsDisabled, true);
-  assert.equal(view.query.hintWarn, true);
-  assert.match(view.query.hint, /Anthropic key/);
-  assert.ok(view.query.placeholder.length < 40, 'placeholder fits the field');
-  assert.equal(view.controlsDisabled, false);
-});
-
-test('before the status call answers the query box does not claim a missing key', () => {
-  const view = presentMapillaryPanel(snapshot({ planner: null }));
-  assert.equal(view.query.inputDisabled, false);
-  assert.equal(view.query.hintWarn, false);
-  assert.doesNotMatch(view.query.placeholder, /Anthropic/);
-});
-
-test('a running query turns ASK into STOP and shows indeterminate progress per stage', () => {
-  const planning = presentMapillaryPanel(
-    snapshot({ enabled: true, query: { busy: true, stage: 'planning' } }),
-  );
-  assert.equal(planning.query.submitLabel, 'STOP');
-  assert.equal(planning.query.submitIsStop, true);
-  assert.deepEqual(planning.progress, {
-    visible: true,
-    indeterminate: true,
-    percent: 0,
-    label: 'Planning…',
+test('status reads LOADING while coverage streams, then ON or OFF', () => {
+  assert.deepEqual(presentMapillaryPanel(snapshot()).status, {
+    text: 'OFF',
+    tone: '',
   });
-  assert.equal(planning.status.text, 'AI · PLANNING');
-
-  const resolving = presentMapillaryPanel(
-    snapshot({
-      enabled: true,
-      query: { busy: true, stage: 'resolving', place: 'Sacramento, CA' },
-    }),
+  assert.deepEqual(
+    presentMapillaryPanel(
+      snapshot({ enabled: true, coverage: { loading: true } }),
+    ).status,
+    { text: 'LOADING', tone: 'busy' },
   );
-  assert.equal(resolving.progress.label, 'Finding Sacramento, CA…');
-
-  const fetching = presentMapillaryPanel(
-    snapshot({
-      enabled: true,
-      query: { busy: true, stage: 'fetching' },
-      features: { loading: true, progress: { done: 3, tiles: 12 }, total: 410 },
-    }),
-  );
-  assert.equal(fetching.progress.indeterminate, false);
-  assert.equal(fetching.progress.percent, 25);
-  assert.equal(fetching.progress.label, '3/12 tiles · 410 found');
+  assert.deepEqual(presentMapillaryPanel(snapshot({ enabled: true })).status, {
+    text: 'ON',
+    tone: 'on',
+  });
 });
 
-test('idle copy depends on whether the layer is on', () => {
-  assert.match(
-    presentMapillaryPanel(snapshot()).answer,
-    /Turn on Street Level/,
+test('errors from the viewer or the coverage web surface in one alert', () => {
+  assert.equal(presentMapillaryPanel(snapshot()).error, null);
+  assert.equal(
+    presentMapillaryPanel(
+      snapshot({ street: { error: 'Image could not be opened' } }),
+    ).error,
+    'Image could not be opened',
   );
-  assert.match(
-    presentMapillaryPanel(snapshot({ enabled: true })).answer,
-    /Click a green line/,
+  assert.equal(
+    presentMapillaryPanel(snapshot({ coverage: { error: 'Tile HTTP 502' } }))
+      .error,
+    'Tile HTTP 502',
   );
-  const view = presentMapillaryPanel(
-    snapshot({ enabled: true, query: { error: 'Planner unavailable' } }),
-  );
-  assert.equal(view.error, 'Planner unavailable');
-  assert.equal(view.answer, '');
-});
-
-test('result chips cap at eight and describe the overflow', () => {
-  const counts = Array.from({ length: 11 }, (_, i) => ({
-    value: `object--v${i}`,
-    label: `Class ${i}`,
-    color: '#fff',
-    count: 100 - i,
-  }));
-  const view = presentMapillaryPanel(
-    snapshot({ enabled: true, features: { total: 900, counts } }),
-  );
-  assert.equal(view.results.visible, true);
-  assert.equal(view.results.chips.length, 8);
-  assert.equal(view.results.more.count, 3);
-  assert.match(view.results.more.title, /Class 8 92, Class 9 91, Class 10 90/);
-  assert.equal(view.results.all.length, 11);
 });
 
 test('legend passes through in the layer’s order', () => {
@@ -187,6 +105,7 @@ test('legend passes through in the layer’s order', () => {
 });
 
 test('the meta line never mixes the visible-sequence count with the selected sequence', () => {
+  assert.equal(presentMapillaryPanel(snapshot()).meta, '');
   const browsing = presentMapillaryPanel(
     snapshot({ enabled: true, coverage: { zoom: 14, sequences: 812 } }),
   );
@@ -200,6 +119,13 @@ test('the meta line never mixes the visible-sequence count with the selected seq
   );
   assert.equal(selected.meta, '33 images in this sequence · Esc clears');
   assert.doesNotMatch(selected.meta, /sequences in view/);
+  const hinted = presentMapillaryPanel(
+    snapshot({
+      enabled: true,
+      coverage: { hint: 'Point the camera at the globe' },
+    }),
+  );
+  assert.equal(hinted.meta, 'Point the camera at the globe');
 });
 
 test('viewer caption reads "Image by" left and date right, with a deep link', () => {
@@ -213,15 +139,10 @@ test('viewer caption reads "Image by" left and date right, with a deep link', ()
         capturedAt: Date.UTC(2023, 9, 8),
         bearing: 93.4,
         isPano: true,
-        feature: { label: 'Fire hydrant', imageCount: 5 },
-        highlight: { count: 2 },
       },
     }),
   );
-  assert.equal(
-    view.viewer.captionLeft,
-    'Fire hydrant · 5 sightings · 2 detections outlined · Image by mapfool',
-  );
+  assert.equal(view.viewer.captionLeft, 'Image by mapfool');
   assert.equal(view.viewer.captionRight, '360° · 93° · 2023-10-08');
   assert.equal(
     view.viewer.link,
@@ -229,6 +150,16 @@ test('viewer caption reads "Image by" left and date right, with a deep link', ()
   );
   assert.equal(view.viewer.follow.disabled, false);
   assert.equal(view.wantsOpen, true);
+});
+
+test('an image without a creator name leaves the left caption empty', () => {
+  const view = presentMapillaryPanel(
+    snapshot({
+      street: { open: true, imageId: '1', capturedAt: Date.UTC(2024, 0, 2) },
+    }),
+  );
+  assert.equal(view.viewer.captionLeft, '');
+  assert.equal(view.viewer.captionRight, '2024-01-02');
 });
 
 test('image deep links match the mapillary.com share format', () => {

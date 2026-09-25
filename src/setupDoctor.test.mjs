@@ -266,7 +266,6 @@ test('doctor describes the credential ladder without exposing values', () => {
     OPENSKY_CLIENT_SECRET: { configured: false },
     LL2_API_TOKEN: { configured: true, source: 'environment' },
     MAPILLARY_CLIENT_TOKEN: { configured: false },
-    ANTHROPIC_API_KEY: { configured: false },
   };
   const capabilities = buildCapabilitySummary(credentials);
   assert.match(
@@ -322,7 +321,6 @@ test('doctor sends Keychain-backed reports to dev-fresh and describes OpenSky as
       'OPENSKY_CLIENT_SECRET',
       'LL2_API_TOKEN',
       'MAPILLARY_CLIENT_TOKEN',
-      'ANTHROPIC_API_KEY',
     ].map((name) => [name, { configured: false }]),
   );
   credentials.GOOGLE_MAPS_API_KEY = {
@@ -364,7 +362,6 @@ test('doctor never calls a dependency-missing setup ready', () => {
       'OPENSKY_CLIENT_SECRET',
       'LL2_API_TOKEN',
       'MAPILLARY_CLIENT_TOKEN',
-      'ANTHROPIC_API_KEY',
     ].map((name) => [name, { configured: false }]),
   );
   const output = formatSetupReport({

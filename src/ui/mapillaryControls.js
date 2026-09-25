@@ -7,8 +7,8 @@ const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
- * Own the Street Level panel: the query box, result chips, progress, the
- * imagery filters and the embedded MapillaryJS viewer. The panel itself is
+ * Own the Street Level panel: the imagery filters, the legend and the
+ * embedded MapillaryJS viewer. The panel itself is
  * ordinary GEV chrome (collapse button, rail layout, persistence) driven by
  * the application shell; this class only fills the body and asks the shell
  * to open the panel when something worth seeing arrives.
@@ -25,7 +25,6 @@ export class MapillaryControls {
     this._view = null;
     this._wasEnabled = null;
     this._wasStreetOpen = false;
-    this._lastStage = null;
     this._wrapHome = null;
     this._expandReturnFocus = null;
     this._elements = this._collect();
@@ -39,20 +38,8 @@ export class MapillaryControls {
       controls: byId('mly-controls'),
       enableBtn: byId('mly-enable-btn'),
       lookBtn: byId('mly-look-btn'),
-      form: byId('mly-query-form'),
-      input: byId('mly-query-input'),
-      runBtn: byId('mly-query-run'),
-      hint: byId('mly-ai-hint'),
-      answer: byId('mly-answer'),
       error: byId('mly-error'),
       errorText: byId('mly-error-text'),
-      progress: byId('mly-progress'),
-      progressFill: byId('mly-progress-fill'),
-      progressLabel: byId('mly-progress-label'),
-      results: byId('mly-results'),
-      chips: byId('mly-result-chips'),
-      frameBtn: byId('mly-frame-btn'),
-      clearBtn: byId('mly-clear-btn'),
       sinceSelect: byId('mly-since'),
       legend: byId('mly-legend'),
       followBtn: byId('mly-follow-btn'),
@@ -84,28 +71,6 @@ export class MapillaryControls {
     this.listen(el.lookBtn, 'click', async () => {
       if (!(await this._ensureEnabled())) return;
       this.mapillary.openNearest?.();
-    });
-    this.listen(el.form, 'submit', (event) => {
-      event.preventDefault();
-      if (this._view?.query.submitIsStop) this.mapillary.abortQuery?.();
-      else this._run(el.input?.value);
-    });
-    for (const button of this.root.querySelectorAll('[data-mly-suggestion]')) {
-      this.listen(button, 'click', () => {
-        if (el.input) el.input.value = button.dataset.mlySuggestion || '';
-        this._run(button.dataset.mlySuggestion);
-      });
-    }
-    this.listen(el.frameBtn, 'click', () => this.mapillary.frameResults?.());
-    this.listen(el.clearBtn, 'click', () => this.mapillary.clearQuery?.());
-    this.listen(el.chips, 'click', (event) => {
-      const more = event.target.closest?.('[data-mly-more]');
-      if (!more) return;
-      const expanded = el.chips.classList.toggle('is-expanded');
-      more.setAttribute('aria-expanded', String(expanded));
-      more.textContent = expanded
-        ? 'FEWER'
-        : `+${more.dataset.mlyMore} CLASSES`;
     });
     for (const button of this.root.querySelectorAll('[data-mly-pano]')) {
       this.listen(button, 'click', () =>
@@ -148,13 +113,6 @@ export class MapillaryControls {
     }
     // The expanded viewer is a dialog: Esc closes it, Tab stays inside.
     this.listen(el.viewerWrap, 'keydown', (event) => this._onDialogKey(event));
-    // Keep the app's keyboard shortcuts from firing while typing a query,
-    // but let Escape through so GEV's panel disclosure can collapse the panel.
-    const shield = (event) => {
-      if (event.key !== 'Escape') event.stopPropagation();
-    };
-    this.listen(el.input, 'keydown', shield);
-    this.listen(el.input, 'keyup', shield);
     // MapillaryJS only tracks window resizes; the panel resizes on its own.
     if (typeof ResizeObserver === 'function' && el.viewer) {
       let queued = false;
@@ -190,13 +148,6 @@ export class MapillaryControls {
     } catch (error) {
       this.actions.showToast?.(error?.message || 'Street Level toggle failed');
     }
-  }
-
-  async _run(prompt) {
-    const text = String(prompt || '').trim();
-    if (!text) return;
-    if (!(await this._ensureEnabled())) return;
-    this.mapillary.runQuery?.(text);
   }
 
   connect() {
@@ -304,8 +255,7 @@ export class MapillaryControls {
     this._view = view;
     this._renderHeader(view);
     this._renderGate(view);
-    this._renderQuery(view);
-    this._renderResults(view);
+    this._renderError(view);
     this._renderFilters(view);
     this._renderViewer(view, state);
     this._renderMeta(view);
@@ -333,82 +283,11 @@ export class MapillaryControls {
     if (el.controls) el.controls.disabled = view.controlsDisabled;
   }
 
-  _renderQuery(view) {
+  _renderError(view) {
     const el = this._elements;
-    const { query } = view;
-    if (el.input) {
-      el.input.placeholder = query.placeholder;
-      el.input.disabled = query.inputDisabled;
-    }
-    if (el.runBtn) {
-      el.runBtn.textContent = query.submitLabel;
-      el.runBtn.classList.toggle('is-stop', query.submitIsStop);
-      el.runBtn.disabled = query.inputDisabled && !query.submitIsStop;
-      el.runBtn.setAttribute(
-        'aria-label',
-        query.submitIsStop ? 'Stop the query' : 'Ask',
-      );
-    }
-    for (const button of this.root.querySelectorAll('[data-mly-suggestion]'))
-      button.disabled = query.suggestionsDisabled;
-    if (el.hint) {
-      el.hint.textContent = query.hint;
-      el.hint.classList.toggle('is-warn', query.hintWarn);
-    }
-    if (el.answer) el.answer.textContent = view.answer;
-    if (el.error) {
-      el.error.hidden = !view.error;
-      if (el.errorText) el.errorText.textContent = view.error || '';
-    }
-    if (el.progress) {
-      el.progress.hidden = !view.progress.visible;
-      el.progress.classList.toggle(
-        'is-indeterminate',
-        view.progress.indeterminate,
-      );
-      if (el.progressFill && !view.progress.indeterminate)
-        el.progressFill.style.width = `${view.progress.percent}%`;
-      if (el.progressFill && view.progress.indeterminate)
-        el.progressFill.style.removeProperty('width');
-      if (el.progressLabel) el.progressLabel.textContent = view.progress.label;
-    }
-  }
-
-  _renderResults(view) {
-    const el = this._elements;
-    if (!el.results) return;
-    el.results.hidden = !view.results.visible;
-    if (!view.results.visible || !el.chips) return;
-    const expanded = el.chips.classList.contains('is-expanded');
-    const chip = (entry, overflow) => {
-      const node = document.createElement('span');
-      node.className = `mly-value-chip${overflow ? ' is-overflow' : ''}`;
-      node.title = entry.value;
-      const dot = document.createElement('i');
-      dot.style.background = entry.color;
-      const text = document.createElement('span');
-      text.textContent = entry.label;
-      const num = document.createElement('b');
-      num.textContent = entry.count;
-      node.append(dot, text, num);
-      return node;
-    };
-    const nodes = view.results.all.map((entry, index) =>
-      chip(entry, index >= view.results.chips.length),
-    );
-    if (view.results.more) {
-      const more = document.createElement('button');
-      more.type = 'button';
-      more.className = 'mly-value-chip';
-      more.dataset.mlyMore = String(view.results.more.count);
-      more.title = view.results.more.title;
-      more.setAttribute('aria-expanded', String(expanded));
-      more.textContent = expanded
-        ? 'FEWER'
-        : `+${view.results.more.count} CLASSES`;
-      nodes.push(more);
-    } else el.chips.classList.remove('is-expanded');
-    el.chips.replaceChildren(...nodes);
+    if (!el.error) return;
+    el.error.hidden = !view.error;
+    if (el.errorText) el.errorText.textContent = view.error || '';
   }
 
   _renderFilters(view) {
@@ -471,11 +350,6 @@ export class MapillaryControls {
     this._wasEnabled = enabled;
     if (state.street.open && !this._wasStreetOpen) this.setCollapsed(false);
     this._wasStreetOpen = state.street.open === true;
-    if (state.query.stage !== this._lastStage) {
-      this._lastStage = state.query.stage;
-      if (state.query.stage === 'done' || state.query.stage === 'error')
-        this.setCollapsed(false);
-    }
   }
 
   destroy() {

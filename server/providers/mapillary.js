@@ -1,13 +1,11 @@
 import { installMapillaryRoutes } from './mapillary/routes.js';
 
 /**
- * Vite plugin: Mapillary street-level data.
+ * Vite plugin: Mapillary street-level coverage.
  *
- * Serves cached vector tiles (coverage, point features, traffic signs) with
- * the Mapillary token added server-side, fans a city-sized bbox out over
- * z14 feature tiles as an NDJSON stream, turns natural-language requests
- * into query plans with Claude (ANTHROPIC_API_KEY stays on this machine),
- * and proxies the MIT-licensed Mapillary sprite icons.
+ * Serves cached coverage vector tiles with the Mapillary token added
+ * server-side (and the unused z14 image point layer stripped in transit),
+ * plus a status route that says whether a token is configured.
  */
 function mapillaryProxy() {
   return {

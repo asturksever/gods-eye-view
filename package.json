@@ -48,7 +48,6 @@
     "test:track": "node scripts/track-regression.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.126.0",
     "@jtarrio/signals": "^0.10.0",
     "@jtarrio/webrtlsdr": "^3.0.6",
     "@mapbox/vector-tile": "^3.0.0",
@@ -59,8 +58,7 @@
     "mapillary-js": "^4.1.2",
     "mgrs": "^2.1.0",
     "pbf": "^5.1.2",
-    "satellite.js": "^6.0.2",
-    "zod": "^4.6.5"
+    "satellite.js": "^6.0.2"
   },
   "devDependencies": {
     "prettier": "3.9.6",

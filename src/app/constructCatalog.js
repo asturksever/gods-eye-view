@@ -59,14 +59,9 @@ const SOURCE_METHODS = Object.freeze({
   mapillary: [
     'getStatus',
     'getTile',
-    'queryFeatures',
-    'plan',
-    'geocode',
     'getImage',
     'getSequenceImages',
     'nearestImages',
-    'getMapFeature',
-    'spriteUrl',
   ],
 });
 

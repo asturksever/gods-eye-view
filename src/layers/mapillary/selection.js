@@ -1,7 +1,7 @@
 import * as Cesium from 'cesium';
 import { MAPILLARY_LAYER_ID, PICK_PREFIX } from './policy.js';
 
-/** Click handling for coverage lines, image cones and query results. */
+/** Click handling for coverage lines and image cones. */
 export function createSelection({ state, parts }) {
   const { picking, input } = state.services;
 
@@ -25,11 +25,6 @@ export function createSelection({ state, parts }) {
       parts.sequences.select(id.slice(PICK_PREFIX.sequence.length));
     } else if (id.startsWith(PICK_PREFIX.image)) {
       parts.street.openImage(id.slice(PICK_PREFIX.image.length));
-    } else if (id.startsWith(PICK_PREFIX.feature)) {
-      parts.street.openFeature(id.slice(PICK_PREFIX.feature.length));
-    } else if (id.startsWith(PICK_PREFIX.object)) {
-      // 3D object entities are id'd `mly:obj:<featureId>:<part>`.
-      parts.street.openFeature(id.split(':')[2]);
     }
   }
 

@@ -1,14 +1,5 @@
 import { fetchTile, TileRequestError, TileUpstreamError } from './tiles.js';
-import { handleFeatureQuery } from './features.js';
-import { handlePlan } from './planner.js';
-import { handleSprite } from './sprites.js';
-import {
-  anthropicConfigured,
-  mapillaryToken,
-  plannerModel,
-  QUERY_MAX_TILES,
-  FEATURE_TILE_ZOOM,
-} from './constants.js';
+import { mapillaryToken } from './constants.js';
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -17,29 +8,23 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-/** GET /api/mapillary/status — what this install can do, never a value. */
+/** GET /api/mapillary/status — whether a token is configured, never its value. */
 function handleStatus(req, res) {
   if (req.method !== 'GET')
     return sendJson(res, 405, { error: 'Method not allowed' });
-  sendJson(res, 200, {
-    configured: Boolean(mapillaryToken()),
-    planner: anthropicConfigured(),
-    plannerModel: anthropicConfigured() ? plannerModel() : null,
-    limits: { maxTiles: QUERY_MAX_TILES, featureZoom: FEATURE_TILE_ZOOM },
-  });
+  sendJson(res, 200, { configured: Boolean(mapillaryToken()) });
 }
 
-/** GET /api/mapillary/tiles/{layer}/{z}/{x}/{y} — cached protobuf tile. */
+/** GET /api/mapillary/tiles/coverage/{z}/{x}/{y} — cached protobuf tile. */
 async function handleTile(req, res) {
   if (req.method !== 'GET')
     return sendJson(res, 405, { error: 'Method not allowed' });
-  const match =
-    /^\/(coverage|points|signs)\/(\d{1,2})\/(\d{1,6})\/(\d{1,6})$/.exec(
-      (req.url || '').split('?')[0],
-    );
+  const match = /^\/(coverage)\/(\d{1,2})\/(\d{1,6})\/(\d{1,6})$/.exec(
+    (req.url || '').split('?')[0],
+  );
   if (!match)
     return sendJson(res, 400, {
-      error: 'Tile path must be /{layer}/{z}/{x}/{y}',
+      error: 'Tile path must be /coverage/{z}/{x}/{y}',
     });
   if (!mapillaryToken())
     return sendJson(res, 503, { error: 'no_key', keyRequired: true });
@@ -73,7 +58,4 @@ async function handleTile(req, res) {
 export function installMapillaryRoutes(middlewares) {
   middlewares.use('/api/mapillary/status', handleStatus);
   middlewares.use('/api/mapillary/tiles', handleTile);
-  middlewares.use('/api/mapillary/features', handleFeatureQuery);
-  middlewares.use('/api/mapillary/plan', handlePlan);
-  middlewares.use('/api/mapillary/sprite', handleSprite);
 }

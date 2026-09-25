@@ -96,7 +96,7 @@ test('graph API errors carry the upstream message and status', async () => {
   );
   const source = createMapillarySource({ token: 'MLY|1|abc', fetchImpl });
   await assert.rejects(
-    () => source.getMapFeature('999'),
+    () => source.getImage('999'),
     (error) =>
       error instanceof MapillarySourceError &&
       error.status === 400 &&
@@ -104,42 +104,8 @@ test('graph API errors carry the upstream message and status', async () => {
   );
 });
 
-test('feature queries stream NDJSON records and resolve with the done record', async () => {
-  const lines = [
-    JSON.stringify({ type: 'start', tiles: 2 }),
-    JSON.stringify({
-      type: 'tile',
-      rows: [[-121.5, 38.5, 'a', 'object--bench', 0, 0]],
-    }),
-    JSON.stringify({ type: 'done', total: 1 }),
-  ].join('\n');
-  const { calls, fetchImpl } = fakeFetch(
-    () =>
-      new Response(lines, {
-        status: 200,
-        headers: { 'content-type': 'application/x-ndjson' },
-      }),
-  );
-  const source = createMapillarySource({ token: 'MLY|1|abc', fetchImpl });
-  const seen = [];
-  const done = await source.queryFeatures(
-    {
-      bbox: [-121.5, 38.5, -121.4, 38.6],
-      layer: 'points',
-      values: ['object--bench'],
-    },
-    (record) => seen.push(record.type),
-  );
-  assert.deepEqual(seen, ['start', 'tile', 'done']);
-  assert.equal(done.total, 1);
-  assert.equal(calls[0].url, '/api/mapillary/features');
-  assert.equal(calls[0].init.method, 'POST');
-});
-
-test('sprite URLs are proxied per taxonomy value', () => {
+test('the source exposes only imagery lookups', () => {
   const source = createMapillarySource({ token: 'MLY|1|abc' });
-  assert.equal(
-    source.spriteUrl('object--fire-hydrant'),
-    '/api/mapillary/sprite/object--fire-hydrant.svg',
-  );
+  for (const gone of ['queryFeatures', 'plan', 'geocode', 'spriteUrl'])
+    assert.equal(source[gone], undefined, gone);
 });

@@ -3,15 +3,6 @@
  * renders. Pure: no DOM, no layer calls, so every wording decision is testable.
  */
 
-const HINT_READY =
-  'Objects, traffic signs, coverage or a street view of any place. Follow-ups refine the last answer.';
-const HINT_NO_PLANNER =
-  'Plain-English questions need an Anthropic key in POWER UP. Coverage, photos and filters work without it.';
-const IDLE_ANSWER_OFF =
-  'Turn on Street Level to see Mapillary coverage on the globe.';
-const IDLE_ANSWER_ON =
-  'Click a green line to see its photos, or ask for objects and signs.';
-
 function formatDate(ms) {
   if (!Number.isFinite(ms)) return '';
   try {
@@ -30,84 +21,12 @@ export function mapillaryImageUrl(imageId) {
 
 function presentStatus(state) {
   if (state.keyRequired) return { text: 'KEY REQUIRED', tone: 'warn' };
-  if (state.query.busy)
-    return { text: `AI · ${state.query.stage.toUpperCase()}`, tone: 'busy' };
-  if (state.coverage.loading || state.features.loading)
-    return { text: 'LOADING', tone: 'busy' };
+  if (state.coverage.loading) return { text: 'LOADING', tone: 'busy' };
   return state.enabled ? { text: 'ON', tone: 'on' } : { text: 'OFF', tone: '' };
-}
-
-function presentProgress(state) {
-  const { stage, busy } = state.query;
-  const { progress, loading, total } = state.features;
-  if (loading && progress.tiles > 0) {
-    const pct = Math.round((progress.done / progress.tiles) * 100);
-    return {
-      visible: true,
-      indeterminate: false,
-      percent: pct,
-      label: `${progress.done}/${progress.tiles} tiles · ${total.toLocaleString()} found`,
-    };
-  }
-  if (busy && stage === 'planning')
-    return {
-      visible: true,
-      indeterminate: true,
-      percent: 0,
-      label: 'Planning…',
-    };
-  if (busy && stage === 'resolving')
-    return {
-      visible: true,
-      indeterminate: true,
-      percent: 0,
-      label: `Finding ${state.query.place || 'the area'}…`,
-    };
-  if (busy)
-    return {
-      visible: true,
-      indeterminate: true,
-      percent: 0,
-      label: 'Working…',
-    };
-  return { visible: false, indeterminate: false, percent: 0, label: '' };
-}
-
-function presentResults(state, { maxChips = 8 } = {}) {
-  const counts = state.features.counts || [];
-  const visible = state.features.total > 0 || state.features.hasBbox === true;
-  const chips = counts.map(({ value, count, label, color }) => ({
-    value,
-    label,
-    color,
-    count: count.toLocaleString(),
-  }));
-  const hidden = chips.slice(maxChips);
-  return {
-    visible,
-    chips: chips.slice(0, maxChips),
-    more: hidden.length
-      ? {
-          count: hidden.length,
-          title: hidden.map((chip) => `${chip.label} ${chip.count}`).join(', '),
-        }
-      : null,
-    all: chips,
-  };
 }
 
 function presentViewer(state) {
   const { street } = state;
-  const left = [];
-  if (street.feature?.label)
-    left.push(
-      `${street.feature.label}${street.feature.imageCount ? ` · ${street.feature.imageCount} sightings` : ''}`,
-    );
-  if (street.highlight?.count)
-    left.push(
-      `${street.highlight.count} detection${street.highlight.count === 1 ? '' : 's'} outlined`,
-    );
-  if (street.creator) left.push(`Image by ${street.creator}`);
   const right = [];
   if (street.isPano) right.push('360°');
   if (Number.isFinite(street.bearing))
@@ -117,7 +36,7 @@ function presentViewer(state) {
     open: street.open === true,
     loading: street.loading === true && !street.imageId,
     renderMode: street.renderMode === 'fill' ? 'fill' : 'letterbox',
-    captionLeft: left.join(' · '),
+    captionLeft: street.creator ? `Image by ${street.creator}` : '',
     captionRight: right.join(' · '),
     link: street.imageId ? mapillaryImageUrl(street.imageId) : null,
     follow: {
@@ -133,17 +52,9 @@ function presentMeta(state) {
     return state.sequence.loading
       ? 'Loading this sequence…'
       : `${state.sequence.images.toLocaleString()} images in this sequence · Esc clears`;
-  const bits = [];
   if (state.coverage.zoom && state.coverage.sequences > 0)
-    bits.push(
-      `${state.coverage.sequences.toLocaleString()} sequences in view · click a line for its photos`,
-    );
-  else if (state.coverage.hint) bits.push(state.coverage.hint);
-  if (state.query.usage?.model)
-    bits.push(
-      `${state.query.usage.model} · ${state.query.usage.input_tokens ?? '?'}→${state.query.usage.output_tokens ?? '?'} tok`,
-    );
-  return bits.join(' · ');
+    return `${state.coverage.sequences.toLocaleString()} sequences in view · click a line for its photos`;
+  return state.coverage.hint || '';
 }
 
 /**
@@ -153,18 +64,6 @@ function presentMeta(state) {
 export function presentMapillaryPanel(state) {
   const enabled = state.enabled === true;
   const keyRequired = state.keyRequired === true;
-  // Unknown (status not fetched yet) reads as available: the server answers
-  // a missing key with its own error, and the panel must not claim one is missing.
-  const planner = state.planner !== false;
-  const busy = state.query.busy === true;
-  const error = state.query.error || state.street.error || null;
-  let answer = state.query.answer || '';
-  if (!answer && !error) {
-    if (busy) answer = '';
-    else if (!enabled) answer = IDLE_ANSWER_OFF;
-    else if (state.coverage.hint) answer = state.coverage.hint;
-    else answer = IDLE_ANSWER_ON;
-  }
   return {
     enabled,
     keyRequired,
@@ -174,30 +73,12 @@ export function presentMapillaryPanel(state) {
       text: enabled ? 'STREET LEVEL ON' : 'STREET LEVEL OFF',
       pressed: enabled,
     },
-    query: {
-      placeholder: planner
-        ? 'Ask about objects, signs or a place'
-        : 'Anthropic key needed — see POWER UP',
-      inputDisabled: !planner,
-      suggestionsDisabled: !planner,
-      hint: planner ? HINT_READY : HINT_NO_PLANNER,
-      hintWarn: !planner,
-      model: state.plannerModel ? `· ${state.plannerModel}` : '',
-      submitLabel: busy ? 'STOP' : 'ASK',
-      submitIsStop: busy,
-    },
-    progress: presentProgress(state),
-    answer,
-    error,
-    results: presentResults(state),
+    error: state.street.error || state.coverage.error || null,
     filter: state.coverage.filter || { pano: 'all', sinceMs: null },
     legend: state.coverage.legend || [],
     viewer: presentViewer(state),
     meta: presentMeta(state),
-    /** The panel opens itself at these moments (a native panel stays put otherwise). */
-    wantsOpen:
-      state.street.open === true ||
-      state.query.stage === 'done' ||
-      state.query.stage === 'error',
+    /** The panel opens itself when an image opens (a native panel stays put otherwise). */
+    wantsOpen: state.street.open === true,
   };
 }
