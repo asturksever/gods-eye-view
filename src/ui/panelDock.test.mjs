@@ -15,7 +15,9 @@ function fixture() {
     const classes = new Set();
     const style = {
       removeProperty(name) {
+        // Like CSSStyleDeclaration: 'z-index' also clears style.zIndex.
         delete this[name];
+        delete this[name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
       },
       getPropertyValue: () => '',
     };
@@ -187,6 +189,58 @@ test('two quick header presses snap a floating panel back; slow or distant ones 
       false,
       'a double press docks',
     );
+  } finally {
+    f.restore();
+  }
+});
+
+test('a restored floating window stacks above the docked DISPLAY panel (z 110)', () => {
+  const f = fixture();
+  try {
+    const panel = f.element();
+    panel.id = 'street-level-panel';
+    f.owner._portablePanels.set('street-level-panel', {
+      panel,
+      min: { width: 320, height: 280 },
+      dockOnCollapse: true,
+    });
+    f.store.set(
+      'godsEyeView.v8.panelPos.street-level-panel',
+      JSON.stringify({
+        left: 900,
+        top: 200,
+        width: 420,
+        height: 600,
+        floating: true,
+      }),
+    );
+    f.owner._restorePanelPosition('street-level-panel', panel);
+    assert.equal(panel.classList.contains('panel-floating'), true);
+    assert.ok(Number(panel.style.zIndex) > 110, `z ${panel.style.zIndex}`);
+    f.owner.dockPanel('street-level-panel');
+    assert.equal(panel.style.zIndex, undefined, 'docking drops the promotion');
+  } finally {
+    f.restore();
+  }
+});
+
+test('renumbering the z ladder never drops a window below the docked panels', () => {
+  const f = fixture();
+  try {
+    const windows = [f.element(), f.element(), f.element()];
+    windows.forEach((node, index) => {
+      node.classList.add('panel-draggable');
+      node.style.zIndex = String(130 + index);
+    });
+    globalThis.document.querySelectorAll = (selector) =>
+      selector === '.panel-draggable' ? windows : [];
+    f.owner._panelZCounter = 139;
+    const top = f.element();
+    top.classList.add('panel-draggable');
+    f.owner._promotePanelZ(top);
+    for (const node of [...windows, top])
+      assert.ok(Number(node.style.zIndex) > 110, `z ${node.style.zIndex}`);
+    assert.ok(Number(top.style.zIndex) > Number(windows[2].style.zIndex));
   } finally {
     f.restore();
   }

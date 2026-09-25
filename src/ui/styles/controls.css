@@ -117,6 +117,9 @@
 #right-context-rail > .panel-floating {
   position: fixed;
   inset: auto;
+  /* Above every docked rail panel (#pp-toggles is 110). PanelPositionControls
+     promotes floating windows from this floor (PANEL_Z_FLOATING_FLOOR). */
+  z-index: 111;
   max-height: calc(100vh - 12px);
   margin: 0;
   flex: none;

@@ -12,6 +12,13 @@ const PANEL_POSITION_STORAGE_VERSION = 'v8';
 /** Z ladder: panels promote within [100, 139]; voice pill 150, toast 200, clean-view-exit 300. */
 const PANEL_Z_BASE = 100;
 const PANEL_Z_MAX = 139;
+/**
+ * Lowest z a promoted (dragged or floating) panel may take: above every panel
+ * docked in a rail, the highest of which is #pp-toggles at 110 (controls.css).
+ * Renumbering restarts here, so a floating window never slips under DISPLAY.
+ * Keep in step with `#right-context-rail > .panel-floating` in controls.css.
+ */
+const PANEL_Z_FLOATING_FLOOR = PANEL_Z_BASE + 11;
 /** Pointer travel before a header press becomes a drag that lifts a portable panel out. */
 const DRAG_THRESHOLD_PX = 4;
 /**
@@ -37,6 +44,8 @@ const FLOATING_STYLE_PROPERTIES = [
   'bottom',
   'width',
   'height',
+  // A docked panel takes the rail's stacking, not a floating window's.
+  'z-index',
 ];
 
 function clamp(value, min, max) {
@@ -264,6 +273,9 @@ export class PanelPositionControls {
       if (Boolean(pos.floating) !== Boolean(portable)) return;
       if (portable) {
         panelEl.classList.add('panel-floating', 'panel-draggable');
+        // A restored window must stack above the docked rail panels too, not
+        // only one that was lifted or clicked this session.
+        this._promotePanelZ(panelEl);
         if (Number.isFinite(pos.width)) {
           panelEl.style.width = `${clamp(
             Math.round(pos.width),
@@ -337,7 +349,7 @@ export class PanelPositionControls {
       const promoted = [...document.querySelectorAll('.panel-draggable')]
         .filter((el) => el.style.zIndex)
         .sort((a, b) => Number(a.style.zIndex) - Number(b.style.zIndex));
-      let z = PANEL_Z_BASE + 1;
+      let z = PANEL_Z_FLOATING_FLOOR;
       for (const el of promoted) {
         el.style.zIndex = String(z);
         z += 1;
