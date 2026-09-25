@@ -2796,8 +2796,12 @@ the settings follow. SINCE is a stepped range input (any date, 10, 5, 3, 2 and
 1 years, 6, 3 and 1 months) whose readout names the cut-off date. The panel is
 portable (`street-level-panel` spec in `PanelPositionControls`, minimum
 320 × 280, `dockOnCollapse`): in a resized window the viewer takes the spare
-height and only `.sl-settings` scrolls, and collapsing the window or SHRINK
-after EXPAND docks it at its default size.
+height and only `.sl-settings` scrolls, and a user's collapse, a header
+double-click or SHRINK after EXPAND docks it at its default size (cockpit
+entry, restores and the Cyber accordion never dock a floating window). At
+phone width (≤720 px) the rail is the band between mid-screen and the credit
+line, so the viewer's height is derived from that band instead of 16:10 and
+the whole photo and caption fit without scrolling.
 
 Street-level providers implement the contract documented in
 `src/layers/streetLevel/registry.js`: a definition (`id`, `name`, `label`,

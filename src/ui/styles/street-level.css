@@ -461,6 +461,7 @@ button.sl-status:focus-visible {
 
 .panel-floating[style*='height'] .sl-viewer {
   flex: 1 1 auto;
+  height: auto;
   min-height: 0;
   aspect-ratio: auto;
 }
@@ -497,6 +498,7 @@ button.sl-status:focus-visible {
 
 .sl-viewer-wrap-expanded .sl-viewer {
   flex: 1 1 auto;
+  height: auto;
   min-height: 0;
   aspect-ratio: auto;
 }
@@ -539,5 +541,18 @@ button.sl-status:focus-visible {
 
   .sl-viewer {
     min-height: 150px;
+  }
+}
+
+/* ── Phones ──────────────────────────────────────────────────────────────── */
+/* At this width the right rail is the band between mid-screen and the credit
+   line (responsive.css: top 50vh + 8px, bottom 2vh + 7.5rem). Size the photo
+   from that band, less the panel's header, tool bar and caption (~150px), so
+   the whole image shows without scrolling; EXPAND still gives full screen. */
+@media (max-width: 720px) {
+  .sl-viewer {
+    aspect-ratio: auto;
+    height: clamp(110px, calc(48vh - 8px - 7.5rem - 150px), 320px);
+    min-height: 0;
   }
 }

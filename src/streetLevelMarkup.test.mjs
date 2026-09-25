@@ -122,6 +122,19 @@ test('labels say what the buttons do', () => {
   );
 });
 
+test('on phones the viewer is sized from the rail band, not its aspect ratio', () => {
+  assert.match(
+    panelCss,
+    /@media \(max-width: 720px\) \{\s*\.sl-viewer \{[^}]*height: clamp\(/,
+  );
+  // Floating and expanded viewers must not inherit the phone height.
+  for (const selector of [
+    ".panel-floating\\[style\\*='height'\\] \\.sl-viewer",
+    '\\.sl-viewer-wrap-expanded \\.sl-viewer',
+  ])
+    assert.match(panelCss, new RegExp(`${selector} \\{[^}]*height: auto`));
+});
+
 test('the viewer comes first and the panel is a portable, resizable window', () => {
   const controlsBlock = html.slice(html.indexOf('<fieldset id="sl-controls"'));
   assert.ok(

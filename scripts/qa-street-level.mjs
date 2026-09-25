@@ -621,6 +621,63 @@ async function main() {
         });
       },
     );
+    await step(
+      'on a phone the whole photo fits in the docked panel',
+      async () => {
+        await page.setViewport({
+          width: 390,
+          height: 844,
+          isMobile: true,
+          hasTouch: true,
+        });
+        await sleep(800);
+        if (
+          await page.$eval('#street-level-panel', (node) =>
+            node.classList.contains('collapsed'),
+          )
+        )
+          await page.click(
+            '.panel-collapse-btn[data-collapse-target="street-level-panel"]',
+          );
+        await page.evaluate((id) => {
+          void window.__godsEyeView.dataManager.layers
+            .get('street-level')
+            .module.openImage('mapillary', id);
+        }, firstImageId);
+        await page.waitForFunction(
+          () => {
+            const s = window.__godsEyeView.dataManager.layers
+              .get('street-level')
+              .module.getUIState().street;
+            return (s.imageId && !s.loading) || s.error;
+          },
+          { timeout: 90_000 },
+        );
+        await sleep(600);
+        const fit = await page.evaluate(() => {
+          const inner = document
+            .querySelector('.street-level-panel-inner')
+            .getBoundingClientRect();
+          const meta = document
+            .getElementById('sl-image-meta')
+            .getBoundingClientRect();
+          const viewer = document
+            .getElementById('sl-viewer')
+            .getBoundingClientRect();
+          return {
+            cut: Math.round(meta.bottom - inner.bottom),
+            top: Math.round(viewer.top - inner.top),
+            height: Math.round(viewer.height),
+            overflowX: document.documentElement.scrollWidth > innerWidth,
+          };
+        });
+        assert.ok(fit.cut <= 1, `photo and caption fit (${fit.cut}px cut)`);
+        assert.ok(fit.height >= 100, `viewer stays usable (${fit.height}px)`);
+        assert.equal(fit.overflowX, false, 'no sideways scroll');
+        await page.setViewport(VIEWPORTS[0]);
+        await sleep(600);
+      },
+    );
     await step('no page errors', () => {
       assert.deepEqual(errors, []);
     });
