@@ -1,6 +1,6 @@
 # Changelog
 
-- Street Level (Mapillary): a new layer draws Mapillary coverage on the globe from orbit down to a single street, opens photos and 360° panoramas in an embedded MapillaryJS viewer beside the CCTV panel, and answers plain-English questions ("show me all fire hydrants in Sacramento") with Mapillary's detected objects and traffic signs when an Anthropic key is present; the layer needs a free Mapillary client token and credits CC BY-SA 4.0 imagery on the globe.
+- Street Level: a provider-neutral street-level imagery layer modelled on the iD editor's photo overlay. One panel in the right rail carries a chip per imagery provider, shared 360°/flat and captured-since filters, coverage drawn on the globe from orbit down to a single street, image cones per sequence, and one embedded viewer whose adapter follows the provider of the open image; each active provider credits its imagery on the globe, and share links carry the provider switches and the filter. Mapillary is the first provider (free client token; CC BY-SA 4.0 imagery); Google Street View, KartaView and Panoramax are next.
 
 - CCTV cameras whose bearing is a guess now say so. Packs mark bearings derived
   from a hash of the camera id as `headingConfidence: 'low'`, but nothing read the

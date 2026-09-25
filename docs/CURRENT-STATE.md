@@ -2766,24 +2766,42 @@ its criteria cannot be silently ignored.
 | Dams ▰                 | OpenInfraMap/OSM extract (bundled)                                                                                                                                                              | `src/data/localLayers.js`                             | —                                                        | static                                                                            |
 | Submarine Cables ◠     | TeleGeography public map (bundled)                                                                                                                                                              | `src/data/telegeographySubmarineCables.js`            | —                                                        | static                                                                            |
 | FIRMS Active Fires ▲   | NASA FIRMS live (VIIRS ×3 NRT + MODIS NRT, trailing 24h)                                                                                                                                        | `src/data/firmsHeatmap.js`                            | `/api/firms` (`FIRMS_MAP_KEY`)                           | 10 min (proxy TTL 30 min)                                                         |
-| Street Level 📷        | Mapillary vector tiles + Graph API + MapillaryJS (optional Claude planner, server-side key)                                                                                                     | `src/layers/mapillary/` via `src/app/layers/mapillary.js` | `/api/mapillary/status`, `/tiles`, `/features` (NDJSON), `/plan`, `/sprite` (`MAPILLARY_CLIENT_TOKEN`; `ANTHROPIC_API_KEY` optional) | camera-driven (320 ms debounce, ≤9 coverage tiles); queries on demand (≤600 tiles, cached 24 h) |
+| Street Level 📷        | Provider-neutral street-level imagery; Mapillary registered (vector tiles + Graph API + MapillaryJS)                                                                                     | `src/layers/streetLevel/` (core) + `src/layers/streetLevel/providers/mapillary/` via `src/app/layers/streetLevel.js` | `/api/mapillary/status`, `/api/mapillary/tiles/coverage/{z}/{x}/{y}` (`MAPILLARY_CLIENT_TOKEN`) | camera-driven (320 ms debounce, ≤9 coverage tiles, cached 24 h) |
 | Wind 🌬                 | NOAA GFS 10 m wind (keyless, 0.25°→1° grid; animated particles)                                                                                                                                 | `src/data/wind.js`                                    | `/api/wind`                                              | 1 h (forecast cycle)                                                              |
 | Fire Perimeters 🔥 | NIFC WFIGS current interagency perimeters (keyless, paged past the 2000-record cap); InciWeb catalog + incident page origin and update time checks for verified incident-page links | `src/layers/perimeters/` via `src/app/layers/perimeters.js` | `/api/fire-perimeters` + `/api/fire-perimeters/inciweb/*` | 5 min (server caches: catalog 1 h; publication 30 min) |
 
 Fire Perimeters uses capped, timed server reads with stale-on-error caching and a per-client limit. Unchanged snapshots retain geometry; link checks cancel on disable or selection change, and the row legend shows reported containment.
 
-Street Level (Mapillary) lives in the right context rail next to CCTV as an
-ordinary collapsible panel and starts collapsed. Without `MAPILLARY_CLIENT_TOKEN`
-the header status reads KEY REQUIRED and the controls stay disabled (key setup
-is documented in the README's Street Level section); with it, coverage
-draws as ground-clamped sequence lines (z0–5 overview points from orbit,
-z11–14 sequences below 60 km) and the proxy strips the unused `image` point
-layer from z14 tiles in transit (12 MB → ~80 KB). The plain-English query box
-is only live with `ANTHROPIC_API_KEY` (server-side; the browser posts the
-sentence to `/api/mapillary/plan`). While enabled the layer adds an on-globe
-Cesium credit ("Imagery © Mapillary contributors, CC BY-SA 4.0"). Follow-ups
-kept out of the first landing: procedural 3D objects for results, a Google 3D
-map-stack shortcut, and portable/resizable rail panels.
+Street Level lives in the right context rail next to CCTV as an ordinary
+collapsible panel (`#street-level-panel`, share token `3`, option owner
+`street-level`) and starts collapsed. It is modelled on the iD editor's photo
+overlay: one panel, a PROVIDERS chip per registered imagery provider, shared
+360°/flat and captured-since filters (stored as relative days so a link keeps
+its meaning), one viewer host, and one on-globe credit per active provider.
+Share options: `m` (Mapillary on/off), `p` (a/p/f panorama mode), `s`
+(since, days). Only Mapillary is registered in this build. Without
+`MAPILLARY_CLIENT_TOKEN` the header reads KEY REQUIRED, the Mapillary chip
+turns amber and the controls stay disabled; with it, coverage draws as
+ground-clamped sequence lines (z0–5 overview points from orbit, z11–14
+sequences below 60 km) and the proxy strips the unused `image` point layer
+from z14 tiles in transit (12 MB → ~80 KB).
+
+Street-level providers implement the contract documented in
+`src/layers/streetLevel/registry.js`: a definition (`id`, `name`, `label`,
+`requiresKeyId`, `pickPrefix`, `colors`, `credit`, `capabilities`, `legend`,
+`externalUrl`, `create`) whose `create(context)` returns an instance with
+`status`, `init`/`activate`/`deactivate`/`destroy`, `refreshCoverage`,
+`setFilter`, `coverageStats`, `handlePick`, optional sequence selection,
+`nearestImage`, and a viewer adapter (`mount`/`open`/`close`/`unmount`/
+`resize`/`onPose`) that emits a provider-neutral pose. The core routes clicks
+by pick prefix, swaps viewer adapters in the one host, adds and removes each
+provider's Cesium credit, and fans the filter out to every provider. Adding a
+provider: implement the definition, register it in
+`src/app/layers/streetLevel.js`, add its boolean option to the `street-level`
+group in `src/data/layerState.js` and its modules to
+`scripts/package-boundaries.json`; the chip, credit and legend follow. Once a
+keyless provider registers, `requiresKeyId` on the layer becomes null and the
+key gate moves to the chips, by design.
 
 Directions is a keyless front end to the routing the voice agent already
 uses. Its row chips are the whole interface: DRIVE / WALK / BIKE pick the
