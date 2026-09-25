@@ -97,7 +97,7 @@ export class PanelLayoutController {
     this._cctvPanel = document.getElementById('cctv-panel');
     this._weatherPanel = document.getElementById('weather-panel');
     this._recentImageryPanel = document.getElementById('recent-imagery-panel');
-    this._mapillaryPanel = document.getElementById('mapillary-panel');
+    this._streetLevelPanel = document.getElementById('street-level-panel');
     this._sliderPanel = document.getElementById('param-slider-panel');
     this._detectionBtn = document.getElementById('detection-toggle');
   }
@@ -202,7 +202,7 @@ export class PanelLayoutController {
       this._cctvPanel,
       this._weatherPanel,
       this._recentImageryPanel,
-      this._mapillaryPanel,
+      this._streetLevelPanel,
     ]) {
       if (!panel) continue;
       for (const property of ['top', 'right', 'bottom', 'left', 'z-index'])
@@ -231,7 +231,7 @@ export class PanelLayoutController {
         this._cctvPanel,
         this._weatherPanel,
         this._recentImageryPanel,
-        this._mapillaryPanel,
+        this._streetLevelPanel,
         globalContextPanel,
         document.getElementById('radio-panel'),
       ]) {

@@ -1,7 +1,7 @@
 import { createState } from './state.js';
-import { createCoverage, visibleBbox } from './coverage.js';
-import { createSequences } from './sequences.js';
-import { createViewerBridge } from './viewerBridge.js';
+import { createCoverage, visibleBbox } from './providers/mapillary/coverage.js';
+import { createSequences } from './providers/mapillary/sequences.js';
+import { createViewerBridge } from './providers/mapillary/viewer.js';
 import { createSelection } from './selection.js';
 import * as Cesium from 'cesium';
 import {
@@ -9,12 +9,12 @@ import {
   COVERAGE_RECENT_DAYS,
   MAPILLARY_CREDIT_HTML,
   MAPILLARY_KEY_ID,
-  MAPILLARY_LAYER_ID,
+  STREET_LEVEL_LAYER_ID,
   NEAREST_LIMIT,
   NEAREST_RADIUS_M,
-} from './policy.js';
+} from './providers/mapillary/policy.js';
 
-export { MAPILLARY_LAYER_ID } from './policy.js';
+export { STREET_LEVEL_LAYER_ID } from './providers/mapillary/policy.js';
 
 const SOURCE_METHODS = [
   'getStatus',
@@ -30,7 +30,7 @@ const SOURCE_METHODS = [
  * are injected; nothing here reads the DOM except the viewer host the UI
  * hands over.
  */
-export function createMapillaryLayer({ source, services = {} }) {
+export function createStreetLevelLayer({ source, services = {} }) {
   if (!SOURCE_METHODS.every((method) => typeof source?.[method] === 'function'))
     throw new TypeError('A Mapillary source is required');
   const state = createState({ services });
@@ -72,7 +72,7 @@ export function createMapillaryLayer({ source, services = {} }) {
         try {
           listener(snapshot);
         } catch (error) {
-          console.warn('[Data:Mapillary] listener error:', error);
+          console.warn('[Data:StreetLevel] listener error:', error);
         }
       }
     });
@@ -174,7 +174,7 @@ export function createMapillaryLayer({ source, services = {} }) {
   }
 
   const layer = {
-    id: MAPILLARY_LAYER_ID,
+    id: STREET_LEVEL_LAYER_ID,
     name: 'Street Level',
     icon: '📷',
     source: 'Mapillary',
@@ -184,13 +184,13 @@ export function createMapillaryLayer({ source, services = {} }) {
 
     init(viewer) {
       if (state.initialized)
-        throw new Error('Mapillary layer is already initialized');
+        throw new Error('Street Level layer is already initialized');
       state.viewer = viewer;
       state.initialized = true;
       parts.sequences.ensureCollections(viewer);
       parts.sequences.setVisible(false);
       refreshStatus();
-      console.log('[Data:Mapillary] Initialized');
+      console.log('[Data:StreetLevel] Initialized');
     },
 
     enable(viewer) {

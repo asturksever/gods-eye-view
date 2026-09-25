@@ -61,7 +61,7 @@ function presentMeta(state) {
  * @param {object} state Snapshot from the layer's `getUIState()`.
  * @returns {object} Everything the panel needs, already worded.
  */
-export function presentMapillaryPanel(state) {
+export function presentStreetLevelPanel(state) {
   const enabled = state.enabled === true;
   const keyRequired = state.keyRequired === true;
   return {

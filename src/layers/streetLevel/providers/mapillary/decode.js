@@ -1,6 +1,6 @@
 import { PbfReader } from 'pbf';
 import { VectorTile } from '@mapbox/vector-tile';
-import { tileLocalToLonLat } from './tileMath.js';
+import { tileLocalToLonLat } from '../../tileMath.js';
 
 /**
  * Decode a Mapillary coverage tile (`mly1_public`) in the browser.

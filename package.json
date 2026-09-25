@@ -42,7 +42,7 @@
     "opensky:import": "./scripts/opensky-import-client.sh",
     "preview": "vite preview",
     "qa:map-source-tray": "node scripts/qa-map-source-tray.mjs",
-    "qa:mapillary": "node scripts/qa-mapillary.mjs",
+    "qa:street-level": "node scripts/qa-street-level.mjs",
     "qa:transit": "node scripts/qa-transit.mjs",
     "test": "node scripts/run-unit-tests.mjs",
     "test:track": "node scripts/track-regression.mjs"
@@ -254,7 +254,7 @@
     "./server/providers/mapillary": {
       "node": "./server/providers/mapillary.js"
     },
-    "./layers/mapillary": "./src/layers/mapillary/index.js",
-    "./layers/mapillary/source": "./src/layers/mapillary/source.js"
+    "./layers/street-level": "./src/layers/streetLevel/index.js",
+    "./layers/street-level/mapillary/source": "./src/layers/streetLevel/providers/mapillary/source.js"
   }
 }

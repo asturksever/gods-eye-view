@@ -1,22 +1,22 @@
-import { presentMapillaryPanel } from './mapillaryPresentation.js';
+import { presentStreetLevelPanel } from './streetLevelPresentation.js';
 
-export { mapillaryImageUrl } from './mapillaryPresentation.js';
-
-const RENDER_MODE_KEY = 'gev:mapillary:render-mode';
+const RENDER_MODE_KEY = 'gev:street-level:render-mode';
+/** Key the panel used before it became provider-neutral. */
+const LEGACY_RENDER_MODE_KEY = 'gev:mapillary:render-mode';
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * Own the Street Level panel: the imagery filters, the legend and the
- * embedded MapillaryJS viewer. The panel itself is
+ * embedded street-level viewer. The panel itself is
  * ordinary GEV chrome (collapse button, rail layout, persistence) driven by
  * the application shell; this class only fills the body and asks the shell
  * to open the panel when something worth seeing arrives.
  */
-export class MapillaryControls {
-  constructor({ root, mapillary, actions }) {
+export class StreetLevelControls {
+  constructor({ root, layer, actions }) {
     this.root = root;
-    this.mapillary = mapillary;
+    this.layer = layer;
     this.actions = actions;
     this.destroyed = false;
     this.listeners = new AbortController();
@@ -34,24 +34,24 @@ export class MapillaryControls {
   _collect() {
     const byId = (id) => this.root?.querySelector(`#${id}`) || null;
     return {
-      status: byId('mly-status'),
-      controls: byId('mly-controls'),
-      enableBtn: byId('mly-enable-btn'),
-      lookBtn: byId('mly-look-btn'),
-      error: byId('mly-error'),
-      errorText: byId('mly-error-text'),
-      sinceSelect: byId('mly-since'),
-      legend: byId('mly-legend'),
-      followBtn: byId('mly-follow-btn'),
-      viewerWrap: byId('mly-viewer-wrap'),
-      viewerExpand: byId('mly-viewer-expand'),
-      viewerClose: byId('mly-viewer-close'),
-      viewerPlaceholder: byId('mly-viewer-placeholder'),
-      viewer: byId('mly-viewer'),
-      imageBy: byId('mly-image-by'),
-      imageWhen: byId('mly-image-when'),
-      imageLink: byId('mly-image-link'),
-      coverageMeta: byId('mly-coverage-meta'),
+      status: byId('sl-status'),
+      controls: byId('sl-controls'),
+      enableBtn: byId('sl-enable-btn'),
+      lookBtn: byId('sl-look-btn'),
+      error: byId('sl-error'),
+      errorText: byId('sl-error-text'),
+      sinceSelect: byId('sl-since'),
+      legend: byId('sl-legend'),
+      followBtn: byId('sl-follow-btn'),
+      viewerWrap: byId('sl-viewer-wrap'),
+      viewerExpand: byId('sl-viewer-expand'),
+      viewerClose: byId('sl-viewer-close'),
+      viewerPlaceholder: byId('sl-viewer-placeholder'),
+      viewer: byId('sl-viewer'),
+      imageBy: byId('sl-image-by'),
+      imageWhen: byId('sl-image-when'),
+      imageLink: byId('sl-image-link'),
+      coverageMeta: byId('sl-coverage-meta'),
     };
   }
 
@@ -65,16 +65,16 @@ export class MapillaryControls {
   _bind() {
     const el = this._elements;
     if (!this.root) return;
-    this.mapillary.attachViewerHost?.(el.viewer);
+    this.layer.attachViewerHost?.(el.viewer);
 
     this.listen(el.enableBtn, 'click', () => this._toggleEnabled());
     this.listen(el.lookBtn, 'click', async () => {
       if (!(await this._ensureEnabled())) return;
-      this.mapillary.openNearest?.();
+      this.layer.openNearest?.();
     });
-    for (const button of this.root.querySelectorAll('[data-mly-pano]')) {
+    for (const button of this.root.querySelectorAll('[data-sl-pano]')) {
       this.listen(button, 'click', () =>
-        this.mapillary.setCoverageFilter?.({ pano: button.dataset.mlyPano }),
+        this.layer.setCoverageFilter?.({ pano: button.dataset.slPano }),
       );
     }
     this.listen(el.sinceSelect, 'change', () => {
@@ -84,19 +84,19 @@ export class MapillaryControls {
         sinceMs = Date.UTC(Number(value.slice(5)), 0, 1);
       else if (Number(value) > 0)
         sinceMs = Date.now() - Number(value) * 86_400_000;
-      this.mapillary.setCoverageFilter?.({ sinceMs });
+      this.layer.setCoverageFilter?.({ sinceMs });
     });
     this.listen(el.followBtn, 'click', () => {
-      this.mapillary.setFollow?.(!(this._state?.street?.follow === true));
+      this.layer.setFollow?.(!(this._state?.street?.follow === true));
     });
-    this.listen(el.viewerClose, 'click', () => this.mapillary.closeViewer?.());
+    this.listen(el.viewerClose, 'click', () => this.layer.closeViewer?.());
     this.listen(el.viewerExpand, 'click', () =>
       this.setViewerExpanded(!this.isViewerExpanded()),
     );
-    for (const button of this.root.querySelectorAll('[data-mly-render]')) {
+    for (const button of this.root.querySelectorAll('[data-sl-render]')) {
       this.listen(button, 'click', () => {
-        const mode = button.dataset.mlyRender;
-        this.mapillary.setViewerRenderMode?.(mode);
+        const mode = button.dataset.slRender;
+        this.layer.setViewerRenderMode?.(mode);
         try {
           localStorage.setItem(RENDER_MODE_KEY, mode);
         } catch {
@@ -105,9 +105,11 @@ export class MapillaryControls {
       });
     }
     try {
-      const stored = localStorage.getItem(RENDER_MODE_KEY);
+      const stored =
+        localStorage.getItem(RENDER_MODE_KEY) ??
+        localStorage.getItem(LEGACY_RENDER_MODE_KEY);
       if (stored === 'fill' || stored === 'letterbox')
-        this.mapillary.setViewerRenderMode?.(stored);
+        this.layer.setViewerRenderMode?.(stored);
     } catch {
       /* storage unavailable */
     }
@@ -121,7 +123,7 @@ export class MapillaryControls {
         queued = true;
         requestAnimationFrame(() => {
           queued = false;
-          this.mapillary.resizeViewer?.();
+          this.layer.resizeViewer?.();
         });
       });
       this._resizeObserver.observe(el.viewer);
@@ -154,23 +156,20 @@ export class MapillaryControls {
     this._unsubscribe?.();
     this._unsubscribe = null;
     if (this.destroyed || !this.root) return;
-    this._unsubscribe = this.mapillary.subscribe?.((state) =>
-      this.render(state),
-    );
-    if (this.mapillary.getUIState) this.render(this.mapillary.getUIState());
+    this._unsubscribe = this.layer.subscribe?.((state) => this.render(state));
+    if (this.layer.getUIState) this.render(this.layer.getUIState());
   }
 
   /** Ask the shell to open (or close) the rail panel. */
   setCollapsed(collapsed, options = {}) {
     this.actions.setPanelCollapsed?.(collapsed, options);
-    if (!collapsed)
-      requestAnimationFrame(() => this.mapillary.resizeViewer?.());
+    if (!collapsed) requestAnimationFrame(() => this.layer.resizeViewer?.());
   }
 
   isViewerExpanded() {
     return (
       this._elements.viewerWrap?.classList.contains(
-        'mly-viewer-wrap-expanded',
+        'sl-viewer-wrap-expanded',
       ) === true
     );
   }
@@ -187,14 +186,14 @@ export class MapillaryControls {
       this._wrapHome = { parent: wrap.parentNode, next: wrap.nextSibling };
       this._expandReturnFocus = document.activeElement;
       document.body.appendChild(wrap);
-      wrap.classList.add('mly-viewer-wrap-expanded');
+      wrap.classList.add('sl-viewer-wrap-expanded');
       wrap.setAttribute('role', 'dialog');
       wrap.setAttribute('aria-modal', 'true');
       wrap.setAttribute('aria-label', 'Street-level image');
       wrap.tabIndex = -1;
       wrap.focus({ preventScroll: true });
     } else {
-      wrap.classList.remove('mly-viewer-wrap-expanded');
+      wrap.classList.remove('sl-viewer-wrap-expanded');
       wrap.removeAttribute('role');
       wrap.removeAttribute('aria-modal');
       wrap.removeAttribute('aria-label');
@@ -210,14 +209,14 @@ export class MapillaryControls {
     }
     const button = this._elements.viewerExpand;
     if (button) {
-      const icon = button.querySelector('.mly-btn-icon');
-      const text = button.querySelector('.mly-btn-text');
+      const icon = button.querySelector('.sl-btn-icon');
+      const text = button.querySelector('.sl-btn-text');
       if (icon) icon.textContent = on ? '⤡' : '⤢';
       if (text) text.textContent = on ? 'SHRINK' : 'EXPAND';
       button.setAttribute('aria-pressed', String(on));
       button.setAttribute('aria-label', on ? 'Shrink' : 'Expand');
     }
-    requestAnimationFrame(() => this.mapillary.resizeViewer?.());
+    requestAnimationFrame(() => this.layer.resizeViewer?.());
   }
 
   _onDialogKey(event) {
@@ -251,7 +250,7 @@ export class MapillaryControls {
   render(state) {
     if (this.destroyed || !state || !this.root) return;
     this._state = state;
-    const view = presentMapillaryPanel(state);
+    const view = presentStreetLevelPanel(state);
     this._view = view;
     this._renderHeader(view);
     this._renderGate(view);
@@ -264,10 +263,10 @@ export class MapillaryControls {
 
   _renderHeader(view) {
     const el = this._elements;
-    this.root.dataset.mlyEnabled = String(view.enabled);
+    this.root.dataset.slEnabled = String(view.enabled);
     if (el.status) {
       el.status.textContent = view.status.text;
-      el.status.className = `mly-status${view.status.tone ? ` is-${view.status.tone}` : ''}`;
+      el.status.className = `sl-status${view.status.tone ? ` is-${view.status.tone}` : ''}`;
     }
     if (el.enableBtn) {
       el.enableBtn.textContent = view.enableButton.text;
@@ -292,8 +291,8 @@ export class MapillaryControls {
 
   _renderFilters(view) {
     const el = this._elements;
-    for (const button of this.root.querySelectorAll('[data-mly-pano]')) {
-      const active = button.dataset.mlyPano === view.filter.pano;
+    for (const button of this.root.querySelectorAll('[data-sl-pano]')) {
+      const active = button.dataset.slPano === view.filter.pano;
       button.classList.toggle('is-active', active);
       button.setAttribute('aria-checked', String(active));
     }
@@ -302,7 +301,7 @@ export class MapillaryControls {
         ...view.legend.map((entry) => {
           const item = document.createElement('li');
           const swatch = document.createElement('i');
-          swatch.className = 'mly-legend-swatch';
+          swatch.className = 'sl-legend-swatch';
           swatch.style.background = entry.color;
           const label = document.createElement('span');
           label.textContent = entry.label;
@@ -323,8 +322,8 @@ export class MapillaryControls {
       el.followBtn.setAttribute('aria-pressed', String(viewer.follow.pressed));
       el.followBtn.disabled = viewer.follow.disabled;
     }
-    for (const button of this.root.querySelectorAll('[data-mly-render]')) {
-      const active = button.dataset.mlyRender === viewer.renderMode;
+    for (const button of this.root.querySelectorAll('[data-sl-render]')) {
+      const active = button.dataset.slRender === viewer.renderMode;
       button.classList.toggle('is-active', active);
       button.setAttribute('aria-checked', String(active));
     }
@@ -335,7 +334,7 @@ export class MapillaryControls {
       el.imageLink.hidden = !viewer.link;
       if (viewer.link) el.imageLink.href = viewer.link;
     }
-    if (state.street.open) this.mapillary.resizeViewer?.();
+    if (state.street.open) this.layer.resizeViewer?.();
   }
 
   _renderMeta(view) {
@@ -361,6 +360,6 @@ export class MapillaryControls {
     this._resizeObserver = null;
     this._unsubscribe?.();
     this._unsubscribe = null;
-    this.mapillary.attachViewerHost?.(null);
+    this.layer.attachViewerHost?.(null);
   }
 }

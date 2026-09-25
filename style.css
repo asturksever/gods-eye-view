@@ -12,7 +12,7 @@
    loaded lazily on first image open while its controls need styling as soon
    as that first image lands; ~9 KB gzipped. */
 @import './src/ui/styles/mapillary-js.css';
-@import './src/ui/styles/mapillary.css';
+@import './src/ui/styles/street-level.css';
 @import './src/ui/styles/scenes.css';
 @import './src/ui/styles/bhote-koshi.css';
 @import './src/ui/styles/recent-imagery.css';

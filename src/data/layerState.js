@@ -498,7 +498,6 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
     disposition: 'enabled-only',
   }),
   Object.freeze({ id: 'local-firms', token: 'w', disposition: 'enabled-only' }),
-  Object.freeze({ id: 'mapillary', token: '3', disposition: 'enabled-only' }),
   Object.freeze({
     id: 'military',
     token: 'm',
@@ -537,6 +536,11 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
     token: 's',
     disposition: 'enabled+options',
     optionOwner: 'satellites',
+  }),
+  Object.freeze({
+    id: 'street-level',
+    token: '3',
+    disposition: 'enabled-only',
   }),
   Object.freeze({
     id: 'telegeography-submarine-cables',

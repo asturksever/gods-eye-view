@@ -32,7 +32,7 @@ const PANEL_GROUPS = [
   },
   {
     label: 'Cameras',
-    ids: ['cctv', 'recent-imagery', 'mapillary'],
+    ids: ['cctv', 'recent-imagery', 'street-level'],
   },
   {
     label: 'Infrastructure',
@@ -73,7 +73,7 @@ const PANEL_LABELS = {
   'ais-live-vessels': 'Live Vessels',
   bikeshare: 'Bike Share',
   cctv: 'Cameras',
-  mapillary: 'Street Level (Mapillary)',
+  'street-level': 'Street Level',
   'alpr-cameras': 'Mapped ALPR Cameras',
   'local-datacenters': 'Data Centers',
   'local-firms': 'Active Fires',

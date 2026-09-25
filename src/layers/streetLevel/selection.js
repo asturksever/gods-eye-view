@@ -1,5 +1,8 @@
 import * as Cesium from 'cesium';
-import { MAPILLARY_LAYER_ID, PICK_PREFIX } from './policy.js';
+import {
+  STREET_LEVEL_LAYER_ID,
+  PICK_PREFIX,
+} from './providers/mapillary/policy.js';
 
 /** Click handling for coverage lines and image cones. */
 export function createSelection({ state, parts }) {
@@ -90,7 +93,7 @@ export function createSelection({ state, parts }) {
       Cesium.ScreenSpaceEventType.MOUSE_MOVE,
     );
     document.addEventListener('keydown', onKeyDown);
-    picking?.registerPickOwner?.(MAPILLARY_LAYER_ID, ownsPick);
+    picking?.registerPickOwner?.(STREET_LEVEL_LAYER_ID, ownsPick);
   }
 
   function uninstall() {
@@ -102,7 +105,7 @@ export function createSelection({ state, parts }) {
       state.clickHandler.destroy();
     state.clickHandler = null;
     document.removeEventListener('keydown', onKeyDown);
-    picking?.unregisterPickOwner?.(MAPILLARY_LAYER_ID);
+    picking?.unregisterPickOwner?.(STREET_LEVEL_LAYER_ID);
   }
 
   return { install, uninstall, ownsPick };

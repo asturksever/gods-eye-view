@@ -1,5 +1,5 @@
 import * as Cesium from 'cesium';
-import { imageConeGlyph } from './glyphs.js';
+import { imageConeGlyph } from '../../glyphs.js';
 import { passesImageryFilter } from './coverage.js';
 import {
   COLORS,
@@ -64,7 +64,7 @@ export function createSequences({ state, source, parts }) {
       });
       viewer.scene.primitives.add(state.sequence.collection);
       sprites?.registerSpriteCollection?.(
-        'mapillary',
+        'street-level:mapillary-cones',
         state.sequence.collection,
       );
     }
@@ -74,7 +74,7 @@ export function createSequences({ state, source, parts }) {
       });
       viewer.scene.primitives.add(state.street.markerCollection);
       sprites?.registerSpriteCollection?.(
-        'mapillary',
+        'street-level:marker',
         state.street.markerCollection,
       );
     }
@@ -199,7 +199,7 @@ export function createSequences({ state, source, parts }) {
         id: PICK_PREFIX.position,
         position: cartesian,
         image: (id) =>
-          import('./glyphs.js').then((m) =>
+          import('../../glyphs.js').then((m) =>
             m.positionMarkerGlyph({ color: COLORS.position }),
           ),
         imageId: 'mly-position',
@@ -232,14 +232,17 @@ export function createSequences({ state, source, parts }) {
     for (const key of ['collection']) {
       const collection = state.sequence[key];
       if (collection) {
-        sprites?.unregisterSpriteCollection?.('mapillary', collection);
+        sprites?.unregisterSpriteCollection?.(
+          'street-level:mapillary-cones',
+          collection,
+        );
         viewer?.scene?.primitives?.remove(collection);
         state.sequence[key] = null;
       }
     }
     if (state.street.markerCollection) {
       sprites?.unregisterSpriteCollection?.(
-        'mapillary',
+        'street-level:marker',
         state.street.markerCollection,
       );
       viewer?.scene?.primitives?.remove(state.street.markerCollection);

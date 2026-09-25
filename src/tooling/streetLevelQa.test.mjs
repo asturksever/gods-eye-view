@@ -5,7 +5,7 @@ import {
   isCollapsed,
   RAIL_ORDER,
   VIEWPORTS,
-} from '../../scripts/qa-mapillary.mjs';
+} from '../../scripts/qa-street-level.mjs';
 
 test('the QA harness exercises both review viewports', () => {
   assert.deepEqual(
@@ -20,7 +20,7 @@ test('rail order puts Street Level between CCTV and Context', () => {
     'cctv-panel',
     'weather-panel',
     'recent-imagery-panel',
-    'mapillary-panel',
+    'street-level-panel',
     'global-context-panel',
   ]);
   assert.equal(isCollapsed(['panel-collapsible', 'collapsed']), true);
@@ -29,7 +29,7 @@ test('rail order puts Street Level between CCTV and Context', () => {
 
 test('the harness only runs its browser flow when executed directly', () => {
   const source = fs.readFileSync(
-    new URL('../../scripts/qa-mapillary.mjs', import.meta.url),
+    new URL('../../scripts/qa-street-level.mjs', import.meta.url),
     'utf8',
   );
   assert.match(

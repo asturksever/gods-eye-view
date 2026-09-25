@@ -93,7 +93,7 @@ test('controls bind catalog instances rather than similarly named defaults', () 
     'military-awareness',
     'military-installations',
     'rocket-launches',
-    'mapillary',
+    'street-level',
     'local-adsb',
   ];
   const layers = ids.map((id) => ({ id }));

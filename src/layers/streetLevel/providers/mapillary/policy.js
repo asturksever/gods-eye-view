@@ -1,5 +1,5 @@
 /** Identity and tuning for the Mapillary street-level layer. */
-export const MAPILLARY_LAYER_ID = 'mapillary';
+export const STREET_LEVEL_LAYER_ID = 'street-level';
 export const MAPILLARY_KEY_ID = 'mapillary';
 export const MAPILLARY_GRAPH_HOST = 'https://graph.mapillary.com';
 

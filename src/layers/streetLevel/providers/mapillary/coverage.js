@@ -4,7 +4,7 @@ import {
   coverageZoomForHeight,
   overviewZoomForHeight,
   tilesForBbox,
-} from './tileMath.js';
+} from '../../tileMath.js';
 import {
   COLORS,
   COVERAGE_LINE_WIDTH_PX,

@@ -162,7 +162,7 @@
 }
 #right-context-rail > #pp-toggles,
 #right-context-rail > #cctv-panel,
-#right-context-rail > #mapillary-panel,
+#right-context-rail > #street-level-panel,
 #right-context-rail > #weather-panel,
 #right-context-rail > #recent-imagery-panel,
 #right-context-rail > #global-context-panel {
@@ -177,7 +177,7 @@
   pointer-events: auto;
 }
 #right-context-rail #cctv-panel,
-#right-context-rail #mapillary-panel,
+#right-context-rail #street-level-panel,
 #right-context-rail #weather-panel,
 #right-context-rail #recent-imagery-panel {
   width: 100%;
@@ -193,7 +193,7 @@
   min-height: 0;
 }
 #right-context-rail #cctv-panel.collapsed,
-#right-context-rail #mapillary-panel.collapsed,
+#right-context-rail #street-level-panel.collapsed,
 #right-context-rail #weather-panel.collapsed,
 #right-context-rail #recent-imagery-panel.collapsed {
   width: var(--right-display-collapsed-width);
@@ -208,7 +208,7 @@
 }
 #right-context-rail > #pp-toggles.collapsed .pp-header-row,
 #right-context-rail #cctv-panel.collapsed .cctv-panel-inner,
-#right-context-rail #mapillary-panel.collapsed .mapillary-panel-inner,
+#right-context-rail #street-level-panel.collapsed .street-level-panel-inner,
 #right-context-rail #weather-panel.collapsed .weather-panel-inner,
 #right-context-rail #recent-imagery-panel.collapsed .recent-imagery-panel-inner,
 #right-context-rail
@@ -219,7 +219,9 @@
   box-sizing: border-box;
 }
 #right-context-rail #cctv-panel:not(.collapsed) .cctv-panel-inner,
-#right-context-rail #mapillary-panel:not(.collapsed) .mapillary-panel-inner {
+#right-context-rail
+  #street-level-panel:not(.collapsed)
+  .street-level-panel-inner {
   max-height: 100%;
   overflow-y: auto;
   scrollbar-gutter: stable;
@@ -267,7 +269,7 @@
 }
 #right-context-rail.layout-focus > #pp-toggles:not(.collapsed),
 #right-context-rail.layout-focus > #cctv-panel:not(.collapsed),
-#right-context-rail.layout-focus > #mapillary-panel:not(.collapsed),
+#right-context-rail.layout-focus > #street-level-panel:not(.collapsed),
 #right-context-rail.layout-focus > #weather-panel:not(.collapsed),
 #right-context-rail.layout-focus > #recent-imagery-panel:not(.collapsed),
 #right-context-rail.layout-focus > #global-context-panel:not(.collapsed) {
@@ -289,8 +291,8 @@
   > #cctv-panel:not(.collapsed)
   .cctv-panel-inner,
 #right-context-rail.layout-focus
-  > #mapillary-panel:not(.collapsed)
-  .mapillary-panel-inner,
+  > #street-level-panel:not(.collapsed)
+  .street-level-panel-inner,
 #right-context-rail.layout-focus
   > #recent-imagery-panel:not(.collapsed)
   .recent-imagery-panel-inner,

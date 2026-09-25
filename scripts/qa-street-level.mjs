@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Browser QA for the Street Level (Mapillary) layer against a running dev
+ * Browser QA for the Street Level layer against a running dev
  * server: the panel's place in the right rail, the keyless gate, coverage,
- * the embedded viewer and its expanded dialog. Run with `npm run qa:mapillary -- --url http://localhost:4173`.
+ * the embedded viewer and its expanded dialog. Run with `npm run qa:street-level -- --url http://localhost:4173`.
  * Without MAPILLARY_CLIENT_TOKEN on the server only the keyless steps run.
  */
 import assert from 'node:assert/strict';
@@ -20,7 +20,7 @@ export const RAIL_ORDER = Object.freeze([
   'cctv-panel',
   'weather-panel',
   'recent-imagery-panel',
-  'mapillary-panel',
+  'street-level-panel',
   'global-context-panel',
 ]);
 
@@ -79,10 +79,10 @@ async function main() {
         el.remove();
     });
     const module = () =>
-      window.__godsEyeView.dataManager.layers.get('mapillary').module;
+      window.__godsEyeView.dataManager.layers.get('street-level').module;
     const panel = () =>
       page.evaluate(() => {
-        const el = document.getElementById('mapillary-panel');
+        const el = document.getElementById('street-level-panel');
         const rail = document.getElementById('right-context-rail');
         const box = el.getBoundingClientRect();
         return {
@@ -90,9 +90,9 @@ async function main() {
           classes: [...el.classList],
           width: Math.round(box.width),
           right: Math.round(box.right),
-          status: document.getElementById('mly-status').textContent,
-          controlsDisabled: document.getElementById('mly-controls').disabled,
-          bodyDisplay: getComputedStyle(document.getElementById('mly-body'))
+          status: document.getElementById('sl-status').textContent,
+          controlsDisabled: document.getElementById('sl-controls').disabled,
+          bodyDisplay: getComputedStyle(document.getElementById('sl-body'))
             .display,
         };
       });
@@ -115,7 +115,7 @@ async function main() {
     }
     await page.setViewport(VIEWPORTS[0]);
     await page.click(
-      '.panel-collapse-btn[data-collapse-target="mapillary-panel"]',
+      '.panel-collapse-btn[data-collapse-target="street-level-panel"]',
     );
     await sleep(500);
     await step(
@@ -126,7 +126,7 @@ async function main() {
         assert.equal(info.bodyDisplay, 'flex');
         assert.equal(
           await page.evaluate(
-            () => document.querySelectorAll('#mly-legend li').length,
+            () => document.querySelectorAll('#sl-legend li').length,
           ),
           4,
         );
@@ -137,7 +137,7 @@ async function main() {
         'keyless install gates the controls and reports KEY REQUIRED',
         async () => {
           await page.evaluate(() =>
-            window.__godsEyeView.dataManager.setEnabled('mapillary', true, {
+            window.__godsEyeView.dataManager.setEnabled('street-level', true, {
               origin: 'user',
             }),
           );
@@ -179,14 +179,14 @@ async function main() {
       'enabling draws coverage and registers the on-globe credit',
       async () => {
         await page.evaluate(() =>
-          window.__godsEyeView.dataManager.setEnabled('mapillary', true, {
+          window.__godsEyeView.dataManager.setEnabled('street-level', true, {
             origin: 'user',
           }),
         );
         await page.waitForFunction(
           () => {
             const u = window.__godsEyeView.dataManager.layers
-              .get('mapillary')
+              .get('street-level')
               .module.getUIState();
             return u.coverage.sequences > 0 && !u.coverage.loading;
           },
@@ -206,13 +206,13 @@ async function main() {
       async () => {
         await page.evaluate(() =>
           window.__godsEyeView.dataManager.layers
-            .get('mapillary')
+            .get('street-level')
             .module.openNearest(),
         );
         await page.waitForFunction(
           () => {
             const s = window.__godsEyeView.dataManager.layers
-              .get('mapillary')
+              .get('street-level')
               .module.getUIState().street;
             return s.imageId || s.error;
           },
@@ -221,7 +221,7 @@ async function main() {
         const street = await page.evaluate(
           () =>
             window.__godsEyeView.dataManager.layers
-              .get('mapillary')
+              .get('street-level')
               .module.getUIState().street,
         );
         assert.equal(street.error, null, `viewer error: ${street.error}`);
@@ -229,20 +229,20 @@ async function main() {
         try {
           await page.waitForFunction(
             () =>
-              document.getElementById('mly-image-when').textContent.trim()
+              document.getElementById('sl-image-when').textContent.trim()
                 .length > 0,
             { timeout: 30_000 },
           );
         } catch (error) {
           const dump = await page.evaluate(() => {
             const u = window.__godsEyeView.dataManager.layers
-              .get('mapillary')
+              .get('street-level')
               .module.getUIState();
             return {
               street: u.street,
-              wrapHidden: document.getElementById('mly-viewer-wrap').hidden,
+              wrapHidden: document.getElementById('sl-viewer-wrap').hidden,
               collapsed: document
-                .getElementById('mapillary-panel')
+                .getElementById('street-level-panel')
                 .classList.contains('collapsed'),
             };
           });
@@ -252,10 +252,10 @@ async function main() {
           );
         }
         const view = await page.evaluate(() => ({
-          hidden: document.getElementById('mly-viewer-wrap').hidden,
-          when: document.getElementById('mly-image-when').textContent.trim(),
+          hidden: document.getElementById('sl-viewer-wrap').hidden,
+          when: document.getElementById('sl-image-when').textContent.trim(),
           width: Math.round(
-            document.getElementById('mly-viewer').getBoundingClientRect().width,
+            document.getElementById('sl-viewer').getBoundingClientRect().width,
           ),
         }));
         assert.equal(view.hidden, false);
@@ -266,10 +266,10 @@ async function main() {
     await step(
       'EXPAND opens a modal dialog and Esc returns focus to the button',
       async () => {
-        await page.click('#mly-viewer-expand');
+        await page.click('#sl-viewer-expand');
         await sleep(600);
         const dialog = await page.evaluate(() => {
-          const wrap = document.getElementById('mly-viewer-wrap');
+          const wrap = document.getElementById('sl-viewer-wrap');
           return {
             role: wrap.getAttribute('role'),
             modal: wrap.getAttribute('aria-modal'),
@@ -287,21 +287,21 @@ async function main() {
           await page
             .evaluate(() => ({
               expanded: document
-                .getElementById('mly-viewer-wrap')
-                .classList.contains('mly-viewer-wrap-expanded'),
+                .getElementById('sl-viewer-wrap')
+                .classList.contains('sl-viewer-wrap-expanded'),
               focus: document.activeElement?.id,
             }))
             .then((r) => `${r.expanded}:${r.focus}`),
-          'false:mly-viewer-expand',
+          'false:sl-viewer-expand',
         );
       },
     );
     await step('× closes the image and deselects it on the globe', async () => {
-      await page.click('#mly-viewer-close');
+      await page.click('#sl-viewer-close');
       await sleep(500);
       const after = await page.evaluate(() => {
         const u = window.__godsEyeView.dataManager.layers
-          .get('mapillary')
+          .get('street-level')
           .module.getUIState();
         return { open: u.street.open, sequence: u.sequence.selectedId };
       });

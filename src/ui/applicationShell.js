@@ -15,7 +15,7 @@ import { readShellElements } from './shellElements.js';
 import { CockpitCoordinator } from './cockpitCoordinator.js';
 import { ContextControls } from './context.js';
 import { CctvControls } from './cctv.js';
-import { MapillaryControls } from './mapillaryControls.js';
+import { StreetLevelControls } from './streetLevelControls.js';
 import { RadioControls } from './radio.js';
 import { LocalSdrControls } from './localSdrControls.js';
 import { LocationNavigation } from './locationNavigation.js';
@@ -570,7 +570,7 @@ export class StyleManager extends ShellFacade {
     this._initRightPanelAdaptiveLayout();
     this._initRadioPanel();
     this._initCctvPanel();
-    this._initMapillaryPanel();
+    this._initStreetLevelPanel();
     this._initGlobalContextPanel();
     this._initLocationBar();
     this._initShareButton();
@@ -933,26 +933,26 @@ export class StyleManager extends ShellFacade {
   }
 
   /** Compose camera panel controls from the existing camera port and application actions. */
-  _initMapillaryPanel() {
-    const { mapillaryLayer } = this.services;
-    this._mapillaryControls?.destroy();
-    this._mapillaryControls = null;
-    if (!this._mapillaryPanel || !mapillaryLayer) return;
-    this._mapillaryControls = new MapillaryControls({
-      root: this._mapillaryPanel,
-      mapillary: mapillaryLayer,
+  _initStreetLevelPanel() {
+    const { streetLevelLayer } = this.services;
+    this._streetLevelControls?.destroy();
+    this._streetLevelControls = null;
+    if (!this._streetLevelPanel || !streetLevelLayer) return;
+    this._streetLevelControls = new StreetLevelControls({
+      root: this._streetLevelPanel,
+      layer: streetLevelLayer,
       actions: {
-        isEnabled: () => this._dataManager?.isEnabled('mapillary') === true,
+        isEnabled: () => this._dataManager?.isEnabled('street-level') === true,
         setEnabled: (enabled) =>
-          this._dataManager?.setEnabled('mapillary', enabled, {
+          this._dataManager?.setEnabled('street-level', enabled, {
             origin: 'user',
           }),
         setPanelCollapsed: (collapsed, options) =>
-          this.setPanelCollapsed('mapillary-panel', collapsed, options),
+          this.setPanelCollapsed('street-level-panel', collapsed, options),
         showToast: (message) => this._showToast(message),
       },
     });
-    this._mapillaryControls.connect();
+    this._streetLevelControls.connect();
   }
 
   _initCctvPanel() {
@@ -1557,7 +1557,7 @@ export class StyleManager extends ShellFacade {
     this._cameraOrientationControls?.destroy();
     this._clearLayersControl?.destroy();
     this._cctvControls?.destroy();
-    this._mapillaryControls?.destroy();
+    this._streetLevelControls?.destroy();
     this._radioControls?.destroy();
     this._localSdrControls?.destroy();
     this._cockpitCoordinator.stop();

@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   mapillaryImageUrl,
-  presentMapillaryPanel,
-} from './mapillaryPresentation.js';
+  presentStreetLevelPanel,
+} from './streetLevelPresentation.js';
 
 function snapshot(overrides = {}) {
   const base = {
@@ -59,45 +59,48 @@ function deepMerge(target, source) {
 }
 
 test('a missing Mapillary token gates every control and flags KEY REQUIRED', () => {
-  const view = presentMapillaryPanel(snapshot({ keyRequired: true }));
+  const view = presentStreetLevelPanel(snapshot({ keyRequired: true }));
   assert.equal(view.controlsDisabled, true);
   assert.deepEqual(view.status, { text: 'KEY REQUIRED', tone: 'warn' });
 });
 
 test('status reads LOADING while coverage streams, then ON or OFF', () => {
-  assert.deepEqual(presentMapillaryPanel(snapshot()).status, {
+  assert.deepEqual(presentStreetLevelPanel(snapshot()).status, {
     text: 'OFF',
     tone: '',
   });
   assert.deepEqual(
-    presentMapillaryPanel(
+    presentStreetLevelPanel(
       snapshot({ enabled: true, coverage: { loading: true } }),
     ).status,
     { text: 'LOADING', tone: 'busy' },
   );
-  assert.deepEqual(presentMapillaryPanel(snapshot({ enabled: true })).status, {
-    text: 'ON',
-    tone: 'on',
-  });
+  assert.deepEqual(
+    presentStreetLevelPanel(snapshot({ enabled: true })).status,
+    {
+      text: 'ON',
+      tone: 'on',
+    },
+  );
 });
 
 test('errors from the viewer or the coverage web surface in one alert', () => {
-  assert.equal(presentMapillaryPanel(snapshot()).error, null);
+  assert.equal(presentStreetLevelPanel(snapshot()).error, null);
   assert.equal(
-    presentMapillaryPanel(
+    presentStreetLevelPanel(
       snapshot({ street: { error: 'Image could not be opened' } }),
     ).error,
     'Image could not be opened',
   );
   assert.equal(
-    presentMapillaryPanel(snapshot({ coverage: { error: 'Tile HTTP 502' } }))
+    presentStreetLevelPanel(snapshot({ coverage: { error: 'Tile HTTP 502' } }))
       .error,
     'Tile HTTP 502',
   );
 });
 
 test('legend passes through in the layer’s order', () => {
-  const view = presentMapillaryPanel(snapshot());
+  const view = presentStreetLevelPanel(snapshot());
   assert.deepEqual(
     view.legend.map((entry) => entry.key),
     ['recent', 'older', 'pano', 'selected'],
@@ -105,12 +108,12 @@ test('legend passes through in the layer’s order', () => {
 });
 
 test('the meta line never mixes the visible-sequence count with the selected sequence', () => {
-  assert.equal(presentMapillaryPanel(snapshot()).meta, '');
-  const browsing = presentMapillaryPanel(
+  assert.equal(presentStreetLevelPanel(snapshot()).meta, '');
+  const browsing = presentStreetLevelPanel(
     snapshot({ enabled: true, coverage: { zoom: 14, sequences: 812 } }),
   );
   assert.match(browsing.meta, /^812 sequences in view · click a line/);
-  const selected = presentMapillaryPanel(
+  const selected = presentStreetLevelPanel(
     snapshot({
       enabled: true,
       coverage: { zoom: 14, sequences: 812 },
@@ -119,7 +122,7 @@ test('the meta line never mixes the visible-sequence count with the selected seq
   );
   assert.equal(selected.meta, '33 images in this sequence · Esc clears');
   assert.doesNotMatch(selected.meta, /sequences in view/);
-  const hinted = presentMapillaryPanel(
+  const hinted = presentStreetLevelPanel(
     snapshot({
       enabled: true,
       coverage: { hint: 'Point the camera at the globe' },
@@ -129,7 +132,7 @@ test('the meta line never mixes the visible-sequence count with the selected seq
 });
 
 test('viewer caption reads "Image by" left and date right, with a deep link', () => {
-  const view = presentMapillaryPanel(
+  const view = presentStreetLevelPanel(
     snapshot({
       enabled: true,
       street: {
@@ -153,7 +156,7 @@ test('viewer caption reads "Image by" left and date right, with a deep link', ()
 });
 
 test('an image without a creator name leaves the left caption empty', () => {
-  const view = presentMapillaryPanel(
+  const view = presentStreetLevelPanel(
     snapshot({
       street: { open: true, imageId: '1', capturedAt: Date.UTC(2024, 0, 2) },
     }),
