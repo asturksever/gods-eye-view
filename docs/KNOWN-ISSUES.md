@@ -58,7 +58,7 @@ Related keys (current versions):
   `'1'` closed, absent means the panel's own default. A view opened from a share
   link ignores the stored value entirely.
 - Panel positions: `godsEyeView.v8.panelPos.<panel-id>` — written only for a
-  portable panel (currently CCTV) lifted out of its rail, as
+  portable panel (CCTV, Street Level) lifted out of its rail, as
   `{ left, top, width, height, floating: true }`. Deleting it, or double-clicking
   the panel header, returns that panel to the rail; docked panels store nothing.
 - CCTV calibration: `godsEyeView.cctv.calibration.v2`

@@ -388,6 +388,15 @@ export class PanelChrome {
     this.shareLinkManager?.onPanelStateChange?.();
   }
 
+  /**
+   * Dock a floating portable panel back into its rail at its default size.
+   * @param {string} panelId
+   * @returns {boolean} Whether the panel was floating.
+   */
+  dockPanel(panelId) {
+    return this._panelPosition?.dockPanel?.(panelId) === true;
+  }
+
   setPanelCollapsed(
     panelId,
     collapsed,
@@ -548,6 +557,7 @@ export class PanelChrome {
       }
     }
     panelEl.classList.toggle('collapsed', nextCollapsed);
+    this._panelPosition?.onPanelCollapsed?.(panelId, nextCollapsed);
     if (
       nextCollapsed &&
       this.cockpitView?.active &&

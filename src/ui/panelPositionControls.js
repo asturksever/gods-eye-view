@@ -14,6 +14,13 @@ const PANEL_Z_BASE = 100;
 const PANEL_Z_MAX = 139;
 /** Pointer travel before a header press becomes a drag that lifts a portable panel out. */
 const DRAG_THRESHOLD_PX = 4;
+/**
+ * Two header presses this close in time and space snap a floating panel
+ * back. Detected from pointerdown because the drag handler's
+ * preventDefault() suppresses the mouse events a native dblclick needs.
+ */
+const DOUBLE_PRESS_MS = 400;
+const DOUBLE_PRESS_SLOP_PX = 6;
 /** Viewport margin every positioned panel keeps clear. */
 const VIEWPORT_MARGIN_PX = 6;
 /** One-time hint shown the first time a portable panel leaves its rail. */
@@ -123,6 +130,7 @@ export class PanelPositionControls {
     if (this.destroyed || this._dragInitialized) return;
     this._dragInitialized = true;
     const cctvPanel = document.getElementById('cctv-panel');
+    const streetLevelPanel = document.getElementById('street-level-panel');
     // A `portable` spec lifts out of its rail on a header drag, resizes from
     // every edge and remembers its window; the others only reposition in
     // place. Another panel opts in by adding a spec here.
@@ -139,6 +147,16 @@ export class PanelPositionControls {
         portable: true,
         min: { width: 300, height: 160 },
       },
+      {
+        id: 'street-level-panel',
+        panel: streetLevelPanel,
+        handle: streetLevelPanel?.querySelector('.panel-header'),
+        portable: true,
+        min: { width: 320, height: 280 },
+        // Shrinking the window to its strip docks it, so it never sits
+        // over the globe as a stray header.
+        dockOnCollapse: true,
+      },
     ].filter(Boolean);
 
     for (const spec of dragSpecs) {
@@ -147,6 +165,7 @@ export class PanelPositionControls {
         this._portablePanels.set(spec.id, {
           panel: spec.panel,
           min: { width: 300, height: 160, ...spec.min },
+          dockOnCollapse: spec.dockOnCollapse === true,
         });
         spec.panel.classList.add('panel-portable');
       }
@@ -475,6 +494,30 @@ export class PanelPositionControls {
    * a real drag is swallowed so it cannot toggle by accident. Double-clicking
    * the header snaps the panel back.
    */
+  /**
+   * Put a floating portable panel back in its rail at its default size.
+   * @param {string} panelId
+   * @returns {boolean} Whether the panel was floating.
+   */
+  dockPanel(panelId) {
+    const portable = this._portablePanels.get(panelId);
+    if (!portable?.panel.classList.contains('panel-floating')) return false;
+    this._resetPanelPosition(panelId);
+    return true;
+  }
+
+  /**
+   * A panel was collapsed or expanded. A portable panel that opted into
+   * `dockOnCollapse` returns to its rail when collapsed while floating.
+   * @param {string} panelId
+   * @param {boolean} collapsed
+   */
+  onPanelCollapsed(panelId, collapsed) {
+    if (!collapsed || !this._portablePanels.get(panelId)?.dockOnCollapse)
+      return;
+    this.dockPanel(panelId);
+  }
+
   _makePortablePanelDraggable(panelId, panelEl, handleEl) {
     let swallowNextClick = false;
     this.listen(
@@ -494,10 +537,27 @@ export class PanelPositionControls {
       event.preventDefault();
       this._resetPanelPosition(panelId);
     });
+    let lastPress = null;
     this.listen(handleEl, 'pointerdown', (event) => {
       if (event.button !== 0) return;
       const interactive = event.target.closest?.(INTERACTIVE_SELECTOR);
       if (interactive && !interactive.matches('.panel-collapse-btn')) return;
+
+      const now = event.timeStamp || performance.now();
+      const doublePress =
+        !interactive &&
+        lastPress &&
+        now - lastPress.time <= DOUBLE_PRESS_MS &&
+        Math.hypot(event.clientX - lastPress.x, event.clientY - lastPress.y) <=
+          DOUBLE_PRESS_SLOP_PX;
+      lastPress = doublePress
+        ? null
+        : { time: now, x: event.clientX, y: event.clientY };
+      if (doublePress && panelEl.classList.contains('panel-floating')) {
+        event.preventDefault();
+        this._resetPanelPosition(panelId);
+        return;
+      }
 
       this._cancelDrag?.();
       // A header press must not start a text selection across the page.
@@ -518,6 +578,8 @@ export class PanelPositionControls {
           )
             return;
           dragging = true;
+          // A drag between two presses is not a double-click.
+          lastPress = null;
           const rect = panelEl.getBoundingClientRect();
           offsetX = startX - rect.left;
           offsetY = startY - rect.top;

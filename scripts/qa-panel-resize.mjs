@@ -117,6 +117,9 @@ async function main() {
           top: rect.top,
           width: rect.width,
           height: rect.height,
+          // handlePoint() reads the far edges for s/e handles.
+          right: rect.right,
+          bottom: rect.bottom,
           floating: panel.classList.contains('panel-floating'),
           collapsed: panel.classList.contains('collapsed'),
           inRail: panel.parentElement?.id === 'right-context-rail',
@@ -189,8 +192,11 @@ async function main() {
     assert.equal(afterLayout.allocated, '', 'the rail no longer allocates it');
     const railExcludes = await page.evaluate((id) => {
       const rail = document.getElementById('right-context-rail');
+      // Same rule as the rail: hidden panels (a layer that is off) take no room.
       const counted = [...rail.children].filter((panel) =>
-        panel.matches('[data-panel-id]:not(.panel-floating):not(.collapsed)'),
+        panel.matches(
+          '[data-panel-id]:not(.panel-floating):not(.collapsed):not([hidden])',
+        ),
       );
       return {
         expandedCount: rail.dataset.expandedCount,
@@ -210,6 +216,15 @@ async function main() {
     );
     console.log('PASS: header drag lifts CCTV out of the rail');
 
+    // Park the window near the top: the voice dock sits above every panel at
+    // the bottom of the screen and would otherwise cover the south corners
+    // once the loop below has grown the window.
+    {
+      const header = await headerPoint();
+      await drag(header, 0, 120 - header.y);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+
     // Every handle moves only its own edges.
     const limits = {
       minWidth: MIN_SIZE.width,
@@ -220,11 +235,21 @@ async function main() {
     for (const dir of RESIZE_DIRECTIONS) {
       const before = await readPanel();
       const { dx, dy } = growthDelta(dir, 40);
-      await drag(handlePoint(before, dir), dx, dy);
+      const point = handlePoint(before, dir);
+      // Name what the pointer lands on, so a covered handle is obvious.
+      const hit = await page.evaluate(({ x, y }) => {
+        const node = document.elementFromPoint(x, y);
+        if (!node) return 'nothing';
+        const dirAttr = node.dataset?.dir
+          ? `[data-dir=${node.dataset.dir}]`
+          : '';
+        return `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ''}.${[...node.classList].join('.')}${dirAttr}`;
+      }, point);
+      await drag(point, dx, dy);
       const after = await readPanel();
       const expected = resizeBox(before, dir, dx, dy, limits);
       for (const key of ['left', 'top', 'width', 'height'])
-        near(after[key], expected[key], 2, `${dir} ${key}`);
+        near(after[key], expected[key], 2, `${dir} ${key} (pointer on ${hit})`);
       assert.deepEqual(driftedEdges(before, after, dir, 2), [], `${dir} pins`);
     }
     console.log('PASS: eight resize handles keep the opposite edge pinned');
@@ -257,11 +282,21 @@ async function main() {
 
     // Double-click the header to snap back.
     const point = await headerPoint();
+    const headerHit = await page.evaluate(({ x, y }) => {
+      const node = document.elementFromPoint(x, y);
+      return node
+        ? `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ''}.${[...node.classList].join('.')}`
+        : 'nothing';
+    }, point);
     await page.mouse.click(point.x, point.y, { clickCount: 1 });
     await page.mouse.click(point.x, point.y, { clickCount: 2 });
     await new Promise((resolve) => setTimeout(resolve, 300));
     const snapped = await readPanel();
-    assert.equal(snapped.floating, false, 'double-click snaps back');
+    assert.equal(
+      snapped.floating,
+      false,
+      `double-click snaps back (pointer on ${headerHit})`,
+    );
     assert.equal(snapped.inRail, true);
     assert.equal(snapped.inlineWidth, '');
     assert.equal(snapped.inlineHeight, '');
