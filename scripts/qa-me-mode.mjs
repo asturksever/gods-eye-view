@@ -1,0 +1,428 @@
+#!/usr/bin/env node
+/**
+ * Browser proof of Me Mode: toggle row, avatar load, WASD/Shift clip changes,
+ * first-person view, voice placement/walk, fly_to redirect, camera restore and
+ * the `?avatar=` swap. Screenshots go to docs/avatar-demo/ when
+ * QA_SCREENSHOTS=1.
+ *
+ *   npm run dev   # in another terminal
+ *   node scripts/qa-me-mode.mjs [--second-avatar=/avatars/other.glb]
+ *
+ * Ground contact is measured against whatever surface is loaded: with a Google
+ * key that is the photoreal tileset; keyless it is the terrain globe.
+ */
+import fs from 'node:fs';
+import puppeteer from 'puppeteer';
+
+const BASE = process.env.QA_BASE_URL || 'http://localhost:4173';
+const SHOTS = process.env.QA_SCREENSHOTS === '1' ? 'docs/avatar-demo' : null;
+const secondAvatar =
+  process.argv
+    .find((arg) => arg.startsWith('--second-avatar='))
+    ?.split('=')[1] || null;
+const KINGS_CROSS = { lat: 51.5308, lon: -0.1238 };
+const TIMES_SQUARE = { lat: 40.758, lon: -73.9855 };
+
+const browser = await puppeteer.launch({
+  headless: true,
+  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+  protocolTimeout: 300000,
+  args: [
+    '--no-sandbox',
+    '--window-size=1280,800',
+    ...(process.platform === 'darwin'
+      ? ['--use-angle=metal', '--enable-gpu']
+      : ['--use-gl=angle', '--use-angle=swiftshader']),
+  ],
+});
+let failures = 0;
+const check = (name, passed, detail = '') => {
+  console.log(
+    `[${passed ? 'PASS' : 'FAIL'}] ${name}${detail ? ` — ${detail}` : ''}`,
+  );
+  if (!passed) failures++;
+};
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function open(page, search = '') {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  await page.setViewport({ width: 1280, height: 800 });
+  await page.goto(`${BASE}/?welcome=0${search}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await page.waitForFunction(
+    () => window.__godsEyeView?.dataManager?.layers?.get('avatar'),
+    { timeout: 120000 },
+  );
+  return errors;
+}
+
+const avatarState = () => {
+  const { viewer, dataManager } = window.__godsEyeView;
+  const avatar = dataManager.layers.get('avatar').module;
+  const primitives = viewer.scene.primitives;
+  let model = null;
+  for (let i = 0; i < primitives.length; i++) {
+    if (primitives.get(i)?.id === 'me-mode-avatar') model = primitives.get(i);
+  }
+  const animations = model?.activeAnimations;
+  return {
+    active: avatar.isActive(),
+    pose: avatar.getPose(),
+    stats: avatar.getStats(),
+    inputs: viewer.scene.screenSpaceCameraController.enableInputs,
+    modelShown: Boolean(model?.show),
+    clip: animations?.length ? animations.get(0).name : null,
+    bodyClass: document.body.classList.contains('me-mode'),
+    hint: Boolean(document.querySelector('.me-mode-hint')),
+  };
+};
+
+/** Surface height under the avatar, excluding the avatar itself. */
+const groundGap = async () => {
+  const { viewer, dataManager } = window.__godsEyeView;
+  const pose = dataManager.layers.get('avatar').module.getPose();
+  const Cesium = await import('/node_modules/cesium/Build/Cesium/index.js');
+  const carto = Cesium.Cartographic.fromDegrees(pose.lon, pose.lat);
+  // Keyless with the ellipsoid fallback terrain, the surface is exactly 0 m.
+  if (
+    viewer.scene.globe.show &&
+    viewer.terrainProvider.constructor.name === 'EllipsoidTerrainProvider'
+  )
+    return pose.height;
+  const primitives = viewer.scene.primitives;
+  const exclude = [];
+  for (let i = 0; i < primitives.length; i++)
+    if (primitives.get(i)?.id === 'me-mode-avatar')
+      exclude.push(primitives.get(i));
+  let ground = viewer.scene.sampleHeightSupported
+    ? viewer.scene.sampleHeight(carto, exclude)
+    : undefined;
+  if (!Number.isFinite(ground) && viewer.scene.globe.show)
+    ground = viewer.scene.globe.getHeight(carto);
+  return Number.isFinite(ground) ? pose.height - ground : null;
+};
+
+async function hold(page, keys, ms) {
+  await page.evaluate(() => {
+    const { viewer } = window.__godsEyeView;
+    window.__meModeFrames = 0;
+    window.__meModeFrameCounter?.();
+    window.__meModeFrameCounter = viewer.scene.postRender.addEventListener(
+      () => window.__meModeFrames++,
+    );
+  });
+  for (const key of keys) await page.keyboard.down(key);
+  await sleep(ms);
+  const mid = await page.evaluate(avatarState);
+  mid.fps = await page.evaluate(
+    (seconds) => window.__meModeFrames / seconds,
+    ms / 1000,
+  );
+  for (const key of [...keys].reverse()) await page.keyboard.up(key);
+  return mid;
+}
+
+async function screenshot(page, name) {
+  if (!SHOTS) return;
+  fs.mkdirSync(SHOTS, { recursive: true });
+  await page.screenshot({ path: `${SHOTS}/${name}.png` });
+  console.log(`  saved ${SHOTS}/${name}.png`);
+}
+
+try {
+  const page = await browser.newPage();
+  const errors = await open(page);
+  await sleep(3000);
+  check(
+    'app loads with Me Mode off',
+    !(await page.evaluate(avatarState)).active,
+  );
+
+  // Start from a camera looking at Kings Cross. Re-apply until it sticks:
+  // GEV's startup camera flight can still be running on a slow renderer.
+  await page.waitForFunction(
+    async ({ lat, lon }) => {
+      const { viewer } = window.__godsEyeView;
+      const Cesium = await import('/node_modules/cesium/Build/Cesium/index.js');
+      const here = viewer.camera.positionCartographic;
+      if (
+        Math.abs(Cesium.Math.toDegrees(here.latitude) - (lat - 0.0025)) <
+          1e-4 &&
+        Math.abs(Cesium.Math.toDegrees(here.longitude) - lon) < 1e-4
+      )
+        return true;
+      viewer.camera.cancelFlight();
+      viewer.camera.setView({
+        destination: Cesium.Cartesian3.fromDegrees(lon, lat - 0.0025, 260),
+        orientation: { heading: 0, pitch: Cesium.Math.toRadians(-45), roll: 0 },
+      });
+      return false;
+    },
+    { timeout: 60000, polling: 1000 },
+    KINGS_CROSS,
+  );
+  await sleep(1500);
+
+  const row = await page.$('#data-toggles [data-layer-id="avatar"]');
+  check('Me Mode row is in the layer panel', Boolean(row));
+  // The panel may be collapsed headless: dispatch the toggle's own click.
+  const clickToggle = () =>
+    page.evaluate(() =>
+      document
+        .querySelector(
+          '#data-toggles [data-layer-id="avatar"] .data-toggle-btn',
+        )
+        .click(),
+    );
+  await clickToggle();
+  await page.waitForFunction(
+    () => {
+      const avatar =
+        window.__godsEyeView.dataManager.layers.get('avatar').module;
+      return avatar.getStats().count === 1 || avatar.getStats().error;
+    },
+    { timeout: 120000 },
+  );
+  await page
+    .waitForFunction(
+      () => {
+        const { viewer } = window.__godsEyeView;
+        for (let i = 0; i < viewer.scene.primitives.length; i++) {
+          const model = viewer.scene.primitives.get(i);
+          if (model?.id === 'me-mode-avatar')
+            return model.activeAnimations.length > 0;
+        }
+        return false;
+      },
+      { timeout: 30000 },
+    )
+    .catch(() => {});
+  let state = await page.evaluate(avatarState);
+  check(
+    'avatar loaded and Me Mode active',
+    state.active && state.stats.count === 1,
+    state.stats.error || '',
+  );
+  check('camera inputs are taken over', state.inputs === false);
+  check('hint and body class shown', state.hint && state.bodyClass);
+  check(
+    'idle clip plays while standing',
+    /idle|survey/i.test(state.clip || ''),
+    state.clip,
+  );
+  const startDistance = Math.hypot(
+    (state.pose.lat - KINGS_CROSS.lat) * 111320,
+    (state.pose.lon - KINGS_CROSS.lon) *
+      111320 *
+      Math.cos((KINGS_CROSS.lat * Math.PI) / 180),
+  );
+  check(
+    'avatar starts at the camera target',
+    startDistance < 50,
+    `${startDistance.toFixed(1)} m from Kings Cross`,
+  );
+  let gap = await page.evaluate(groundGap);
+  check(
+    'feet on the surface at start',
+    gap !== null && Math.abs(gap) < 0.3,
+    `gap ${gap?.toFixed(3)} m`,
+  );
+  await screenshot(page, 'kings-cross-start');
+
+  const before = state.pose;
+  const walking = await hold(page, ['KeyW'], 2500);
+  check(
+    'W walks with the walk clip',
+    /walk/i.test(walking.clip || '') &&
+      Math.abs(walking.pose.speed - 1.4) < 0.01,
+    `${walking.clip} @ ${walking.pose.speed} m/s`,
+  );
+  const running = await hold(page, ['ShiftLeft', 'KeyW'], 2500);
+  check(
+    'Shift+W runs with the run clip',
+    /run/i.test(running.clip || '') && Math.abs(running.pose.speed - 4) < 0.01,
+    `${running.clip} @ ${running.pose.speed} m/s`,
+  );
+  await sleep(800);
+  state = await page.evaluate(avatarState);
+  const moved = Math.hypot(
+    (state.pose.lat - before.lat) * 111320,
+    (state.pose.lon - before.lon) *
+      111320 *
+      Math.cos((before.lat * Math.PI) / 180),
+  );
+  // Expected travel is speed × time, capped by the frame clamp (0.25 s/frame)
+  // on very slow software renderers.
+  const expected =
+    1.4 * Math.min(2.5, walking.fps * 2.5 * 0.25) +
+    4 * Math.min(2.5, running.fps * 2.5 * 0.25);
+  check(
+    'avatar moved forward at the stated speed',
+    moved > expected * 0.6,
+    `${moved.toFixed(1)} m, expected ~${expected.toFixed(1)} m at ${walking.fps.toFixed(1)}/${running.fps.toFixed(1)} fps`,
+  );
+  check(
+    'back to idle after release',
+    /idle|survey/i.test(state.clip || ''),
+    state.clip,
+  );
+  gap = await page.evaluate(groundGap);
+  check(
+    'feet on the surface after walking',
+    gap !== null && Math.abs(gap) < 0.3,
+    `gap ${gap?.toFixed(3)} m`,
+  );
+  await screenshot(page, 'kings-cross-walked');
+
+  // Shortcut isolation: W must not trigger POI flights, V not clean view.
+  await page.keyboard.press('KeyV');
+  await sleep(300);
+  state = await page.evaluate(avatarState);
+  check(
+    'V switches to first person and hides the model',
+    state.pose.view === 'first-person' && !state.modelShown,
+  );
+  check(
+    'V did not toggle clean view',
+    !(await page.evaluate(() =>
+      document.body.classList.contains('ui-clean-view'),
+    )),
+  );
+  await page.keyboard.press('KeyV');
+  await sleep(300);
+  state = await page.evaluate(avatarState);
+  check(
+    'V returns to third person',
+    state.pose.view === 'third-person' && state.modelShown,
+  );
+
+  // Voice tools through the real action runner.
+  const voice = await page.evaluate(async (target) => {
+    const { createGevActionRunner } = await import('/src/voice/gevActions.js');
+    const { viewer, styleManager, dataManager } = window.__godsEyeView;
+    const run = createGevActionRunner({ viewer, styleManager, dataManager });
+    const place = await run('place_avatar', {
+      query: 'Times Square',
+      latitude: target.lat,
+      longitude: target.lon,
+    });
+    const pose = dataManager.layers.get('avatar').module.getPose();
+    const near = await run('move_avatar_to', {
+      latitude: target.lat + 0.0002,
+      longitude: target.lon,
+    });
+    const view = await run('get_current_view_state', {});
+    return { place, pose, near, avatar: view.avatar };
+  }, TIMES_SQUARE);
+  check(
+    'place_avatar teleports to Times Square',
+    voice.place.ok &&
+      voice.place.mode === 'teleported' &&
+      Math.abs(voice.pose.lat - TIMES_SQUARE.lat) < 1e-6,
+    JSON.stringify({ grounded: voice.place.groundConfirmed }),
+  );
+  check(
+    'move_avatar_to walks a short distance',
+    voice.near.ok &&
+      voice.near.mode === 'walking' &&
+      voice.near.distanceM === 22,
+    JSON.stringify(voice.near),
+  );
+  check(
+    'view state carries the avatar pose',
+    voice.avatar?.active && typeof voice.avatar.facing === 'string',
+    JSON.stringify(voice.avatar),
+  );
+  await sleep(4000);
+  state = await page.evaluate(avatarState);
+  check(
+    'autopilot walks toward the target',
+    /walk/i.test(state.clip || '') ||
+      state.pose.lat > TIMES_SQUARE.lat + 0.00005,
+    `${state.clip}, lat ${state.pose.lat.toFixed(6)}`,
+  );
+  gap = await page.evaluate(groundGap);
+  check(
+    'feet on the surface at Times Square',
+    gap !== null && Math.abs(gap) < 0.3,
+    `gap ${gap?.toFixed(3)} m`,
+  );
+  await screenshot(page, 'times-square');
+
+  const redirect = await page.evaluate(async (target) => {
+    const { createGevActionRunner } = await import('/src/voice/gevActions.js');
+    const { viewer, styleManager, dataManager } = window.__godsEyeView;
+    const run = createGevActionRunner({ viewer, styleManager, dataManager });
+    return run('fly_to_location', {
+      latitude: target.lat,
+      longitude: target.lon,
+    });
+  }, KINGS_CROSS);
+  check(
+    'fly_to_location moves the avatar while Me Mode is on',
+    redirect.action === 'place_avatar' && redirect.mode === 'teleported',
+  );
+
+  await clickToggle();
+  await page.waitForFunction(
+    () =>
+      !window.__godsEyeView.dataManager.layers.get('avatar').module.isActive(),
+    { timeout: 30000 },
+  );
+  state = await page.evaluate(avatarState);
+  check(
+    'toggle off restores camera inputs',
+    state.inputs === true &&
+      !state.hint &&
+      !state.bodyClass &&
+      state.clip === null,
+  );
+  const avatarErrors = errors.filter((text) => /me mode|avatar/i.test(text));
+  check(
+    'no Me Mode console errors',
+    avatarErrors.length === 0,
+    avatarErrors.join(' | '),
+  );
+  if (errors.length)
+    console.log(
+      `  other console errors (${errors.length}):`,
+      errors.slice(0, 5),
+    );
+  await page.close();
+
+  if (secondAvatar) {
+    const second = await browser.newPage();
+    await open(second, `&avatar=${encodeURIComponent(secondAvatar)}`);
+    await sleep(2000);
+    await second.evaluate(() =>
+      window.__godsEyeView.dataManager.setEnabled('avatar', true, {
+        origin: 'user',
+      }),
+    );
+    await second.waitForFunction(
+      () =>
+        window.__godsEyeView.dataManager.layers.get('avatar').module.getStats()
+          .count === 1,
+      { timeout: 120000 },
+    );
+    const swapped = await hold(second, ['KeyW'], 1500);
+    check(
+      `?avatar=${secondAvatar} loads and animates`,
+      swapped.active && Boolean(swapped.clip),
+      swapped.clip,
+    );
+    await screenshot(second, 'second-avatar');
+    await second.close();
+  }
+} finally {
+  await browser.close();
+}
+console.log(
+  failures ? `${failures} check(s) failed` : 'All Me Mode checks passed',
+);
+process.exit(failures ? 1 : 0);
