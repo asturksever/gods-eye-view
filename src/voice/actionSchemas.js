@@ -899,6 +899,30 @@ const schemas = [
       },
     },
   },
+  {
+    name: 'place_avatar',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        query: { type: 'string', minLength: 1, maxLength: 200 },
+        latitude: { type: 'number', minimum: -90, maximum: 90 },
+        longitude: { type: 'number', minimum: -180, maximum: 180 },
+      },
+    },
+  },
+  {
+    name: 'move_avatar_to',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        query: { type: 'string', minLength: 1, maxLength: 200 },
+        latitude: { type: 'number', minimum: -90, maximum: 90 },
+        longitude: { type: 'number', minimum: -180, maximum: 180 },
+      },
+    },
+  },
 ];
 
 function freeze(value) {

@@ -599,4 +599,48 @@ export const ACTION_DESCRIPTIONS = {
       'Predict the next pass in 24 hours for one satellite in the loaded catalog, identified by exact NORAD ID or name. Ambiguous names return candidates: ask for a choice rather than selecting one. Defaults to geometric passes; visibleOnly requires estimated illumination and a dark observer sky, which does not guarantee naked-eye visibility. Uses camera location unless coordinates are supplied.',
     $position: 1,
   },
+  place_avatar: {
+    description:
+      'Me Mode: put the user\'s walking avatar on the ground at a place ("put me at Kings Cross", "take me to Shibuya crossing"). Turns Me Mode on if needed and teleports; the camera follows the avatar. The result reports whether the ground height was confirmed.',
+    $position: 1,
+    parameters: {
+      properties: {
+        query: {
+          description:
+            'Place to stand at, e.g. "Kings Cross", "Shibuya crossing" or "Times Square". Omit when giving coordinates.',
+          $position: 1,
+        },
+        latitude: {
+          description: 'Explicit WGS84 latitude, with longitude.',
+          $position: 2,
+        },
+        longitude: {
+          description: 'Explicit WGS84 longitude, with latitude.',
+          $position: 3,
+        },
+      },
+    },
+  },
+  move_avatar_to: {
+    description:
+      "Me Mode: move the user's avatar to a place. Walks in a straight line when the place is under 300 m away (no building avoidance), otherwise teleports like place_avatar. Walking returns immediately with distance and ETA; do not claim arrival.",
+    $position: 1,
+    parameters: {
+      properties: {
+        query: {
+          description:
+            'Place to stand at, e.g. "Kings Cross", "Shibuya crossing" or "Times Square". Omit when giving coordinates.',
+          $position: 1,
+        },
+        latitude: {
+          description: 'Explicit WGS84 latitude, with longitude.',
+          $position: 2,
+        },
+        longitude: {
+          description: 'Explicit WGS84 longitude, with latitude.',
+          $position: 3,
+        },
+      },
+    },
+  },
 };

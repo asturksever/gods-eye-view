@@ -20,7 +20,13 @@ test('the complete Realtime tool payload pins the additive analyst, satellite, L
     .update(
       JSON.stringify(
         stable(
-          GEV_REALTIME_TOOLS.filter((tool) => tool.name !== 'set_cyber_sonar'),
+          // Me Mode's avatar tools are separately additive, like sonar.
+          GEV_REALTIME_TOOLS.filter(
+            (tool) =>
+              !['set_cyber_sonar', 'place_avatar', 'move_avatar_to'].includes(
+                tool.name,
+              ),
+          ),
         ),
       ),
     )
@@ -87,7 +93,13 @@ test('metadata cannot add tools, fields, types or enum values', () => {
 
 test('all legacy action arguments are byte-identical after removing the deliberate additions', () => {
   const legacy = structuredClone(GEV_ACTION_SCHEMAS).filter(
-    (tool) => !['next_satellite_pass', 'set_cyber_sonar'].includes(tool.name),
+    (tool) =>
+      ![
+        'next_satellite_pass',
+        'set_cyber_sonar',
+        'place_avatar',
+        'move_avatar_to',
+      ].includes(tool.name),
   );
   const layers = legacy.find((tool) => tool.name === 'analyst_query').parameters
     .properties.layers.items;

@@ -7,6 +7,7 @@ import { readLayerLifecycleSummary } from './layerSummary.js';
 export { readLayerLifecycleSummary } from './layerSummary.js';
 import { defaultGeospatial } from '../search/defaults.js';
 import * as Cesium from 'cesium';
+import { WALK_SPEED_MPS, WALK_TO_MAX_M } from '../layers/avatar/model.js';
 import {
   CITY_POIS,
   findPoiByName,
@@ -928,6 +929,32 @@ export function createGevActionRunner({
       };
     }
 
+    if (name === 'place_avatar' || name === 'move_avatar_to') {
+      return moveAvatar(dataManager, name, args, {
+        placeSearch,
+        ...runOptions,
+      });
+    }
+
+    // While Me Mode owns the camera, "take me to X" moves the avatar: the
+    // follow camera would otherwise pull straight back from a camera flight.
+    if (
+      name === 'fly_to_location' &&
+      dataManager.layers.get('avatar')?.module?.isActive?.()
+    ) {
+      const preset = args.locationId ? CITY_POIS[args.locationId] : null;
+      return moveAvatar(
+        dataManager,
+        'place_avatar',
+        {
+          query: args.query || preset?.name,
+          latitude: args.latitude,
+          longitude: args.longitude,
+        },
+        { placeSearch, ...runOptions },
+      );
+    }
+
     if (name === 'fly_to_location') {
       return flyToRequestedLocation(viewer, args, {
         placeSearch,
@@ -1161,6 +1188,78 @@ export function createGevActionRunner({
     }
 
     throw new Error(`Unknown GEV tool: ${name}`);
+  };
+}
+
+/**
+ * Me Mode voice tools: teleport the avatar (place_avatar), or walk it when the
+ * destination is close (move_avatar_to). Turns Me Mode on when it is off.
+ */
+async function moveAvatar(dataManager, action, args = {}, options = {}) {
+  const avatar = dataManager.layers.get('avatar')?.module;
+  if (!avatar) return { ok: false, action, error: 'Me Mode is unavailable' };
+  const isCurrent = () =>
+    !options.signal?.aborted &&
+    (typeof options.isCurrent !== 'function' || options.isCurrent());
+  const query = String(args.query || '').trim();
+  let target = null;
+  if (Number.isFinite(args.latitude) && Number.isFinite(args.longitude)) {
+    target = {
+      lat: args.latitude,
+      lon: args.longitude,
+      label:
+        query || `${args.latitude.toFixed(5)}, ${args.longitude.toFixed(5)}`,
+    };
+  } else if (query) {
+    const { placeSearch = unavailablePlaceSearch, signal } = options;
+    const { place } = await placeSearch.geocode(query, { signal });
+    if (place)
+      target = { lat: place.lat, lon: place.lng, label: place.label || query };
+  }
+  if (!isCurrent()) return { ok: false, action, cancelled: true };
+  if (!target)
+    return {
+      ok: false,
+      action,
+      error: query ? `Could not find "${query}"` : 'No place was given',
+    };
+
+  const distanceM = avatar.distanceTo(target.lon, target.lat);
+  if (
+    action === 'move_avatar_to' &&
+    distanceM !== null &&
+    distanceM <= WALK_TO_MAX_M
+  ) {
+    avatar.walkTo(target.lon, target.lat);
+    return {
+      ok: true,
+      action,
+      mode: 'walking',
+      label: target.label,
+      distanceM: Math.round(distanceM),
+      etaS: Math.round(distanceM / WALK_SPEED_MPS),
+    };
+  }
+
+  const placed = avatar.setPosition(target.lon, target.lat);
+  if (!avatar.isActive()) {
+    const enabled = await dataManager.setEnabled('avatar', true, {
+      origin: 'voice',
+      signal: options.signal,
+    });
+    if (enabled === false || !avatar.isActive()) {
+      placed.catch(() => {});
+      return { ok: false, action, error: 'Me Mode could not start' };
+    }
+  }
+  const pose = await placed;
+  return {
+    ok: true,
+    action,
+    mode: 'teleported',
+    label: target.label,
+    groundConfirmed: pose?.grounded !== false,
+    avatar: avatar.describeForVoice(),
   };
 }
 
@@ -3105,6 +3204,9 @@ function getCurrentViewState(
         ? styleManager.getControlState()
         : null,
     scenePlayback: sceneDirector?.getPlaybackStatus?.() || null,
+    // Me Mode: where the user's avatar stands and faces ("what is in front of me").
+    avatar:
+      dataManager.layers.get('avatar')?.module?.describeForVoice?.() || null,
     tracked: collectTrackedEntities(dataManager),
     layers: dataManager.getAll().map((layer) => ({
       id: layer.id,
