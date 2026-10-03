@@ -11,6 +11,9 @@
  */
 
 const GLB_MAGIC = 0x46546c67; // 'glTF'
+/** Rest-pose joint bounds are padded by this share of their diagonal so the
+ *  skin (head top, toes, hands) and animated poses stay inside. */
+const BOUNDS_PADDING = 0.15;
 const CHUNK_JSON = 0x4e4f534a; // 'JSON'
 
 /**
@@ -53,9 +56,97 @@ export function normalizeSkinnedNodes(gltf) {
     delete node.translation;
     delete node.rotation;
     delete node.scale;
+    fitPositionBounds(gltf, node);
     changed += 1;
   });
   return { gltf, changed };
+}
+
+/** Column-major 4×4 product. */
+function multiply(a, b) {
+  const out = new Array(16).fill(0);
+  for (let col = 0; col < 4; col++)
+    for (let row = 0; row < 4; row++)
+      for (let k = 0; k < 4; k++)
+        out[col * 4 + row] += a[k * 4 + row] * b[col * 4 + k];
+  return out;
+}
+
+function localMatrix(node) {
+  if (node.matrix) return node.matrix.slice();
+  const [x, y, z, w] = node.rotation || [0, 0, 0, 1];
+  const [sx, sy, sz] = node.scale || [1, 1, 1];
+  const [tx, ty, tz] = node.translation || [0, 0, 0];
+  return [
+    (1 - 2 * (y * y + z * z)) * sx,
+    2 * (x * y + z * w) * sx,
+    2 * (x * z - y * w) * sx,
+    0,
+    2 * (x * y - z * w) * sy,
+    (1 - 2 * (x * x + z * z)) * sy,
+    2 * (y * z + x * w) * sy,
+    0,
+    2 * (x * z + y * w) * sz,
+    2 * (y * z - x * w) * sz,
+    (1 - 2 * (x * x + y * y)) * sz,
+    0,
+    tx,
+    ty,
+    tz,
+    1,
+  ];
+}
+
+/**
+ * Cesium sizes a primitive from its POSITION accessor's min/max. For a skin
+ * those are the unskinned (often centimetre) bind positions, so a re-parented
+ * skinned mesh would get a bounding sphere ~100× too large and off-centre.
+ * Replace them, in memory, with the rest-pose joint bounds plus padding —
+ * where the skin actually renders.
+ */
+function fitPositionBounds(gltf, node) {
+  const joints = gltf.skins?.[node.skin]?.joints;
+  const mesh = gltf.meshes?.[node.mesh];
+  if (!joints?.length || !mesh) return;
+  const nodes = gltf.nodes;
+  const parentOf = new Map();
+  nodes.forEach((candidate, index) =>
+    (candidate.children || []).forEach((child) => parentOf.set(child, index)),
+  );
+  const worldCache = new Map();
+  const world = (index) => {
+    if (worldCache.has(index)) return worldCache.get(index);
+    const local = localMatrix(nodes[index]);
+    const matrix = parentOf.has(index)
+      ? multiply(world(parentOf.get(index)), local)
+      : local;
+    worldCache.set(index, matrix);
+    return matrix;
+  };
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  for (const joint of joints) {
+    const matrix = world(joint);
+    for (let axis = 0; axis < 3; axis++) {
+      min[axis] = Math.min(min[axis], matrix[12 + axis]);
+      max[axis] = Math.max(max[axis], matrix[12 + axis]);
+    }
+  }
+  if (!min.every(Number.isFinite) || !max.every(Number.isFinite)) return;
+  const pad =
+    BOUNDS_PADDING *
+    Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
+  const bounds = {
+    min: min.map((value) => value - pad),
+    max: max.map((value) => value + pad),
+  };
+  for (const primitive of mesh.primitives || []) {
+    const accessor = gltf.accessors?.[primitive.attributes?.POSITION];
+    if (accessor?.min && accessor?.max) {
+      accessor.min = bounds.min.slice();
+      accessor.max = bounds.max.slice();
+    }
+  }
 }
 
 /**

@@ -8,12 +8,15 @@ import {
   clipRoleForSpeed,
   descendToGround,
   describePose,
+  easeInOut,
   followGround,
+  keyIntent,
   localOffset,
   offsetLonLat,
   parseAvatarParams,
   resolveClipMap,
   turnToward,
+  unoccludedRange,
   velocityFromKeys,
 } from './model.js';
 
@@ -25,7 +28,7 @@ const NO_KEYS = {
   run: false,
 };
 
-test('avatar URL options accept root-relative and https models only', () => {
+test('avatar URL options accept same-origin root-relative models only', () => {
   assert.deepEqual(
     parseAvatarParams('?avatar=/avatars/said.glb&clips=idle:Stand,run:Sprint'),
     {
@@ -34,14 +37,13 @@ test('avatar URL options accept root-relative and https models only', () => {
       headingOffset: null,
     },
   );
-  assert.equal(
-    parseAvatarParams('?avatar=https://example.org/a.glb').url,
-    'https://example.org/a.glb',
-  );
+
   for (const rejected of [
     '?avatar=javascript:alert(1)',
     '?avatar=//evil.example/a.glb',
     '?avatar=http://example.org/a.glb',
+    '?avatar=https://example.org/a.glb',
+    '?avatar=/\\evil.example/a.glb',
     '?avatar=/avatars/notes.txt',
   ])
     assert.equal(parseAvatarParams(rejected).url, null, rejected);
@@ -176,4 +178,49 @@ test('voice pose is plain JSON with a compass word', () => {
       view: 'third-person',
     },
   );
+});
+
+test('keys: text fields and modifiers are left alone, controls keep arrows', () => {
+  const key = (code, extra = {}) => ({ code, type: 'keydown', ...extra });
+  assert.equal(keyIntent(key('KeyW'), 'text'), null);
+  assert.equal(keyIntent(key('KeyW', { ctrlKey: true }), 'surface'), null);
+  assert.equal(keyIntent(key('ArrowUp'), 'control'), null);
+  assert.deepEqual(keyIntent(key('KeyW'), 'control'), {
+    kind: 'move',
+    role: 'forward',
+    down: true,
+    claim: true,
+  });
+  assert.equal(keyIntent(key('ArrowLeft'), 'surface').role, 'left');
+  assert.equal(
+    keyIntent({ code: 'ShiftLeft', type: 'keyup' }, 'surface').down,
+    false,
+  );
+  assert.equal(
+    keyIntent(key('KeyV', { repeat: true }), 'surface').toggle,
+    false,
+  );
+  assert.equal(keyIntent(key('KeyQ'), 'surface'), null);
+});
+
+test('keys: Escape exits from the globe but not from panels', () => {
+  assert.deepEqual(keyIntent({ code: 'Escape', type: 'keydown' }, 'surface'), {
+    kind: 'exit',
+    claim: false,
+  });
+  assert.equal(keyIntent({ code: 'Escape', type: 'keydown' }, 'control'), null);
+  assert.equal(keyIntent({ code: 'Escape', type: 'keyup' }, 'surface'), null);
+});
+
+test('follow camera pulls in front of walls and slopes', () => {
+  assert.equal(unoccludedRange(6, undefined), 6);
+  assert.equal(unoccludedRange(6, 9), 6);
+  assert.equal(unoccludedRange(6, 3), 2.7);
+  assert.equal(unoccludedRange(6, 0.5), 1);
+});
+
+test('entry easing is smooth and clamped', () => {
+  assert.equal(easeInOut(-1), 0);
+  assert.equal(easeInOut(0.5), 0.5);
+  assert.equal(easeInOut(2), 1);
 });

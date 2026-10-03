@@ -19,13 +19,16 @@ import {
   clipRoleForSpeed,
   descendToGround,
   describePose,
+  easeInOut,
   followGround,
+  keyIntent,
   localOffset,
   normalizeAngle,
   offsetLonLat,
   parseAvatarParams,
   resolveClipMap,
   turnToward,
+  unoccludedRange,
   velocityFromKeys,
 } from './model.js';
 import { loadAvatarSource } from './glb.js';
@@ -47,18 +50,14 @@ const CAMERA_HANDOFF_M = 0.5;
 const CAMERA_HANDOFF_DOT = 0.9995;
 const HINT_TEXT = 'WASD move · Shift run · V view · drag to look · wheel zoom';
 
-const KEY_ROLES = Object.freeze({
-  KeyW: 'forward',
-  ArrowUp: 'forward',
-  KeyS: 'back',
-  ArrowDown: 'back',
-  KeyA: 'left',
-  ArrowLeft: 'left',
-  KeyD: 'right',
-  ArrowRight: 'right',
-  ShiftLeft: 'run',
-  ShiftRight: 'run',
-});
+/** A model that has not finished loading by then fails the toggle. */
+const MODEL_READY_TIMEOUT_MS = 30000;
+/** Entry flight from the current view down to the follow camera. */
+const ENTRY_MS = 1600;
+/** Skip the entry flight when the camera is already this close (m). */
+const ENTRY_MIN_DISTANCE_M = 30;
+/** Seconds for the follow distance to recover after an obstruction clears. */
+const RANGE_RECOVER_S = 0.4;
 
 function isTextTarget(target) {
   return Boolean(
@@ -67,6 +66,22 @@ function isTextTarget(target) {
       'input, textarea, select, [contenteditable]:not([contenteditable="false"])',
     ),
   );
+}
+
+/** Where a key landed: a text field, a focusable control, or the globe/page. */
+function focusKind(target) {
+  if (isTextTarget(target)) return 'text';
+  const document = globalThis.document;
+  if (
+    !target ||
+    target === document?.body ||
+    target === document?.documentElement ||
+    target.tagName === 'CANVAS'
+  )
+    return 'surface';
+  return target.closest?.('button, a[href], select, [role], [tabindex]')
+    ? 'control'
+    : 'surface';
 }
 
 /** Ground lies between the Dead Sea shore and Everest's summit. */
@@ -146,6 +161,14 @@ export function createAvatarLayer({
   let _lastFrameAt = 0;
   let _cameraSet = null;
   let _handedOff = false;
+  let _loadAbort = null;
+  // Entry flight: the camera pose when Me Mode turned on, and when it began.
+  let _entryFrom = null;
+  let _entryStartedAt = null;
+  // Follow distance after walls/slopes behind the avatar are accounted for.
+  let _rangeTarget = CAMERA_RANGE_DEFAULT_M;
+  let _rangeNow = CAMERA_RANGE_DEFAULT_M;
+  let _lastOcclusionAt = 0;
   const _keys = {
     forward: false,
     back: false,
@@ -169,18 +192,26 @@ export function createAvatarLayer({
     for (const key of Object.keys(_keys)) _keys[key] = false;
   }
 
+  function cancelAutopilot() {
+    _autopilot?.resolve?.(false);
+    _autopilot = null;
+  }
+
   function onKey(event) {
-    if (!_enabled || event.isComposing || isTextTarget(event.target)) return;
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
-    const down = event.type === 'keydown';
-    const role = KEY_ROLES[event.code];
-    if (role) {
-      _keys[role] = down;
-      if (down && role !== 'run') _autopilot = null;
-    } else if (event.code === 'KeyV') {
-      if (down && !event.repeat) setView(_firstPerson ? 'third' : 'first');
-    } else {
+    if (!_enabled) return;
+    const intent = keyIntent(event, focusKind(event.target));
+    if (!intent) return;
+    if (intent.kind === 'exit') {
+      // Escape still reaches dialogs and selection handlers (not claimed).
+      if (_dataManager)
+        _dataManager.setEnabled('avatar', false, { origin: 'user' });
       return;
+    }
+    if (intent.kind === 'move') {
+      _keys[intent.role] = intent.down;
+      if (intent.down && intent.role !== 'run') cancelAutopilot();
+    } else if (intent.kind === 'view' && intent.toggle) {
+      setView(_firstPerson ? 'third' : 'first');
     }
     // Claim the key so W (POI), D (detection) and V (clean view) shortcuts
     // do not fire underneath Me Mode.
@@ -194,6 +225,8 @@ export function createAvatarLayer({
     listen(document, 'keydown', onKey, true);
     listen(document, 'keyup', onKey, true);
     listen(window, 'blur', clearKeys);
+    // Right-drag orbits too; no browser menu at the end of it.
+    listen(canvas, 'contextmenu', (event) => event.preventDefault());
     listen(canvas, 'pointerdown', (event) => {
       if (event.button !== 0 && event.button !== 2) return;
       drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
@@ -228,6 +261,7 @@ export function createAvatarLayer({
           CAMERA_RANGE_MIN_M,
           CAMERA_RANGE_MAX_M,
         );
+        _rangeTarget = Math.min(_rangeTarget, _camRange);
       },
       { passive: false },
     );
@@ -462,15 +496,18 @@ export function createAvatarLayer({
     const epoch = ++_placeEpoch;
     _lon = lon;
     _lat = lat;
-    _autopilot?.resolve?.(false);
-    _autopilot = null;
+    cancelAutopilot();
     _groundReady = false;
     if (_model) _model.show = false;
     const exact = await sampleGroundExact(lon, lat);
     if (epoch !== _placeEpoch || !_viewer) return false;
-    // Without an exact sample, start from the last height; the rationed
-    // per-frame samples replace it (a jump restarts the smoother window).
-    const height = Number.isFinite(exact) ? exact : (_smoother.value ?? 0);
+    // Without an exact sample, read whatever has loaded here now; only as a
+    // last resort keep the previous height (the rationed samples correct it,
+    // and a jump restarts the smoother window).
+    const fallback = Number.isFinite(exact) ? exact : sampleTopDown(lon, lat);
+    const height = Number.isFinite(fallback)
+      ? fallback
+      : (_smoother.value ?? 0);
     _height = height;
     _smoother.reset(height);
     _groundReady = true;
@@ -482,10 +519,15 @@ export function createAvatarLayer({
   async function loadModel(url) {
     const epoch = ++_modelEpoch;
     const viewer = _viewer;
+    _loadAbort?.abort();
+    const abort = new AbortController();
+    _loadAbort = abort;
     const attempt = async (candidate) => {
       // Fetch and normalize skinned-node placement before Cesium parses it
       // (see glb.js); Cesium misplaces skins under transformed parents.
-      const source = await loadAvatarSource(resolveAsset(candidate));
+      const source = await loadAvatarSource(resolveAsset(candidate), {
+        signal: abort.signal,
+      });
       return Cesium.Model.fromGltfAsync({
         ...source,
         modelMatrix: modelMatrix(),
@@ -499,7 +541,7 @@ export function createAvatarLayer({
     try {
       model = await attempt(url);
     } catch (error) {
-      if (url !== DEFAULT_AVATAR_URL) throw error;
+      if (url !== DEFAULT_AVATAR_URL || abort.signal.aborted) throw error;
       console.info(
         '[Me Mode] No local default avatar; using the pinned CDN copy.',
       );
@@ -512,17 +554,24 @@ export function createAvatarLayer({
     viewer.scene.primitives.add(model);
     if (!model.ready)
       await new Promise((resolve, reject) => {
+        const settle = (error) => {
+          clearTimeout(timer);
+          removers.forEach((remove) => remove());
+          abort.signal.removeEventListener('abort', onAbort);
+          if (!error) return resolve();
+          viewer.scene.primitives.remove(model);
+          reject(error);
+        };
+        const onAbort = () => settle(new Error('Avatar load cancelled'));
+        const timer = setTimeout(
+          () => settle(new Error('Avatar model took too long to load')),
+          MODEL_READY_TIMEOUT_MS,
+        );
         const removers = [
-          model.readyEvent.addEventListener(() => {
-            removers.forEach((remove) => remove());
-            resolve();
-          }),
-          model.errorEvent.addEventListener((error) => {
-            removers.forEach((remove) => remove());
-            viewer.scene.primitives.remove(model);
-            reject(error);
-          }),
+          model.readyEvent.addEventListener(() => settle()),
+          model.errorEvent.addEventListener((error) => settle(error)),
         ];
+        abort.signal.addEventListener('abort', onAbort);
       });
     if (epoch !== _modelEpoch || viewer !== _viewer || !_enabled) {
       viewer.scene.primitives.remove(model);
@@ -627,9 +676,10 @@ export function createAvatarLayer({
       scratchMatrix,
     );
     // Keep a third-person camera above the pavement when looking up.
+    const range = Math.min(_camRange, _rangeNow);
     const maxPitch = _firstPerson
       ? CAMERA_PITCH_MAX
-      : Math.min(CAMERA_PITCH_MAX, Math.asin(Math.min(1, 1.2 / _camRange)));
+      : Math.min(CAMERA_PITCH_MAX, Math.asin(Math.min(1, 1.2 / range)));
     const pitch = Math.min(_camPitch, maxPitch);
     const sh = Math.sin(_camHeading);
     const ch = Math.cos(_camHeading);
@@ -652,11 +702,12 @@ export function createAvatarLayer({
     } else {
       Cesium.Cartesian3.multiplyByScalar(
         scratchDirection,
-        -_camRange,
+        -range,
         scratchDestination,
       );
       Cesium.Cartesian3.add(scratchEye, scratchDestination, scratchDestination);
     }
+    blendEntry(scratchDestination, scratchDirection, scratchUp);
     viewer.camera.setView({
       destination: scratchDestination,
       orientation: { direction: scratchDirection, up: scratchUp },
@@ -665,6 +716,71 @@ export function createAvatarLayer({
       position: Cesium.Cartesian3.clone(viewer.camera.positionWC),
       direction: Cesium.Cartesian3.clone(viewer.camera.directionWC),
     };
+  }
+
+  /**
+   * Fly from the pre-Me-Mode view down to the follow pose instead of jumping
+   * (from a globe view that is thousands of kilometres). Mutates the targets.
+   */
+  function blendEntry(destination, direction, up) {
+    if (!_entryFrom || _entryStartedAt === null) return;
+    const from = _entryFrom;
+    if (
+      Cesium.Cartesian3.distance(from.position, destination) <
+      ENTRY_MIN_DISTANCE_M
+    ) {
+      _entryFrom = null;
+      return;
+    }
+    const t = easeInOut((performance.now() - _entryStartedAt) / ENTRY_MS);
+    if (t >= 1) {
+      _entryFrom = null;
+      return;
+    }
+    Cesium.Cartesian3.lerp(from.position, destination, t, destination);
+    Cesium.Cartesian3.normalize(
+      Cesium.Cartesian3.lerp(from.direction, direction, t, direction),
+      direction,
+    );
+    Cesium.Cartesian3.normalize(Cesium.Cartesian3.lerp(from.up, up, t, up), up);
+  }
+
+  /** Eye→camera ray: pull the follow camera in front of walls and slopes. */
+  function measureOcclusion(now) {
+    if (
+      _firstPerson ||
+      !_cameraSet ||
+      now - _lastOcclusionAt < SAMPLE_MOVING_MS
+    )
+      return;
+    _lastOcclusionAt = now;
+    const scene = _viewer.scene;
+    if (typeof scene.pickFromRay !== 'function') return;
+    const eye = Cesium.Cartesian3.fromDegrees(
+      _lon,
+      _lat,
+      _height + EYE_HEIGHT_M,
+    );
+    const back = Cesium.Cartesian3.normalize(
+      Cesium.Cartesian3.subtract(
+        _cameraSet.position,
+        eye,
+        new Cesium.Cartesian3(),
+      ),
+      new Cesium.Cartesian3(),
+    );
+    let hitDistance;
+    try {
+      const hit = scene.pickFromRay(new Cesium.Ray(eye, back), excluded());
+      const ellipsoidGlobe =
+        !hit?.object &&
+        _viewer.terrainProvider instanceof Cesium.EllipsoidTerrainProvider;
+      if (hit?.position && !ellipsoidGlobe)
+        hitDistance = Cesium.Cartesian3.distance(eye, hit.position);
+    } catch {
+      hitDistance = undefined;
+    }
+    _rangeTarget = unoccludedRange(_camRange, hitDistance);
   }
 
   /**
@@ -712,8 +828,18 @@ export function createAvatarLayer({
     // GPU still walks at the stated speed.
     const dt = clamp((now - (_lastFrameAt || now)) / 1000, 0, 0.25);
     _lastFrameAt = now;
+    // First placement: leave the camera where it is until there is ground to
+    // fly down to, then start the entry flight.
+    if (_entryFrom && !_groundReady) return;
+    if (_entryFrom && _entryStartedAt === null) _entryStartedAt = now;
     if (_groundReady) step(dt);
     if (_model) _model.modelMatrix = modelMatrix();
+    // Obstructions pull the camera in at once; it eases back out after.
+    _rangeNow =
+      _rangeTarget < _rangeNow
+        ? _rangeTarget
+        : _rangeNow +
+          (_rangeTarget - _rangeNow) * (1 - Math.exp(-dt / RANGE_RECOVER_S));
     updateCamera(_viewer);
   }
 
@@ -721,6 +847,7 @@ export function createAvatarLayer({
   function onPostRender() {
     if (!_enabled || !_groundReady || _lon === null) return;
     const now = performance.now();
+    measureOcclusion(now);
     const interval = _speed > 0 ? SAMPLE_MOVING_MS : SAMPLE_IDLE_MS;
     if (now - _lastSampleAt < interval) return;
     _lastSampleAt = now;
@@ -787,6 +914,13 @@ export function createAvatarLayer({
       _cameraSet = null;
       _error = null;
       _lastFrameAt = 0;
+      _rangeTarget = _rangeNow = _camRange;
+      _entryFrom = {
+        position: Cesium.Cartesian3.clone(viewer.camera.positionWC),
+        direction: Cesium.Cartesian3.clone(viewer.camera.directionWC),
+        up: Cesium.Cartesian3.clone(viewer.camera.upWC),
+      };
+      _entryStartedAt = null;
       const start = _pendingStart || cameraTarget(viewer);
       const pending = _pendingStart;
       _pendingStart = null;
@@ -808,11 +942,16 @@ export function createAvatarLayer({
       try {
         const placed = place(start.lon, start.lat);
         await loadModel(_modelUrl);
-        await placed;
-        pending?.resolve(layer.getPose());
+        const grounded = await placed;
+        pending?.resolve({ ...layer.getPose(), grounded });
         if (signal?.aborted || !_enabled) return false;
         return true;
       } catch (error) {
+        if (!_enabled) {
+          // Turned off mid-load: not a failure worth reporting.
+          pending?.reject(error);
+          return false;
+        }
         console.warn('[Me Mode] Avatar failed to load', error);
         _error = `Avatar model failed to load (${_modelUrl})`;
         pending?.reject(error);
@@ -826,8 +965,10 @@ export function createAvatarLayer({
       _enabled = false;
       _modelEpoch += 1;
       _placeEpoch += 1;
-      _autopilot?.resolve?.(false);
-      _autopilot = null;
+      _loadAbort?.abort();
+      _loadAbort = null;
+      cancelAutopilot();
+      _entryFrom = null;
       releaseControls(viewer);
       if (_model && viewer) viewer.scene.primitives.remove(_model);
       _model = null;
@@ -894,12 +1035,22 @@ export function createAvatarLayer({
     },
 
     /**
+     * Drop a start point queued by `setPosition` while Me Mode was off (for
+     * example when turning it on was refused), so a later manual toggle does
+     * not start there.
+     */
+    cancelPendingStart(reason = 'Me Mode did not start') {
+      _pendingStart?.reject(new Error(reason));
+      _pendingStart = null;
+    },
+
+    /**
      * Walk to a nearby point in a straight line (no building avoidance).
      * Resolves true on arrival, false when interrupted by input or a teleport.
      */
     walkTo(lon, lat, { speed = WALK_SPEED_MPS } = {}) {
       if (!_enabled || _lon === null) return Promise.resolve(false);
-      _autopilot?.resolve?.(false);
+      cancelAutopilot();
       return new Promise((resolve) => {
         _autopilot = { lon, lat, speed, resolve };
       });

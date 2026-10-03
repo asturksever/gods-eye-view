@@ -44,18 +44,18 @@ const CLIP_ROLES = ['idle', 'walk', 'run'];
 
 /**
  * Read `?avatar=` and `?clips=idle:Idle,walk:Walk,run:Run` from a query string.
- * Only same-origin root-relative paths and https URLs are accepted as models.
+ * Only same-origin root-relative `.glb`/`.gltf` paths are accepted: a shared
+ * link must not make a viewer fetch from an arbitrary host. Other origins are
+ * still possible from code via the layer's `setModel`.
  * @param {string} search `location.search`
  * @returns {{ url: string|null, clips: Object<string,string>|null, headingOffset: number|null }}
  */
 export function parseAvatarParams(search = '') {
   const params = new URLSearchParams(search);
   const rawUrl = params.get('avatar')?.trim() || '';
-  const url =
-    /^\/(?!\/)[^\s]*\.(glb|gltf)(\?[^\s]*)?$/i.test(rawUrl) ||
-    /^https:\/\/[^\s]+$/i.test(rawUrl)
-      ? rawUrl
-      : null;
+  const url = /^\/(?!\/)[^\s\\]*\.(glb|gltf)(\?[^\s]*)?$/i.test(rawUrl)
+    ? rawUrl
+    : null;
   const clips = {};
   for (const pair of (params.get('clips') || '').split(',')) {
     const [role, name] = pair.split(':').map((part) => part?.trim());
@@ -220,6 +220,63 @@ export class HeightSmoother {
     if (!this.samples.length) return null;
     return this.samples.reduce((sum, h) => sum + h, 0) / this.samples.length;
   }
+}
+
+const MOVE_KEYS = Object.freeze({
+  KeyW: 'forward',
+  ArrowUp: 'forward',
+  KeyS: 'back',
+  ArrowDown: 'back',
+  KeyA: 'left',
+  ArrowLeft: 'left',
+  KeyD: 'right',
+  ArrowRight: 'right',
+  ShiftLeft: 'run',
+  ShiftRight: 'run',
+});
+
+/**
+ * What a key event means to Me Mode.
+ * `focus` is where the key landed: 'text' (inputs, editable content),
+ * 'control' (a focused button, list, slider or tab — arrows stay native
+ * there) or 'surface' (the page body or the globe).
+ * @returns {{ kind: 'move'|'view'|'exit', role?: string, claim: boolean }|null}
+ */
+export function keyIntent(event, focus) {
+  if (focus === 'text' || event.isComposing) return null;
+  if (event.ctrlKey || event.metaKey || event.altKey) return null;
+  const down = event.type === 'keydown';
+  if (event.code === 'Escape')
+    // Exit on the surface only; Escape still reaches dialogs and selections.
+    return down && focus === 'surface' ? { kind: 'exit', claim: false } : null;
+  const role = MOVE_KEYS[event.code];
+  if (role) {
+    if (focus === 'control' && event.code.startsWith('Arrow')) return null;
+    return { kind: 'move', role, down, claim: true };
+  }
+  if (event.code === 'KeyV')
+    return { kind: 'view', toggle: down && !event.repeat, claim: true };
+  return null;
+}
+
+/**
+ * Follow distance that keeps the camera in front of whatever sits between it
+ * and the avatar's eye (walls behind, the slope of a hill). `hitDistance` is
+ * the first surface along the eye→camera line, or undefined when clear.
+ */
+export function unoccludedRange(
+  wanted,
+  hitDistance,
+  { margin = 0.3, min = 1 } = {},
+) {
+  if (!Number.isFinite(hitDistance) || hitDistance >= wanted) return wanted;
+  return Math.max(min, hitDistance - margin);
+}
+
+/** Smoothstep easing for the entry flight, t in [0, 1]. */
+export function easeInOut(t) {
+  const x = clamp(t, 0, 1);
+  return x * x * (3 - 2 * x);
 }
 
 /** A downward ground probe starts this far above the feet: steps and curbs

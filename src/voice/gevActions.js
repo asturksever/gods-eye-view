@@ -1249,6 +1249,7 @@ async function moveAvatar(dataManager, action, args = {}, options = {}) {
     });
     if (enabled === false || !avatar.isActive()) {
       placed.catch(() => {});
+      avatar.cancelPendingStart?.();
       return {
         ok: false,
         action,

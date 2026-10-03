@@ -20,10 +20,11 @@ function mixamoLike() {
         children: [1, 2],
       },
       { name: 'Body', mesh: 0, skin: 0, scale: [2, 2, 2] },
-      { name: 'Hips', children: [3] },
-      { name: 'Spine' },
+      { name: 'Hips', translation: [0, 100, 0], children: [3] },
+      { name: 'Spine', translation: [0, 80, 0] },
     ],
-    meshes: [{ primitives: [] }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+    accessors: [{ min: [-90, -20, 0], max: [90, 20, 183] }],
     skins: [{ joints: [2, 3] }],
   };
 }
@@ -60,6 +61,14 @@ test('skinned meshes move to the scene root with no transform', () => {
   assert.deepEqual(gltf.scenes[0].nodes, [0, 1]);
   assert.deepEqual(gltf.nodes[0].children, [2]);
   assert.deepEqual(gltf.nodes[1], { name: 'Body', mesh: 0, skin: 0 });
+  // Bounds follow the skeleton (metres after the armature's 0.01 scale and
+  // −90° X rotation), not the raw centimetre positions.
+  const { min, max } = gltf.accessors[0];
+  assert.ok(Math.abs(max[1] - min[1]) < 2, `${min} → ${max}`);
+  assert.ok(
+    max.every((value) => Math.abs(value) < 3),
+    `${max}`,
+  );
   // Joints keep their hierarchy and transforms.
   assert.deepEqual(gltf.nodes[0].scale, [0.01, 0.01, 0.01]);
   assert.deepEqual(gltf.nodes[2].children, [3]);
