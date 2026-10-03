@@ -87,7 +87,6 @@ const groundGap = async () => {
   const { viewer, dataManager } = window.__godsEyeView;
   const pose = dataManager.layers.get('avatar').module.getPose();
   const Cesium = await import('/node_modules/cesium/Build/Cesium/index.js');
-  const carto = Cesium.Cartographic.fromDegrees(pose.lon, pose.lat);
   // Keyless with the ellipsoid fallback terrain, the surface is exactly 0 m.
   if (
     viewer.scene.globe.show &&
@@ -99,12 +98,16 @@ const groundGap = async () => {
   for (let i = 0; i < primitives.length; i++)
     if (primitives.get(i)?.id === 'me-mode-avatar')
       exclude.push(primitives.get(i));
-  let ground = viewer.scene.sampleHeightSupported
-    ? viewer.scene.sampleHeight(carto, exclude)
-    : undefined;
-  if (!Number.isFinite(ground) && viewer.scene.globe.show)
-    ground = viewer.scene.globe.getHeight(carto);
-  return Number.isFinite(ground) ? pose.height - ground : null;
+  // The surface under the feet: first hit of a ray from 1.2 m above them
+  // (a top-down sample would read the canopy or roof overhead instead).
+  const C3 = viewer.camera.position.constructor;
+  const origin = C3.fromDegrees(pose.lon, pose.lat, pose.height + 1.2);
+  const down = C3.negate(C3.normalize(origin, new C3()), new C3());
+  const Ray = (await import('/node_modules/cesium/Build/Cesium/index.js')).Ray;
+  const hit = viewer.scene.pickFromRay(new Ray(origin, down), exclude);
+  if (!hit?.position) return null;
+  const ground = Cesium.Cartographic.fromCartesian(hit.position).height;
+  return pose.height - ground;
 };
 
 async function hold(page, keys, ms) {
@@ -300,15 +303,16 @@ try {
     const C3 = viewer.camera.position.constructor; // the app's Cesium
     const Cartographic = viewer.camera.positionCartographic.constructor;
     const avatar = dataManager.layers.get('avatar').module;
-    const { lon, lat } = avatar.getPose();
+    const { lon, lat, height: ground } = avatar.getPose();
+    window.__qaGlobeShown = viewer.scene.globe.show;
     viewer.scene.globe.show = false;
     window.__qaSlabs = [
       viewer.entities.add({
-        position: C3.fromDegrees(lon, lat, -0.5),
+        position: C3.fromDegrees(lon, lat, ground - 0.5),
         box: { dimensions: new C3(60, 60, 1) },
       }),
       viewer.entities.add({
-        position: C3.fromDegrees(lon, lat, 6.5),
+        position: C3.fromDegrees(lon, lat, ground + 6.5),
         box: { dimensions: new C3(60, 60, 1) },
       }),
     ];
@@ -321,11 +325,16 @@ try {
       top = viewer.scene.sampleHeight(Cartographic.fromDegrees(lon, lat), [
         model,
       ]);
-      if (top > 6) break;
+      if (top > ground + 6) break;
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
     const placed = await avatar.setPosition(lon, lat);
-    return { top, placedHeight: placed.height, grounded: placed.grounded };
+    return {
+      top: top - ground,
+      placedHeight: placed.height - ground,
+      grounded: placed.grounded,
+      ground,
+    };
   });
   check(
     'a top-down sample would stand on the canopy',
@@ -343,11 +352,11 @@ try {
   await page.evaluate(() => {
     const { viewer } = window.__godsEyeView;
     window.__qaSlabs.forEach((entity) => viewer.entities.remove(entity));
-    viewer.scene.globe.show = true;
+    viewer.scene.globe.show = window.__qaGlobeShown;
   });
   check(
     'walking under the canopy stays on the ground',
-    Math.abs(state.pose.height) < 0.3,
+    Math.abs(state.pose.height - canopy.ground) < 0.3,
     `avatar at ${state.pose.height.toFixed(2)} m`,
   );
   await screenshot(page, 'under-canopy');
