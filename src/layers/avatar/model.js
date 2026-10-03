@@ -222,6 +222,48 @@ export class HeightSmoother {
   }
 }
 
+/** A downward ground probe starts this far above the feet: steps and curbs
+ *  below it are climbed, and anything above it (tree canopy, bridges,
+ *  awnings) is walked under rather than stood on. */
+export const STEP_UP_M = 1.2;
+/** Placement descends through canopies in at most this many probes. */
+const MAX_DESCENT_PROBES = 6;
+/** Each descent probe starts this far below the previous hit. */
+const DESCENT_GAP_M = 0.3;
+
+/**
+ * Ground under a walking avatar. `castDown(fromHeight)` returns the height of
+ * the first surface below `fromHeight` (or undefined); `topDown()` is the
+ * fallback "highest surface here" read for when the probe starts inside
+ * geometry and finds nothing.
+ * @returns {number|undefined}
+ */
+export function followGround(castDown, currentHeight, topDown) {
+  const below = Number.isFinite(currentHeight)
+    ? castDown(currentHeight + STEP_UP_M)
+    : undefined;
+  return Number.isFinite(below) ? below : topDown();
+}
+
+/**
+ * Ground for a placement whose height is unknown: start from the highest
+ * surface (`top`) and keep probing just below each hit until nothing is
+ * below. Canopies and bridge decks are passed through, so the lowest surface
+ * found is the ground. A roof with nothing under it stays the answer.
+ * @param {(fromHeight: number) => Promise<number|undefined>} castDown
+ * @param {number} top
+ * @returns {Promise<number>}
+ */
+export async function descendToGround(castDown, top) {
+  let ground = top;
+  for (let probe = 0; probe < MAX_DESCENT_PROBES; probe++) {
+    const below = await castDown(ground - DESCENT_GAP_M);
+    if (!Number.isFinite(below) || below >= ground) break;
+    ground = below;
+  }
+  return ground;
+}
+
 /** Plain JSON pose for voice scene context. */
 export function describePose({ lon, lat, height, heading, speed, view }) {
   const round = (value, digits) =>

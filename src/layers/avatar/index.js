@@ -17,7 +17,9 @@ import {
   clamp,
   clipRateForSpeed,
   clipRoleForSpeed,
+  descendToGround,
   describePose,
+  followGround,
   localOffset,
   normalizeAngle,
   offsetLonLat,
@@ -40,6 +42,9 @@ const EXACT_SAMPLE_TIMEOUT_MS = 8000;
 /** Seconds for the displayed height to close most of a new sample's gap. */
 const HEIGHT_EASE_S = 0.12;
 const TURN_RATE = 10;
+/** Camera moved by someone else since our last frame: hand it over. */
+const CAMERA_HANDOFF_M = 0.5;
+const CAMERA_HANDOFF_DOT = 0.9995;
 const HINT_TEXT = 'WASD move · Shift run · V view · drag to look · wheel zoom';
 
 const KEY_ROLES = Object.freeze({
@@ -67,6 +72,11 @@ function isTextTarget(target) {
 /** Ground lies between the Dead Sea shore and Everest's summit. */
 function plausibleGround(height) {
   return Number.isFinite(height) && height > -500 && height < 9000;
+}
+
+/** Cockpit flies the camera itself; Me Mode never runs alongside it. */
+function isCockpitActive() {
+  return Boolean(globalThis.document?.body?.classList.contains('cockpit-mode'));
 }
 
 function withTimeout(promise, ms) {
@@ -134,6 +144,8 @@ export function createAvatarLayer({
   let _camRange = CAMERA_RANGE_DEFAULT_M;
   let _firstPerson = false;
   let _lastFrameAt = 0;
+  let _cameraSet = null;
+  let _handedOff = false;
   const _keys = {
     forward: false,
     back: false,
@@ -236,7 +248,9 @@ export function createAvatarLayer({
     Object.assign(_hint.style, {
       position: 'absolute',
       left: '50%',
-      bottom: '28px',
+      // Above the bottom dock (location / voice / presets), which covers
+      // the bottom ~100 px of the viewer.
+      bottom: '128px',
       transform: 'translateX(-50%)',
       padding: '6px 12px',
       borderRadius: '6px',
@@ -275,8 +289,79 @@ export function createAvatarLayer({
     return plausibleGround(height) ? height : undefined;
   }
 
-  /** Cheap per-sample ground read: rendered tiles first, then the globe. */
+  function downRay(lon, lat, fromHeight) {
+    const origin = Cesium.Cartesian3.fromDegrees(lon, lat, fromHeight);
+    const down = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(
+      origin,
+      new Cesium.Cartesian3(),
+    );
+    return new Cesium.Ray(origin, Cesium.Cartesian3.negate(down, down));
+  }
+
+  function hitHeight(hit, fromHeight) {
+    if (!hit?.position) return undefined;
+    // A globe hit (no picked object) over the bare-ellipsoid fallback terrain
+    // is the ellipsoid itself; its coarse tile meshes report wrong heights.
+    if (
+      !hit.object &&
+      _viewer.terrainProvider instanceof Cesium.EllipsoidTerrainProvider
+    )
+      return fromHeight >= 0 ? 0 : undefined;
+    const height = Cesium.Cartographic.fromCartesian(hit.position).height;
+    return plausibleGround(height) && height <= fromHeight + 0.01
+      ? height
+      : undefined;
+  }
+
+  /** First surface below `fromHeight` on loaded geometry (one pick render). */
+  function castDown(lon, lat, fromHeight) {
+    const scene = _viewer.scene;
+    if (typeof scene.pickFromRay !== 'function') return undefined;
+    try {
+      return hitHeight(
+        scene.pickFromRay(downRay(lon, lat, fromHeight), excluded()),
+        fromHeight,
+      );
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** First surface below `fromHeight`, waiting for the most detailed tiles. */
+  async function castDownExact(lon, lat, fromHeight) {
+    const scene = _viewer.scene;
+    if (typeof scene.pickFromRayMostDetailed !== 'function') return undefined;
+    try {
+      return hitHeight(
+        await withTimeout(
+          scene.pickFromRayMostDetailed(
+            downRay(lon, lat, fromHeight),
+            excluded(),
+          ),
+          EXACT_SAMPLE_TIMEOUT_MS,
+        ),
+        fromHeight,
+      );
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Per-sample ground read while walking: a ray from just above the feet,
+   * so canopies and bridges overhead are walked under (sampleHeight would
+   * return the highest surface here, i.e. the treetop).
+   */
   function sampleGround(lon, lat) {
+    return followGround(
+      (from) => castDown(lon, lat, from),
+      _groundReady ? _height : undefined,
+      () => sampleTopDown(lon, lat),
+    );
+  }
+
+  /** Highest surface here: rendered tiles first, then the globe. */
+  function sampleTopDown(lon, lat) {
     const scene = _viewer.scene;
     const carto = cartographic(lon, lat);
     // No photoreal tiles over bare-ellipsoid terrain: the ground is exact.
@@ -297,8 +382,17 @@ export function createAvatarLayer({
     return plausibleGround(height) ? height : undefined;
   }
 
-  /** Exact ground for a placement: waits for the most detailed tiles. */
+  /**
+   * Exact ground for a placement: the highest surface on the most detailed
+   * tiles, then probes downward through canopies and bridge decks.
+   */
   async function sampleGroundExact(lon, lat) {
+    const top = await sampleTopDownExact(lon, lat);
+    if (!plausibleGround(top)) return undefined;
+    return descendToGround((from) => castDownExact(lon, lat, from), top);
+  }
+
+  async function sampleTopDownExact(lon, lat) {
     const scene = _viewer.scene;
     if (scene.sampleHeightSupported) {
       try {
@@ -332,7 +426,7 @@ export function createAvatarLayer({
         // Fall through to a rendered sample.
       }
     }
-    return sampleGround(lon, lat);
+    return sampleTopDown(lon, lat);
   }
 
   /** Where the camera is looking: the start point when Me Mode turns on. */
@@ -567,12 +661,52 @@ export function createAvatarLayer({
       destination: scratchDestination,
       orientation: { direction: scratchDirection, up: scratchUp },
     });
+    _cameraSet = {
+      position: Cesium.Cartesian3.clone(viewer.camera.positionWC),
+      direction: Cesium.Cartesian3.clone(viewer.camera.directionWC),
+    };
+  }
+
+  /**
+   * True when something other than Me Mode moved the camera since the last
+   * frame: a search, a POI key, a voice camera tool, Director playback or
+   * Cockpit. Me Mode then hands the camera over instead of silently pulling
+   * it back.
+   */
+  function cameraTakenOver(camera) {
+    if (!_cameraSet) return false;
+    const moved = Cesium.Cartesian3.distance(
+      camera.positionWC,
+      _cameraSet.position,
+    );
+    const turned = Cesium.Cartesian3.dot(
+      camera.directionWC,
+      _cameraSet.direction,
+    );
+    return moved > CAMERA_HANDOFF_M || turned < CAMERA_HANDOFF_DOT;
+  }
+
+  function handOffCamera(reason) {
+    if (_handedOff) return;
+    _handedOff = true;
+    console.info(`[Me Mode] Ending: ${reason}`);
+    if (_dataManager)
+      _dataManager.setEnabled('avatar', false, { origin: 'programmatic' });
+    else layer.disable(_viewer);
   }
 
   // Camera and pose mutate in preUpdate (before tiles select) — mutating in
   // preRender makes 3D Tiles refine against a stale view (see cockpit).
   function onPreUpdate() {
-    if (!_enabled || !_viewer || _lon === null) return;
+    if (!_enabled || _handedOff || !_viewer || _lon === null) return;
+    if (isCockpitActive()) {
+      handOffCamera('Cockpit took the camera');
+      return;
+    }
+    if (cameraTakenOver(_viewer.camera)) {
+      handOffCamera('the camera was moved elsewhere');
+      return;
+    }
     const now = performance.now();
     // Clamped so a stalled tab does not teleport, loose enough that a slow
     // GPU still walks at the stated speed.
@@ -605,7 +739,9 @@ export function createAvatarLayer({
     _hint?.remove();
     _hint = null;
     const controller = viewer?.scene?.screenSpaceCameraController;
-    if (controller && _savedInputs !== null) {
+    // Cockpit switches the inputs off before announcing itself; never hand
+    // them back underneath it.
+    if (controller && _savedInputs !== null && !isCockpitActive()) {
       controller.enableInputs = _savedInputs;
       viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
     }
@@ -640,7 +776,15 @@ export function createAvatarLayer({
 
     async enable(viewer = _viewer, { signal } = {}) {
       _viewer = viewer;
+      if (isCockpitActive()) {
+        _error = 'Exit Cockpit before starting Me Mode';
+        _pendingStart?.reject(new Error(_error));
+        _pendingStart = null;
+        return false;
+      }
       _enabled = true;
+      _handedOff = false;
+      _cameraSet = null;
       _error = null;
       _lastFrameAt = 0;
       const start = _pendingStart || cameraTarget(viewer);
@@ -689,6 +833,7 @@ export function createAvatarLayer({
       _model = null;
       _clipName = null;
       _groundReady = false;
+      _cameraSet = null;
       return true;
     },
 

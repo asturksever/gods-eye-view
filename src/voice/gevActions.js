@@ -1249,7 +1249,11 @@ async function moveAvatar(dataManager, action, args = {}, options = {}) {
     });
     if (enabled === false || !avatar.isActive()) {
       placed.catch(() => {});
-      return { ok: false, action, error: 'Me Mode could not start' };
+      return {
+        ok: false,
+        action,
+        error: avatar.getStats().error || 'Me Mode could not start',
+      };
     }
   }
   const pose = await placed;

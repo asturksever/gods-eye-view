@@ -6,7 +6,9 @@ import {
   RUN_SPEED_MPS,
   WALK_SPEED_MPS,
   clipRoleForSpeed,
+  descendToGround,
   describePose,
+  followGround,
   localOffset,
   offsetLonLat,
   parseAvatarParams,
@@ -120,6 +122,38 @@ test('height smoother averages LOD pops and resets on real jumps', () => {
   assert.ok(Math.abs(smoother.push(NaN) - 50) < 0.01);
   // Teleport-scale jump restarts the window instead of gliding.
   assert.equal(smoother.push(80), 80);
+});
+
+/** A street with a tree canopy (6–9 m) over ground at 20 m. */
+function streetUnderTree() {
+  const surfaces = [29, 26, 20]; // canopy top, canopy underside, ground
+  return (from) => surfaces.find((h) => h < from);
+}
+
+test('walking under a canopy follows the ground, not the treetop', () => {
+  const castDown = streetUnderTree();
+  const topDown = () => 29;
+  assert.equal(followGround(castDown, 20, topDown), 20);
+  // Curbs and steps up to STEP_UP_M are climbed.
+  assert.equal(
+    followGround((from) => (from > 21 ? 21 : undefined), 20, topDown),
+    21,
+  );
+  // Probe starting inside geometry finds nothing: fall back to top-down.
+  assert.equal(
+    followGround(() => undefined, 20, topDown),
+    29,
+  );
+  assert.equal(followGround(castDown, undefined, topDown), 29);
+});
+
+test('placement descends through canopy to the ground', async () => {
+  const castDown = streetUnderTree();
+  assert.equal(await descendToGround(async (from) => castDown(from), 29), 20);
+  // A roof with nothing under it stays the answer.
+  assert.equal(await descendToGround(async () => undefined, 45), 45);
+  // A probe that reports a surface at or above the start never loops.
+  assert.equal(await descendToGround(async () => 50, 45), 45);
 });
 
 test('voice pose is plain JSON with a compass word', () => {
