@@ -10,7 +10,10 @@ moving and 600 ms at rest, never per frame. Placement descends from the
 highest most-detailed surface through anything with ground below it. A camera
 move by any other owner (search, POI keys, voice camera tools, Director,
 Cockpit) ends Me Mode instead of being pulled back, and Me Mode refuses to
-start while Cockpit is active. There is no building collision.
+start while Cockpit is active. There is no avatar collision with buildings;
+the follow camera is pulled in front of walls and slopes by a rationed
+eye-to-camera ray. Esc on the globe exits, `?avatar=` accepts same-origin
+paths only, and a model load times out after 30 s.
 `place_avatar`/`move_avatar_to` are voice tools, and `fly_to_location` moves
 the avatar instead of the camera while it is on. See
 [the avatar guide](avatar.md).

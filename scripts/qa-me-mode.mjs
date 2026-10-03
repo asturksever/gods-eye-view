@@ -352,6 +352,77 @@ try {
   );
   await screenshot(page, 'under-canopy');
 
+  // A wall between the avatar and the follow camera pulls the camera in
+  // front of it; with the wall gone the camera eases back out.
+  const eyeToCamera = () =>
+    page.evaluate(() => {
+      const { viewer, dataManager } = window.__godsEyeView;
+      const C3 = viewer.camera.position.constructor;
+      const pose = dataManager.layers.get('avatar').module.getPose();
+      const eye = C3.fromDegrees(pose.lon, pose.lat, pose.height + 1.6);
+      return C3.distance(eye, viewer.camera.positionWC);
+    });
+  const clearRange = await eyeToCamera();
+  await page.evaluate(() => {
+    const { viewer, dataManager } = window.__godsEyeView;
+    const C3 = viewer.camera.position.constructor;
+    const pose = dataManager.layers.get('avatar').module.getPose();
+    const eye = C3.fromDegrees(pose.lon, pose.lat, pose.height + 1.6);
+    const mid = C3.lerp(eye, viewer.camera.positionWC, 0.5, new C3());
+    window.__qaWall = viewer.entities.add({
+      position: mid,
+      box: { dimensions: new C3(2, 2, 2) },
+    });
+  });
+  await sleep(5000);
+  const blockedRange = await eyeToCamera();
+  await page.evaluate(() =>
+    window.__godsEyeView.viewer.entities.remove(window.__qaWall),
+  );
+  await sleep(4000);
+  const recoveredRange = await eyeToCamera();
+  check(
+    'follow camera pulls in front of an obstruction',
+    blockedRange < clearRange / 2 + 0.5,
+    `${clearRange.toFixed(1)} m clear → ${blockedRange.toFixed(1)} m blocked`,
+  );
+  check(
+    'follow camera eases back out when clear',
+    Math.abs(recoveredRange - clearRange) < 0.5,
+    `${recoveredRange.toFixed(1)} m`,
+  );
+
+  // Panel controls keep their arrow keys; the globe gets no context menu.
+  const keyChecks = await page.evaluate(() => {
+    const button = document.querySelector('#data-toggles .data-toggle-btn');
+    button.focus();
+    const arrow = new KeyboardEvent('keydown', {
+      code: 'ArrowDown',
+      key: 'ArrowDown',
+      bubbles: true,
+      cancelable: true,
+    });
+    button.dispatchEvent(arrow);
+    button.dispatchEvent(
+      new KeyboardEvent('keyup', { code: 'ArrowDown', bubbles: true }),
+    );
+    button.blur();
+    const menu = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+    });
+    window.__godsEyeView.viewer.scene.canvas.dispatchEvent(menu);
+    return {
+      arrowSwallowed: arrow.defaultPrevented,
+      menuSuppressed: menu.defaultPrevented,
+    };
+  });
+  check(
+    'arrow keys on a focused panel control stay native',
+    !keyChecks.arrowSwallowed,
+  );
+  check('no context menu on the globe', keyChecks.menuSuppressed);
+
   // Shortcut isolation: W must not trigger POI flights, V not clean view.
   await page.keyboard.press('KeyV');
   await sleep(300);
@@ -441,7 +512,8 @@ try {
     redirect.action === 'place_avatar' && redirect.mode === 'teleported',
   );
 
-  await clickToggle();
+  await page.evaluate(() => document.activeElement?.blur?.());
+  await page.keyboard.press('Escape');
   await page.waitForFunction(
     () =>
       !window.__godsEyeView.dataManager.layers.get('avatar').module.isActive(),
@@ -449,7 +521,7 @@ try {
   );
   state = await page.evaluate(avatarState);
   check(
-    'toggle off restores camera inputs',
+    'Escape on the globe ends Me Mode and restores camera inputs',
     state.inputs === true &&
       !state.hint &&
       !state.bodyClass &&

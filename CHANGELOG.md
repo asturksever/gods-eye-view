@@ -9,7 +9,10 @@
   clips follow ground speed. The avatar follows the surface with rationed
   downward rays from just above its feet (so it walks under tree canopy and
   bridges), smoothed over five samples. Another camera owner moving the
-  camera ends Me Mode, and Me Mode will not start during Cockpit. `?avatar=` swaps the model
+  camera ends Me Mode, and Me Mode will not start during Cockpit. The follow
+  camera keeps in front of walls and slopes, entry flies down from the
+  current view, Esc on the globe exits, and `?avatar=` accepts same-origin
+  paths only. `?avatar=` swaps the model
   and `?clips=idle:…,walk:…,run:…` maps its clip names. Voice gains
   `place_avatar` and `move_avatar_to` (walks under 300 m), `fly_to_location`
   moves the avatar while Me Mode is on, and `get_current_view_state` reports

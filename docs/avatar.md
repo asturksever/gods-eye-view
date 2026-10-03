@@ -15,9 +15,11 @@ Open **Data Layers → Utilities → Me Mode**, or say "put me at Kings Cross".
 | `V` | Toggle first person (eye height 1.6 m, model hidden) |
 | Drag on the globe | Orbit the camera around the avatar / look around |
 | Mouse wheel | Follow distance, 2–30 m |
+| `Esc` (on the globe) | Leave Me Mode |
 
 While Me Mode is on it owns the camera and these keys. The HUD shortcuts under
-`W`, `D` and `V` are suspended, keys typed into text fields are ignored, and
+`W`, `D` and `V` are suspended. Keys typed into text fields are ignored, and
+arrow keys on a focused panel control keep their normal behaviour, and
 turning the layer off restores the normal GEV camera. If anything else moves
 the camera (a search, a POI key, a voice camera tool, Director playback or
 Cockpit), Me Mode ends and leaves the camera where that move put it, rather
@@ -58,9 +60,12 @@ http://localhost:4173/?avatar=/avatars/spiderman.glb&clips=idle:Breathing,walk:W
 http://localhost:4173/?avatar=/avatars/said.glb&avatarHeading=0
 ```
 
-- `avatar`: a root-relative `.glb`/`.gltf` path or an `https://` URL. Files in
+- `avatar`: a root-relative `.glb`/`.gltf` path on the same server. Other
+  hosts are refused, so a shared link cannot make a viewer download from an
+  arbitrary site; code can still load one through `setModel`. Files in
   `public/avatars/` are served at `/avatars/…` and are **git-ignored**, so a
-  personal scan never ends up in a commit.
+  personal scan never ends up in a commit. A model that has not loaded after
+  30 s fails the toggle, and turning Me Mode off cancels a download.
 - `clips`: maps the three roles to your file's animation names. Unmapped roles
   fall back by name (`*idle*`, `*walk*`, `*run*`, case-insensitive), then
   run → walk → idle. A model with a single clip uses it for everything, and a
@@ -109,8 +114,12 @@ but their licence is yours to check. Keep them in the ignored folder.
 
 ## Limits (demo scope)
 
-No building collision or camera collision; walking through walls is possible.
-No cross-fades between clips. The avatar is local and is not shared through
+The avatar does not collide with buildings; walking through walls is possible.
+The follow camera does: a ray from the avatar's eye pulls it in front of walls
+and uphill slopes behind the avatar, and it eases back out when they clear.
+No cross-fades between clips. Turning Me Mode on flies down from the current
+view over about 1.6 s; anything else moving the camera during that flight
+(for example GEV's own start-up camera move) ends Me Mode. The avatar is local and is not shared through
 share links. Ground following needs loaded surface geometry: with the keyless
 globe the avatar stands on terrain, not on buildings.
 
