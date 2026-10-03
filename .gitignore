@@ -19,3 +19,6 @@ output/
 3d-models/
 pinokio/ENVIRONMENT
 pinokio/.installed
+# Me Mode avatar models stay local (personal scans, third-party characters).
+public/avatars/*
+!public/avatars/README.md
