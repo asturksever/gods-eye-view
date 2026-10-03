@@ -11,7 +11,9 @@
   bridges), smoothed over five samples. Another camera owner moving the
   camera ends Me Mode, and Me Mode will not start during Cockpit. The follow
   camera keeps in front of walls and slopes, entry flies down from the
-  current view, Esc on the globe exits, and `?avatar=` accepts same-origin
+  current view, a First/Third person button sits on the hint bar,
+  Cesium's camera collision is paused so it cannot push the follow camera
+  (which ended Me Mode on interaction), Esc on the globe exits, and `?avatar=` accepts same-origin
   paths only. `?avatar=` swaps the model
   and `?clips=idle:…,walk:…,run:…` maps its clip names. Voice gains
   `place_avatar` and `move_avatar_to` (walks under 300 m), `fly_to_location`

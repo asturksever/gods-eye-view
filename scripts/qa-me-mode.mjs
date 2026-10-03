@@ -388,8 +388,12 @@ try {
   await page.evaluate(() =>
     window.__godsEyeView.viewer.entities.remove(window.__qaWall),
   );
-  await sleep(4000);
-  const recoveredRange = await eyeToCamera();
+  // Easing is per rendered frame; slow software renderers need longer.
+  let recoveredRange = await eyeToCamera();
+  for (let i = 0; i < 15 && Math.abs(recoveredRange - clearRange) >= 0.5; i++) {
+    await sleep(1000);
+    recoveredRange = await eyeToCamera();
+  }
   check(
     'follow camera pulls in front of an obstruction',
     blockedRange < clearRange / 2 + 0.5,
@@ -452,6 +456,32 @@ try {
   check(
     'V returns to third person',
     state.pose.view === 'third-person' && state.modelShown,
+  );
+
+  // The on-screen button toggles first person too, and labels the mode.
+  const viewButton = await page.evaluate(async () => {
+    const button = document.querySelector('.me-mode-view-toggle');
+    const pose = () =>
+      window.__godsEyeView.dataManager.layers.get('avatar').module.getPose()
+        .view;
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const first = { view: pose(), label: button.textContent };
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return {
+      first,
+      back: { view: pose(), label: button.textContent },
+      focusReturned: document.activeElement !== button,
+    };
+  });
+  check(
+    'view button switches to first person and back',
+    viewButton.first.view === 'first-person' &&
+      /first/i.test(viewButton.first.label) &&
+      viewButton.back.view === 'third-person' &&
+      viewButton.focusReturned,
+    JSON.stringify(viewButton),
   );
 
   // Voice tools through the real action runner.
@@ -547,6 +577,42 @@ try {
     { timeout: 120000 },
   );
   await sleep(1500);
+  // A one-frame nudge (Cesium's collision push, any correction) must not
+  // end Me Mode, and Cesium's own camera collision is off while it runs.
+  const nudge = await page.evaluate(async () => {
+    const { viewer, dataManager } = window.__godsEyeView;
+    const C3 = viewer.camera.position.constructor;
+    const controller = viewer.scene.screenSpaceCameraController;
+    const collisionOff = controller.enableCollisionDetection === false;
+    const up = C3.normalize(viewer.camera.positionWC, new C3());
+    const pushed = C3.add(
+      viewer.camera.positionWC,
+      C3.multiplyByScalar(up, 2, new C3()),
+      new C3(),
+    );
+    viewer.camera.setView({
+      destination: pushed,
+      orientation: {
+        direction: viewer.camera.directionWC,
+        up: viewer.camera.upWC,
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    return {
+      collisionOff,
+      active: dataManager.layers.get('avatar').module.isActive(),
+    };
+  });
+  check(
+    'a one-frame camera nudge does not end Me Mode',
+    nudge.active,
+    JSON.stringify(nudge),
+  );
+  check(
+    "Cesium's camera collision is off while Me Mode runs",
+    nudge.collisionOff,
+  );
+
   const handoff = await page.evaluate(async ({ lat, lon }) => {
     const { viewer, dataManager } = window.__godsEyeView;
     const Cesium = await import('/node_modules/cesium/Build/Cesium/index.js');
@@ -560,13 +626,16 @@ try {
       active: avatar.isActive(),
       height: viewer.camera.positionCartographic.height,
       inputs: viewer.scene.screenSpaceCameraController.enableInputs,
+      collision:
+        viewer.scene.screenSpaceCameraController.enableCollisionDetection,
     };
   }, KINGS_CROSS);
   check(
     'an outside camera move ends Me Mode and keeps the new view',
     !handoff.active &&
       Math.abs(handoff.height - 2000) < 5 &&
-      handoff.inputs === true,
+      handoff.inputs === true &&
+      handoff.collision === true,
     JSON.stringify(handoff),
   );
 

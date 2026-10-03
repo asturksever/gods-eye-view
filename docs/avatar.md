@@ -12,7 +12,7 @@ Open **Data Layers → Utilities → Me Mode**, or say "put me at Kings Cross".
 | --- | --- |
 | `W` `A` `S` `D` / arrow keys | Walk relative to the camera (1.4 m/s) |
 | `Shift` + move | Run (4 m/s) |
-| `V` | Toggle first person (eye height 1.6 m, model hidden) |
+| `V`, or the **First / Third person** button on the hint bar | Toggle first person (eye height 1.6 m, model hidden) |
 | Drag on the globe | Orbit the camera around the avatar / look around |
 | Mouse wheel | Follow distance, 2–30 m |
 | `Esc` (on the globe) | Leave Me Mode |
@@ -23,7 +23,10 @@ arrow keys on a focused panel control keep their normal behaviour, and
 turning the layer off restores the normal GEV camera. If anything else moves
 the camera (a search, a POI key, a voice camera tool, Director playback or
 Cockpit), Me Mode ends and leaves the camera where that move put it, rather
-than pulling it back. Me Mode will not start while Cockpit is active.
+than pulling it back. A one-frame correction does not count; a jump over 50 m or a move
+repeated on consecutive frames (a flight) does. Cesium's own camera collision
+is switched off while Me Mode runs, because it would push the follow camera
+off the pavement, and it is restored afterwards. Me Mode will not start while Cockpit is active.
 
 Voice:
 
