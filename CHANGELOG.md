@@ -6,8 +6,10 @@
   avatar at the camera target and lets you walk it on the photoreal tiles.
   WASD/arrow keys move relative to the camera, Shift runs, V toggles first
   person, drag orbits and the wheel zooms the follow camera. Idle/walk/run
-  clips follow ground speed; the avatar follows the surface with rationed
-  `sampleHeight` reads smoothed over five samples. `?avatar=` swaps the model
+  clips follow ground speed. The avatar follows the surface with rationed
+  downward rays from just above its feet (so it walks under tree canopy and
+  bridges), smoothed over five samples. Another camera owner moving the
+  camera ends Me Mode, and Me Mode will not start during Cockpit. `?avatar=` swaps the model
   and `?clips=idle:…,walk:…,run:…` maps its clip names. Voice gains
   `place_avatar` and `move_avatar_to` (walks under 300 m), `fly_to_location`
   moves the avatar while Me Mode is on, and `get_current_view_state` reports

@@ -18,8 +18,10 @@ Open **Data Layers → Utilities → Me Mode**, or say "put me at Kings Cross".
 
 While Me Mode is on it owns the camera and these keys. The HUD shortcuts under
 `W`, `D` and `V` are suspended, keys typed into text fields are ignored, and
-turning the layer off restores the normal GEV camera. Entering Cockpit turns
-Me Mode off.
+turning the layer off restores the normal GEV camera. If anything else moves
+the camera (a search, a POI key, a voice camera tool, Director playback or
+Cockpit), Me Mode ends and leaves the camera where that move put it, rather
+than pulling it back. Me Mode will not start while Cockpit is active.
 
 Voice:
 
@@ -33,11 +35,20 @@ Voice:
 - "What is in front of me?" works from `get_current_view_state`, whose
   `avatar` field carries position, height and compass facing.
 
-Ground following samples the rendered surface (`scene.sampleHeight`, excluding
-the avatar) at most every 90 ms while moving and every 600 ms at rest, and
-averages the last five samples so tile level-of-detail swaps do not make the
-avatar bob. Each sample is a synchronous pick render, so it is never done per
-frame. Jumps over 4 m (bridges, teleports) restart the average.
+Ground following casts a ray straight down from 1.2 m above the feet
+(`scene.pickFromRay`, excluding the avatar). Steps and kerbs below that are
+climbed, and anything above it, such as tree canopy, bridges and awnings, is
+walked under rather than stood on. If the ray starts inside geometry and finds
+nothing, the highest surface (`sampleHeight`) is used instead. Samples are
+taken at most every 90 ms while moving and every 600 ms at rest, and the last
+five are averaged so tile level-of-detail swaps do not make the avatar bob.
+Each sample is a synchronous pick render, so it is never done per frame. Jumps
+over 4 m restart the average.
+
+A placement (toggle on, voice, `setPosition`) starts from the highest surface
+on the most detailed tiles, then probes downward just below each hit until
+nothing is below. A street under a tree lands on the street, and a roof with
+nothing under it stays the answer.
 
 ## Swapping the model
 

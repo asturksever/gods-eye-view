@@ -210,6 +210,19 @@ try {
   );
   check('camera inputs are taken over', state.inputs === false);
   check('hint and body class shown', state.hint && state.bodyClass);
+  const hintOnTop = await page.evaluate(() => {
+    const hint = document.querySelector('.me-mode-hint');
+    // The hint ignores the pointer; hit-test it as if it did not.
+    hint.style.pointerEvents = 'auto';
+    const rect = hint.getBoundingClientRect();
+    const top = document.elementFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+    );
+    hint.style.pointerEvents = 'none';
+    return top === hint || hint.contains(top);
+  });
+  check('hint is not covered by other UI', hintOnTop);
   check(
     'idle clip plays while standing',
     /idle|survey/i.test(state.clip || ''),
@@ -278,6 +291,66 @@ try {
     `gap ${gap?.toFixed(3)} m`,
   );
   await screenshot(page, 'kings-cross-walked');
+
+  // Controlled street: the globe hidden, a ground slab (top at 0 m) and a
+  // tree canopy slab 6–7 m up, both under the avatar. A top-down sample reads
+  // the canopy; the avatar must be placed on, and walk along, the ground.
+  const canopy = await page.evaluate(async () => {
+    const { viewer, dataManager } = window.__godsEyeView;
+    const C3 = viewer.camera.position.constructor; // the app's Cesium
+    const Cartographic = viewer.camera.positionCartographic.constructor;
+    const avatar = dataManager.layers.get('avatar').module;
+    const { lon, lat } = avatar.getPose();
+    viewer.scene.globe.show = false;
+    window.__qaSlabs = [
+      viewer.entities.add({
+        position: C3.fromDegrees(lon, lat, -0.5),
+        box: { dimensions: new C3(60, 60, 1) },
+      }),
+      viewer.entities.add({
+        position: C3.fromDegrees(lon, lat, 6.5),
+        box: { dimensions: new C3(60, 60, 1) },
+      }),
+    ];
+    let model;
+    for (let i = 0; i < viewer.scene.primitives.length; i++)
+      if (viewer.scene.primitives.get(i)?.id === 'me-mode-avatar')
+        model = viewer.scene.primitives.get(i);
+    let top;
+    for (let i = 0; i < 60; i++) {
+      top = viewer.scene.sampleHeight(Cartographic.fromDegrees(lon, lat), [
+        model,
+      ]);
+      if (top > 6) break;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    const placed = await avatar.setPosition(lon, lat);
+    return { top, placedHeight: placed.height, grounded: placed.grounded };
+  });
+  check(
+    'a top-down sample would stand on the canopy',
+    canopy.top > 6,
+    `top-down ${canopy.top?.toFixed(2)} m`,
+  );
+  check(
+    'placement under the canopy lands on the ground',
+    Math.abs(canopy.placedHeight) < 0.3,
+    `placed at ${canopy.placedHeight?.toFixed(2)} m (grounded ${canopy.grounded})`,
+  );
+  await hold(page, ['KeyW'], 2000);
+  await sleep(2500);
+  state = await page.evaluate(avatarState);
+  await page.evaluate(() => {
+    const { viewer } = window.__godsEyeView;
+    window.__qaSlabs.forEach((entity) => viewer.entities.remove(entity));
+    viewer.scene.globe.show = true;
+  });
+  check(
+    'walking under the canopy stays on the ground',
+    Math.abs(state.pose.height) < 0.3,
+    `avatar at ${state.pose.height.toFixed(2)} m`,
+  );
+  await screenshot(page, 'under-canopy');
 
   // Shortcut isolation: W must not trigger POI flights, V not clean view.
   await page.keyboard.press('KeyV');
@@ -382,6 +455,93 @@ try {
       !state.bodyClass &&
       state.clip === null,
   );
+
+  // Another camera owner (search, POI key, voice camera tool) takes over:
+  // Me Mode hands the camera over instead of pulling it back.
+  await clickToggle();
+  await page.waitForFunction(
+    () =>
+      window.__godsEyeView.dataManager.layers.get('avatar').module.getStats()
+        .count === 1,
+    { timeout: 120000 },
+  );
+  await sleep(1500);
+  const handoff = await page.evaluate(async ({ lat, lon }) => {
+    const { viewer, dataManager } = window.__godsEyeView;
+    const Cesium = await import('/node_modules/cesium/Build/Cesium/index.js');
+    viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromDegrees(lon, lat, 2000),
+    });
+    const avatar = dataManager.layers.get('avatar').module;
+    for (let i = 0; i < 60 && avatar.isActive(); i++)
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    return {
+      active: avatar.isActive(),
+      height: viewer.camera.positionCartographic.height,
+      inputs: viewer.scene.screenSpaceCameraController.enableInputs,
+    };
+  }, KINGS_CROSS);
+  check(
+    'an outside camera move ends Me Mode and keeps the new view',
+    !handoff.active &&
+      Math.abs(handoff.height - 2000) < 5 &&
+      handoff.inputs === true,
+    JSON.stringify(handoff),
+  );
+
+  // Cockpit: entering it ends Me Mode without handing mouse input back,
+  // and Me Mode refuses to start while Cockpit owns the camera.
+  await clickToggle();
+  await page.waitForFunction(
+    () =>
+      window.__godsEyeView.dataManager.layers.get('avatar').module.getStats()
+        .count === 1,
+    { timeout: 120000 },
+  );
+  await sleep(1000);
+  const cockpit = await page.evaluate(async () => {
+    const { viewer, dataManager } = window.__godsEyeView;
+    const avatar = dataManager.layers.get('avatar').module;
+    const controller = viewer.scene.screenSpaceCameraController;
+    // Simulate Cockpit's enter() order: inputs off, class, then the event.
+    controller.enableInputs = false;
+    document.body.classList.add('cockpit-mode');
+    window.dispatchEvent(
+      new CustomEvent('gev:cockpit-mode-changed', {
+        detail: { active: true, subjectId: 'qa', layerId: 'flights' },
+      }),
+    );
+    for (let i = 0; i < 60 && avatar.isActive(); i++)
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    const afterEnter = {
+      active: avatar.isActive(),
+      inputs: controller.enableInputs,
+    };
+    await dataManager.setEnabled('avatar', true, { origin: 'user' });
+    const refused = {
+      active: avatar.isActive(),
+      error: avatar.getStats().error,
+    };
+    document.body.classList.remove('cockpit-mode');
+    controller.enableInputs = true;
+    window.dispatchEvent(
+      new CustomEvent('gev:cockpit-mode-changed', {
+        detail: { active: false },
+      }),
+    );
+    return { afterEnter, refused };
+  });
+  check(
+    'Cockpit entry ends Me Mode and leaves mouse input off',
+    !cockpit.afterEnter.active && cockpit.afterEnter.inputs === false,
+    JSON.stringify(cockpit.afterEnter),
+  );
+  check(
+    'Me Mode refuses to start while Cockpit is active',
+    !cockpit.refused.active && /cockpit/i.test(cockpit.refused.error || ''),
+    JSON.stringify(cockpit.refused),
+  );
+
   const avatarErrors = errors.filter((text) => /me mode|avatar/i.test(text));
   check(
     'no Me Mode console errors',

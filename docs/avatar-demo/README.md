@@ -8,5 +8,7 @@ with `GOOGLE_MAPS_API_KEY` set to capture the photoreal versions.
 
 - `kings-cross-start.png`: Me Mode turned on at Kings Cross, London (idle).
 - `kings-cross-walked.png`: after W then Shift+W (walk clip mid-stride).
+- `under-canopy.png`: after placing and walking under a 6–7 m canopy slab
+  over a ground slab (globe hidden): the avatar stays on the ground.
 - `times-square.png`: after voice `place_avatar` to Times Square and a short
   `move_avatar_to` walk north.
