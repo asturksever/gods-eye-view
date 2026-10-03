@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+- Add Me Mode (demo): a Utilities layer that drops a rigged, animated glTF
+  avatar at the camera target and lets you walk it on the photoreal tiles.
+  WASD/arrow keys move relative to the camera, Shift runs, V toggles first
+  person, drag orbits and the wheel zooms the follow camera. Idle/walk/run
+  clips follow ground speed; the avatar follows the surface with rationed
+  `sampleHeight` reads smoothed over five samples. `?avatar=` swaps the model
+  and `?clips=idle:…,walk:…,run:…` maps its clip names. Voice gains
+  `place_avatar` and `move_avatar_to` (walks under 300 m), `fly_to_location`
+  moves the avatar while Me Mode is on, and `get_current_view_state` reports
+  the avatar's position and facing. Skinned meshes nested under transformed
+  armature nodes are re-parented at load so Cesium renders them as the glTF
+  spec and three.js do. No avatar model is bundled; see `docs/avatar.md`.
+
 ## [0.2.1] — 2026-10-02 — God's Eye View through Your Agent (with security fixes and other features)
 
 - Ship each bundled data pack once. The region, marine, admin-boundary,

@@ -1,5 +1,16 @@
 # God's Eye View Current State
 
+Me Mode (Utilities → Me Mode, layer id `avatar`, local-only) places one glTF
+avatar at the camera target and owns the camera and WASD/Shift/V/arrow keys
+while enabled; Cesium's camera inputs, the HUD shortcuts underneath and the
+normal camera return when it is turned off, and entering Cockpit turns it off.
+Ground height comes from `sampleHeight` on the rendered surface (tiles, or the
+keyless globe), sampled at most every 90 ms while moving and 600 ms at rest,
+never per frame; placement waits for `sampleHeightMostDetailed`. There is no
+building collision. `place_avatar`/`move_avatar_to` are voice tools, and
+`fly_to_location` moves the avatar instead of the camera while it is on. See
+[the avatar guide](avatar.md).
+
 ## God's Eye View in conversations — October 2, 2026
 
 Tool answers that can be shown in God's Eye View include a view: camera, layers,
