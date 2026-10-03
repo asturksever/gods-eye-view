@@ -273,6 +273,22 @@ export function unoccludedRange(
   return Math.max(min, hitDistance - margin);
 }
 
+/** A camera jump this large is another owner at once (search, teleport). */
+export const TAKEOVER_JUMP_M = 50;
+/** Smaller outside moves must repeat on this many frames (a flight does;
+ *  a one-frame correction does not). */
+export const TAKEOVER_STRIKES = 2;
+
+/**
+ * Whether an outside camera move means another owner took the camera.
+ * @param {{ moved: number, strikes: number }} change `moved` in metres since
+ *   Me Mode's last frame; `strikes` counts consecutive frames with a move,
+ *   this one included.
+ */
+export function cameraTakenBy({ moved, strikes }) {
+  return moved > TAKEOVER_JUMP_M || strikes >= TAKEOVER_STRIKES;
+}
+
 /** Smoothstep easing for the entry flight, t in [0, 1]. */
 export function easeInOut(t) {
   const x = clamp(t, 0, 1);

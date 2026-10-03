@@ -5,6 +5,7 @@ import {
   HeightSmoother,
   RUN_SPEED_MPS,
   WALK_SPEED_MPS,
+  cameraTakenBy,
   clipRoleForSpeed,
   descendToGround,
   describePose,
@@ -223,4 +224,13 @@ test('entry easing is smooth and clamped', () => {
   assert.equal(easeInOut(-1), 0);
   assert.equal(easeInOut(0.5), 0.5);
   assert.equal(easeInOut(2), 1);
+});
+
+test('camera hand-off ignores one-frame nudges but not flights or jumps', () => {
+  // Cesium's collision push or any one-off correction: overwritten, kept.
+  assert.equal(cameraTakenBy({ moved: 2, strikes: 1 }), false);
+  // A flight moves the camera every frame.
+  assert.equal(cameraTakenBy({ moved: 2, strikes: 2 }), true);
+  // A search or setView jump is another owner at once.
+  assert.equal(cameraTakenBy({ moved: 2000, strikes: 1 }), true);
 });

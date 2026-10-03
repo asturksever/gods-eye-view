@@ -14,6 +14,7 @@ import {
   FALLBACK_AVATAR_URL,
   HeightSmoother,
   WALK_SPEED_MPS,
+  cameraTakenBy,
   clamp,
   clipRateForSpeed,
   clipRoleForSpeed,
@@ -138,7 +139,10 @@ export function createAvatarLayer({
   let _error = null;
   let _removers = [];
   let _hint = null;
+  let _viewButton = null;
   let _savedInputs = null;
+  let _savedCollision = null;
+  let _takeoverStrikes = 0;
 
   // Pose (degrees / ellipsoid metres / compass radians).
   let _lon = null;
@@ -277,8 +281,6 @@ export function createAvatarLayer({
   function showHint(viewer) {
     _hint = document.createElement('div');
     _hint.className = 'me-mode-hint';
-    _hint.setAttribute('role', 'status');
-    _hint.textContent = HINT_TEXT;
     Object.assign(_hint.style, {
       position: 'absolute',
       left: '50%',
@@ -286,7 +288,10 @@ export function createAvatarLayer({
       // the bottom ~100 px of the viewer.
       bottom: '128px',
       transform: 'translateX(-50%)',
-      padding: '6px 12px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '6px 6px 6px 12px',
       borderRadius: '6px',
       background: 'rgba(0, 0, 0, 0.6)',
       color: '#e6f3ff',
@@ -295,12 +300,47 @@ export function createAvatarLayer({
       pointerEvents: 'none',
       zIndex: '5',
     });
+    const text = document.createElement('span');
+    text.setAttribute('role', 'status');
+    text.textContent = HINT_TEXT;
+    _viewButton = document.createElement('button');
+    _viewButton.type = 'button';
+    _viewButton.className = 'me-mode-view-toggle';
+    Object.assign(_viewButton.style, {
+      pointerEvents: 'auto',
+      cursor: 'pointer',
+      padding: '3px 10px',
+      border: '1px solid rgba(230, 243, 255, 0.5)',
+      borderRadius: '4px',
+      background: 'rgba(230, 243, 255, 0.12)',
+      color: 'inherit',
+      font: 'inherit',
+    });
+    _viewButton.addEventListener('click', () => {
+      setView(_firstPerson ? 'third' : 'first');
+      // Hand the keyboard back to the globe so arrows keep walking.
+      _viewButton.blur();
+    });
+    _hint.append(text, _viewButton);
+    syncViewButton();
     viewer.container.appendChild(_hint);
+  }
+
+  function syncViewButton() {
+    if (!_viewButton) return;
+    _viewButton.textContent = _firstPerson
+      ? '👁 First person'
+      : '🧍 Third person';
+    _viewButton.title = _firstPerson
+      ? 'Switch to the third-person follow camera (V)'
+      : 'Switch to first person (V)';
+    _viewButton.setAttribute('aria-pressed', String(_firstPerson));
   }
 
   function setView(view) {
     _firstPerson = view === 'first';
     if (_model) _model.show = !_firstPerson && _groundReady;
+    syncViewButton();
   }
 
   function cartographic(lon = _lon, lat = _lat, height = 0) {
@@ -790,7 +830,7 @@ export function createAvatarLayer({
    * it back.
    */
   function cameraTakenOver(camera) {
-    if (!_cameraSet) return false;
+    if (!_cameraSet) return null;
     const moved = Cesium.Cartesian3.distance(
       camera.positionWC,
       _cameraSet.position,
@@ -799,7 +839,14 @@ export function createAvatarLayer({
       camera.directionWC,
       _cameraSet.direction,
     );
-    return moved > CAMERA_HANDOFF_M || turned < CAMERA_HANDOFF_DOT;
+    if (moved <= CAMERA_HANDOFF_M && turned >= CAMERA_HANDOFF_DOT) {
+      _takeoverStrikes = 0;
+      return null;
+    }
+    _takeoverStrikes += 1;
+    return cameraTakenBy({ moved, strikes: _takeoverStrikes })
+      ? { moved, turnedDeg: (Math.acos(clamp(turned, -1, 1)) * 180) / Math.PI }
+      : null;
   }
 
   function handOffCamera(reason) {
@@ -819,8 +866,12 @@ export function createAvatarLayer({
       handOffCamera('Cockpit took the camera');
       return;
     }
-    if (cameraTakenOver(_viewer.camera)) {
-      handOffCamera('the camera was moved elsewhere');
+    const takeover = cameraTakenOver(_viewer.camera);
+    if (takeover) {
+      handOffCamera(
+        `the camera was moved elsewhere (${takeover.moved.toFixed(1)} m, ` +
+          `${takeover.turnedDeg.toFixed(1)}°)`,
+      );
       return;
     }
     const now = performance.now();
@@ -865,6 +916,7 @@ export function createAvatarLayer({
     clearKeys();
     _hint?.remove();
     _hint = null;
+    _viewButton = null;
     const controller = viewer?.scene?.screenSpaceCameraController;
     // Cockpit switches the inputs off before announcing itself; never hand
     // them back underneath it.
@@ -873,6 +925,9 @@ export function createAvatarLayer({
       viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
     }
     _savedInputs = null;
+    if (controller && _savedCollision !== null)
+      controller.enableCollisionDetection = _savedCollision;
+    _savedCollision = null;
     render.releaseContinuousRender(RENDER_OWNER);
     document.body?.classList.remove('me-mode');
     window.dispatchEvent(
@@ -932,6 +987,12 @@ export function createAvatarLayer({
       const controller = viewer.scene.screenSpaceCameraController;
       _savedInputs = controller.enableInputs;
       controller.enableInputs = false;
+      // Cesium's collision correction runs every frame even with inputs off
+      // and would push the follow camera up off the pavement or over a tree
+      // (GEV enables tileset collision). Me Mode keeps its own camera clear.
+      _savedCollision = controller.enableCollisionDetection;
+      controller.enableCollisionDetection = false;
+      _takeoverStrikes = 0;
       render.holdContinuousRender(RENDER_OWNER);
       document.body?.classList.add('me-mode');
       installInput(viewer);
@@ -992,6 +1053,16 @@ export function createAvatarLayer({
         lastUpdate: null,
         error: _error,
       };
+    },
+
+    /**
+     * Switch between the third-person follow camera and first person
+     * (eye height, model hidden). Same as the V key and the on-screen button.
+     * @param {'first'|'third'} view
+     */
+    setViewMode(view) {
+      setView(view === 'first' ? 'first' : 'third');
+      return _firstPerson ? 'first-person' : 'third-person';
     },
 
     /** True while Me Mode owns the camera. */
