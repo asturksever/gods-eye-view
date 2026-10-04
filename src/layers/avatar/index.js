@@ -58,7 +58,10 @@ const CAMERA_HANDOFF_M = 0.5;
 const CAMERA_HANDOFF_DOT = 0.9995;
 const HINT_TEXT = 'WASD · Shift run · F fly, E/Q up/down · drag to look';
 /** Road snapping gives up after this long and falls back to the tiles. */
-const ROAD_SNAP_TIMEOUT_MS = 3000;
+const ROAD_SNAP_TIMEOUT_MS = 6000;
+/** Street-level check rings around the final spot (m) and their directions. */
+const STREET_CHECK_RADII = [5, 10, 18, 28, 42, 60, 85];
+const STREET_CHECK_DIRECTIONS = 12;
 /** Forward lean while flying at full speed (radians). */
 const FLY_LEAN = 0.9;
 /** A drag shorter than this is a click: drop at the screen centre. */
@@ -597,7 +600,10 @@ export function createAvatarLayer({
     };
   }
 
-  /** Nearest road via GEV's routing proxy (a zero-length route), or null. */
+  /**
+   * Nearest road via GEV's routing proxy (a zero-length OSRM route).
+   * @returns {Promise<{ point: {lon, lat}|null, reason: string }>}
+   */
   async function snapToRoad(lon, lat) {
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(), ROAD_SNAP_TIMEOUT_MS);
@@ -605,34 +611,65 @@ export function createAvatarLayer({
       const response = await fetch(roadSnapUrl(lon, lat), {
         signal: abort.signal,
       });
-      return response.ok
-        ? parseRoadSnap(await response.json(), lon, lat)
-        : null;
-    } catch {
-      return null;
+      if (!response.ok)
+        return { point: null, reason: `routing HTTP ${response.status}` };
+      const payload = await response.json();
+      const point = parseRoadSnap(payload, lon, lat);
+      if (point) return { point, reason: 'road' };
+      return {
+        point: null,
+        reason:
+          payload?.ok === true
+            ? 'no road within 150 m'
+            : `routing: ${payload?.error || 'no answer'}`,
+      };
+    } catch (error) {
+      return {
+        point: null,
+        reason: abort.signal.aborted
+          ? `routing timed out after ${ROAD_SNAP_TIMEOUT_MS / 1000} s`
+          : `routing failed: ${error?.message || error}`,
+      };
     } finally {
       clearTimeout(timer);
     }
   }
 
+  /** Nearest street-level point when `lon, lat` is up on a building. */
+  function streetLevelCheck(lon, lat) {
+    return streetLevelNear(
+      sampleTopDown(lon, lat),
+      ringAround(lon, lat, STREET_CHECK_RADII, STREET_CHECK_DIRECTIONS).map(
+        (point) => ({ ...point, height: sampleTopDown(point.lon, point.lat) }),
+      ),
+    );
+  }
+
   /**
-   * Keep a drop out of buildings: the nearest road when the routing proxy
-   * answers, otherwise the nearest street-level point on the loaded surface
-   * when the drop is on a roof. Returns where to stand and how it was found.
+   * Keep a drop out of buildings. First the nearest road (routing proxy);
+   * then, always, a street-level check of the resulting spot on the loaded
+   * 3D surface, which also catches a road lookup that failed or answered
+   * with a point that is still up on a structure. Logs what it did.
    */
   async function streetSpot(lon, lat) {
     const road = await snapToRoad(lon, lat);
-    if (road) return { ...road, snapped: 'road' };
-    const street = streetLevelNear(
-      sampleTopDown(lon, lat),
-      ringAround(lon, lat).map((point) => ({
-        ...point,
-        height: sampleTopDown(point.lon, point.lat),
-      })),
-    );
-    return street
-      ? { lon: street.lon, lat: street.lat, snapped: 'street-level' }
-      : { lon, lat, snapped: null };
+    let spot = road.point ? { ...road.point } : { lon, lat };
+    const steps = [];
+    if (road.point)
+      steps.push(
+        `moved ${Math.round(localOffset(lon, lat, spot.lon, spot.lat).distance)} m to road`,
+      );
+    else steps.push(`no road snap (${road.reason})`);
+    const street = streetLevelCheck(spot.lon, spot.lat);
+    if (street) {
+      steps.push(
+        `moved ${Math.round(street.distance)} m off a roof to street level`,
+      );
+      spot = { lon: street.lon, lat: street.lat };
+    }
+    console.info(`[Me Mode] Drop: ${steps.join('; ')}`);
+    const snapped = street ? 'street-level' : road.point ? 'road' : null;
+    return { ...spot, snapped };
   }
 
   /**

@@ -19,7 +19,10 @@ A drop never lands inside a building. It is moved onto the nearest road
 through GEV's routing proxy (`/api/route`, the same OSRM service as
 Directions), and only to a road within 150 m. If routing is unavailable, a
 drop on a roof moves to the nearest street-level point around it on the
-loaded 3D surface. The Pegman hides while Me Mode is on. Leave with
+loaded 3D surface. That street-level check (up to 85 m around) also runs
+after a road snap, so a spot that is still up on a structure is corrected.
+Each drop logs what it did in the browser console, e.g.
+`[Me Mode] Drop: moved 23 m to road` or the reason the road lookup failed. The Pegman hides while Me Mode is on. Leave with
 **✕ Exit** on the bar at the bottom, or `Esc`.
 
 | Input | Action |

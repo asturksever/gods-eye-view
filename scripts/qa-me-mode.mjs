@@ -371,6 +371,54 @@ try {
   );
   await screenshot(page, 'under-canopy');
 
+  // A drop on a big roof (60 × 60 m block, 20 m tall) must land on the
+  // street beside it, even when the road lookup is unavailable.
+  const roofDrop = await page.evaluate(async () => {
+    const { viewer, dataManager } = window.__godsEyeView;
+    const C3 = viewer.camera.position.constructor;
+    const Cartographic = viewer.camera.positionCartographic.constructor;
+    const avatar = dataManager.layers.get('avatar').module;
+    const { lon, lat, height: ground } = avatar.getPose();
+    const globeShown = viewer.scene.globe.show;
+    viewer.scene.globe.show = false;
+    const slabs = [
+      viewer.entities.add({
+        position: C3.fromDegrees(lon, lat, ground - 0.5),
+        box: { dimensions: new C3(400, 400, 1) },
+      }),
+      viewer.entities.add({
+        position: C3.fromDegrees(lon, lat, ground + 10),
+        box: { dimensions: new C3(60, 60, 20) },
+      }),
+    ];
+    let roof;
+    for (let i = 0; i < 60; i++) {
+      roof = viewer.scene.sampleHeight(Cartographic.fromDegrees(lon, lat));
+      if (roof > ground + 15) break;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    const placed = await avatar.setPosition(lon, lat);
+    const offset = Math.hypot(
+      (placed.lat - lat) * 111320,
+      (placed.lon - lon) * 111320 * Math.cos((lat * Math.PI) / 180),
+    );
+    slabs.forEach((entity) => viewer.entities.remove(entity));
+    viewer.scene.globe.show = globeShown;
+    return {
+      roof: roof - ground,
+      height: placed.height - ground,
+      offset,
+      snapped: placed.snapped,
+    };
+  });
+  check(
+    'a drop on a roof lands at street level beside the building',
+    roofDrop.roof > 15 &&
+      Math.abs(roofDrop.height) < 0.5 &&
+      roofDrop.offset > 30,
+    JSON.stringify(roofDrop),
+  );
+
   // A wall between the avatar and the follow camera pulls the camera in
   // front of it; with the wall gone the camera eases back out.
   const eyeToCamera = () =>
