@@ -391,6 +391,8 @@ export function keyIntent(event, focus) {
     return { kind: 'view', toggle: down && !event.repeat, claim: true };
   if (event.code === 'KeyF')
     return { kind: 'fly', toggle: down && !event.repeat, claim: true };
+  if (event.code === 'KeyB')
+    return { kind: 'style', toggle: down && !event.repeat, claim: true };
   return null;
 }
 

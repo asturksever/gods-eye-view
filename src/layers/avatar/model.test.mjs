@@ -320,3 +320,11 @@ test('a drop on a roof moves to the nearest street-level point', () => {
   assert.equal(streetLevelNear(20.5, ring), null);
   assert.equal(streetLevelNear(45, ring.slice(0, 2)), null);
 });
+
+test('keys: B switches the fly style', () => {
+  assert.deepEqual(keyIntent({ code: 'KeyB', type: 'keydown' }, 'surface'), {
+    kind: 'style',
+    toggle: true,
+    claim: true,
+  });
+});

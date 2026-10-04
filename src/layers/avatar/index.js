@@ -20,6 +20,7 @@ import {
   clipRoleForSpeed,
   descendToGround,
   describePose,
+  FLY_SPEED_MPS,
   fallStep,
   flyHeight,
   flyVelocityFromKeys,
@@ -40,6 +41,7 @@ import {
   velocityFromKeys,
 } from './model.js';
 import { loadAvatarSource } from './glb.js';
+import { SURF_LEAN, createFlightGear } from './flightGear.js';
 export * from './model.js';
 
 const RENDER_OWNER = 'me-mode';
@@ -56,7 +58,8 @@ const TURN_RATE = 10;
 /** Camera moved by someone else since our last frame: hand it over. */
 const CAMERA_HANDOFF_M = 0.5;
 const CAMERA_HANDOFF_DOT = 0.9995;
-const HINT_TEXT = 'WASD · Shift run · F fly, E/Q up/down · drag to look';
+const HINT_TEXT =
+  'WASD · Shift run · F fly, E/Q up/down, B cape/surf · drag to look';
 /** Road snapping gives up after this long and falls back to the tiles. */
 const ROAD_SNAP_TIMEOUT_MS = 6000;
 /** Street-level check rings around the final spot (m) and their directions. */
@@ -169,6 +172,11 @@ export function createAvatarLayer({
   let _fallSpeed = 0;
   let _floor = null;
   let _flyPitch = 0;
+  let _flyStyle = 'cape';
+  let _gear = null;
+  let _styleButton = null;
+  let _gearShown = null;
+  let _flyClock = 0;
   let _savedInputs = null;
   let _savedCollision = null;
   let _takeoverStrikes = 0;
@@ -247,6 +255,8 @@ export function createAvatarLayer({
       setView(_firstPerson ? 'third' : 'first');
     } else if (intent.kind === 'fly' && intent.toggle) {
       setFlying(!_flying);
+    } else if (intent.kind === 'style' && intent.toggle) {
+      setFlyStyle(_flyStyle === 'cape' ? 'surf' : 'cape');
     }
     // Claim the key so W (POI), D (detection) and V (clean view) shortcuts
     // do not fire underneath Me Mode.
@@ -358,6 +368,12 @@ export function createAvatarLayer({
       setFlying(!_flying);
       _flyButton.blur();
     });
+    _styleButton = _viewButton.cloneNode();
+    _styleButton.className = 'me-mode-style-toggle';
+    _styleButton.addEventListener('click', () => {
+      setFlyStyle(_flyStyle === 'cape' ? 'surf' : 'cape');
+      _styleButton.blur();
+    });
     const exit = _viewButton.cloneNode();
     exit.className = 'me-mode-exit';
     exit.textContent = '✕ Exit';
@@ -367,7 +383,7 @@ export function createAvatarLayer({
         _dataManager.setEnabled('avatar', false, { origin: 'user' });
       else layer.disable(_viewer);
     });
-    _hint.append(text, _flyButton, _viewButton, exit);
+    _hint.append(text, _flyButton, _styleButton, _viewButton, exit);
     syncViewButton();
     viewer.container.appendChild(_hint);
   }
@@ -385,12 +401,23 @@ export function createAvatarLayer({
   }
 
   function syncFlyButton() {
+    if (_styleButton) {
+      _styleButton.hidden = !_flying;
+      _styleButton.textContent = _flyStyle === 'cape' ? '🦸 Cape' : '🏄 Surf';
+      _styleButton.title = 'Switch between cape and surfboard (B)';
+    }
     if (!_flyButton) return;
     _flyButton.textContent = _flying ? '🚶 Land' : '🕊 Fly';
     _flyButton.title = _flying
       ? 'Land where you are (F)'
       : 'Fly: WASD, E up, Q down, Shift faster (F)';
     _flyButton.setAttribute('aria-pressed', String(_flying));
+  }
+
+  /** Cape (lean into the flight) or surf (stand on a board). */
+  function setFlyStyle(style) {
+    _flyStyle = style === 'surf' ? 'surf' : 'cape';
+    syncFlyButton();
   }
 
   /** Take off, or land by falling to whatever surface is below. */
@@ -416,7 +443,8 @@ export function createAvatarLayer({
   }
 
   function excluded() {
-    return _model ? [_model] : [];
+    const own = _gear ? [..._gear.primitives] : [];
+    return _model ? [_model, ...own] : own;
   }
 
   /** Globe surface height, or undefined when the globe cannot answer. */
@@ -841,8 +869,11 @@ export function createAvatarLayer({
       _lat = next.lat;
     }
     _height = flyHeight(_height, velocity.up, dt, _floor);
-    // Superhero lean into the direction of travel.
-    const lean = velocity.speed > 0 ? FLY_LEAN : 0;
+    // Cape: superhero lean into the direction of travel. Surf: stand on the
+    // board, weight slightly back.
+    const lean =
+      _flyStyle === 'surf' ? SURF_LEAN : velocity.speed > 0 ? FLY_LEAN : 0;
+    _flyClock += dt;
     _flyPitch += (lean - _flyPitch) * (1 - Math.exp(-dt / 0.3));
     playClip('idle', 1);
     _clipSeconds += dt * _clipRate;
@@ -1078,6 +1109,15 @@ export function createAvatarLayer({
     if (_entryFrom && _entryStartedAt === null) _entryStartedAt = now;
     if (_groundReady) step(dt);
     if (_model) _model.modelMatrix = modelMatrix();
+    _gearShown = _gear?.update({
+      feet: Cesium.Cartesian3.fromDegrees(_lon, _lat, _height),
+      style: _flying && _groundReady ? _flyStyle : null,
+      firstPerson: _firstPerson,
+      heading: _heading,
+      lean: _flyPitch,
+      speedRatio: _speed / FLY_SPEED_MPS,
+      time: _flyClock,
+    });
     // Obstructions pull the camera in at once; it eases back out after.
     _rangeNow =
       _rangeTarget < _rangeNow
@@ -1118,6 +1158,7 @@ export function createAvatarLayer({
     _hint = null;
     _viewButton = null;
     _flyButton = null;
+    _styleButton = null;
     _flying = false;
     _flyPitch = 0;
     if (_pegman) _pegman.hidden = false;
@@ -1369,6 +1410,7 @@ export function createAvatarLayer({
       document.body?.classList.add('me-mode');
       installInput(viewer);
       showHint(viewer);
+      _gear = createFlightGear(Cesium, viewer.scene);
       window.dispatchEvent(
         new CustomEvent(MODE_EVENT, { detail: { active: true } }),
       );
@@ -1403,6 +1445,9 @@ export function createAvatarLayer({
       cancelAutopilot();
       _entryFrom = null;
       releaseControls(viewer);
+      _gear?.destroy();
+      _gear = null;
+      _gearShown = null;
       if (_model && viewer) viewer.scene.primitives.remove(_model);
       _model = null;
       _clipName = null;
@@ -1445,6 +1490,12 @@ export function createAvatarLayer({
     setFlying(flying) {
       setFlying(Boolean(flying));
       return _flying;
+    },
+
+    /** Fly style: 'cape' (lean into the flight) or 'surf' (on a board). */
+    setFlyStyle(style) {
+      setFlyStyle(style);
+      return _flyStyle;
     },
 
     /** True while Me Mode owns the camera. */
@@ -1526,6 +1577,8 @@ export function createAvatarLayer({
         speed: _speed,
         view: _firstPerson ? 'first-person' : 'third-person',
         flying: _flying,
+        flyStyle: _flyStyle,
+        gear: _gearShown || null,
         enabled: _enabled,
       };
     },
