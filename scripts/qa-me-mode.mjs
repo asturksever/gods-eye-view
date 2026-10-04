@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Browser proof of Me Mode: toggle row, avatar load, WASD/Shift clip changes,
+ * Browser proof of Me Mode: Pegman entry, avatar load, WASD/Shift clip changes,
  * first-person view, voice placement/walk, fly_to redirect, camera restore and
  * the `?avatar=` swap. Screenshots go to docs/avatar-demo/ when
  * QA_SCREENSHOTS=1.
@@ -171,17 +171,27 @@ try {
   );
   await sleep(1500);
 
-  const row = await page.$('#data-toggles [data-layer-id="avatar"]');
-  check('Me Mode row is in the layer panel', Boolean(row));
-  // The panel may be collapsed headless: dispatch the toggle's own click.
-  const clickToggle = () =>
-    page.evaluate(() =>
-      document
-        .querySelector(
-          '#data-toggles [data-layer-id="avatar"] .data-toggle-btn',
-        )
-        .click(),
-    );
+  const entry = await page.evaluate(() => ({
+    pegman: Boolean(document.querySelector('.me-mode-pegman:not([hidden])')),
+    row: Boolean(
+      document.querySelector('#data-toggles [data-layer-id="avatar"]'),
+    ),
+  }));
+  check(
+    'Pegman is on the map and Me Mode is not a layer row',
+    entry.pegman && !entry.row,
+    JSON.stringify(entry),
+  );
+  // A Pegman click (no drag) drops the avatar at the centre of the view.
+  const clickToggle = async () => {
+    const rect = await page.evaluate(() => {
+      const box = document
+        .querySelector('.me-mode-pegman')
+        .getBoundingClientRect();
+      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    });
+    await page.mouse.click(rect.x, rect.y);
+  };
   await clickToggle();
   await page.waitForFunction(
     () => {
@@ -255,13 +265,13 @@ try {
   check(
     'W walks with the walk clip',
     /walk/i.test(walking.clip || '') &&
-      Math.abs(walking.pose.speed - 1.4) < 0.01,
+      Math.abs(walking.pose.speed - 2.8) < 0.01,
     `${walking.clip} @ ${walking.pose.speed} m/s`,
   );
   const running = await hold(page, ['ShiftLeft', 'KeyW'], 2500);
   check(
     'Shift+W runs with the run clip',
-    /run/i.test(running.clip || '') && Math.abs(running.pose.speed - 4) < 0.01,
+    /run/i.test(running.clip || '') && Math.abs(running.pose.speed - 16) < 0.01,
     `${running.clip} @ ${running.pose.speed} m/s`,
   );
   await sleep(800);
@@ -275,8 +285,8 @@ try {
   // Expected travel is speed × time, capped by the frame clamp (0.25 s/frame)
   // on very slow software renderers.
   const expected =
-    1.4 * Math.min(2.5, walking.fps * 2.5 * 0.25) +
-    4 * Math.min(2.5, running.fps * 2.5 * 0.25);
+    2.8 * Math.min(2.5, walking.fps * 2.5 * 0.25) +
+    16 * Math.min(2.5, running.fps * 2.5 * 0.25);
   check(
     'avatar moved forward at the stated speed',
     moved > expected * 0.6,
@@ -383,8 +393,12 @@ try {
       box: { dimensions: new C3(2, 2, 2) },
     });
   });
-  await sleep(5000);
-  const blockedRange = await eyeToCamera();
+  // The wall's geometry is built asynchronously; wait for it to take effect.
+  let blockedRange = await eyeToCamera();
+  for (let i = 0; i < 20 && blockedRange > clearRange / 2 + 0.5; i++) {
+    await sleep(1000);
+    blockedRange = await eyeToCamera();
+  }
   await page.evaluate(() =>
     window.__godsEyeView.viewer.entities.remove(window.__qaWall),
   );
@@ -482,6 +496,46 @@ try {
       viewButton.back.view === 'third-person' &&
       viewButton.focusReturned,
     JSON.stringify(viewButton),
+  );
+
+  // Fly: F takes off, E climbs, WASD flies, F lands by falling to the ground.
+  await page.keyboard.press('KeyF');
+  await sleep(500);
+  const takeoff = await page.evaluate(avatarState);
+  await hold(page, ['KeyE'], 3000);
+  const climbed = await page.evaluate(avatarState);
+  await hold(page, ['KeyW'], 2000);
+  const flown = await page.evaluate(avatarState);
+  check(
+    'F takes off and E climbs',
+    takeoff.pose.flying && climbed.pose.height - takeoff.pose.height > 3,
+    `${takeoff.pose.height.toFixed(1)} → ${climbed.pose.height.toFixed(1)} m`,
+  );
+  check(
+    'WASD flies forward without losing height',
+    flown.pose.flying &&
+      Math.hypot(
+        (flown.pose.lat - climbed.pose.lat) * 111320,
+        (flown.pose.lon - climbed.pose.lon) * 70000,
+      ) > 5 &&
+      flown.pose.height >= climbed.pose.height - 0.5,
+    `${flown.pose.height.toFixed(1)} m`,
+  );
+  await page.keyboard.press('KeyF');
+  let landed = await page.evaluate(avatarState);
+  for (
+    let i = 0;
+    i < 20 && landed.pose.height > takeoff.pose.height + 0.3;
+    i++
+  ) {
+    await sleep(1000);
+    landed = await page.evaluate(avatarState);
+  }
+  check(
+    'F again lands back on the ground',
+    !landed.pose.flying &&
+      Math.abs(landed.pose.height - takeoff.pose.height) < 0.3,
+    `${landed.pose.height.toFixed(2)} m`,
   );
 
   // Voice tools through the real action runner.
@@ -691,6 +745,53 @@ try {
     !cockpit.refused.active && /cockpit/i.test(cockpit.refused.error || ''),
     JSON.stringify(cockpit.refused),
   );
+
+  // Drag the Pegman onto a point of the map: Me Mode starts there.
+  await sleep(1500);
+  const dragFrom = await page.evaluate(() => {
+    const rect = document
+      .querySelector('.me-mode-pegman')
+      .getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  });
+  const dropTarget = await page.evaluate(async () => {
+    const { viewer } = window.__godsEyeView;
+    const Cesium = await import('/node_modules/cesium/Build/Cesium/index.js');
+    const point = new Cesium.Cartesian2(500, 520);
+    const position = viewer.camera.pickEllipsoid(point);
+    const carto = Cesium.Cartographic.fromCartesian(position);
+    return {
+      lon: Cesium.Math.toDegrees(carto.longitude),
+      lat: Cesium.Math.toDegrees(carto.latitude),
+    };
+  });
+  await page.mouse.move(dragFrom.x, dragFrom.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++)
+    await page.mouse.move(
+      dragFrom.x + ((500 - dragFrom.x) * i) / 10,
+      dragFrom.y + ((520 - dragFrom.y) * i) / 10,
+    );
+  await page.mouse.up();
+  await page.waitForFunction(
+    () =>
+      window.__godsEyeView.dataManager.layers.get('avatar').module.getStats()
+        .count === 1,
+    { timeout: 120000 },
+  );
+  const dropped = await page.evaluate(avatarState);
+  const dropError = Math.hypot(
+    (dropped.pose.lat - dropTarget.lat) * 111320,
+    (dropped.pose.lon - dropTarget.lon) *
+      111320 *
+      Math.cos((dropTarget.lat * Math.PI) / 180),
+  );
+  check(
+    'dragging the Pegman onto the map drops the avatar there',
+    dropped.active && dropError < 30,
+    `${dropError.toFixed(1)} m from the drop point`,
+  );
+  await screenshot(page, 'pegman-drop');
 
   const avatarErrors = errors.filter((text) => /me mode|avatar/i.test(text));
   check(

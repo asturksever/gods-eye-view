@@ -6,21 +6,42 @@ the human-avatar PRD): one local avatar, no accounts, no upload flow.
 
 ## Using it
 
-Open **Data Layers → Utilities → Me Mode**, or say "put me at Kings Cross".
+Me Mode works like Street View's Pegman. The yellow figure sits on the right
+of the map, above the HUD readouts:
+
+- **Drag the Pegman** onto any spot on the globe and let go: the avatar is
+  dropped there.
+- **Click it** (or press Enter on it): the avatar is dropped at the centre of
+  the view.
+- **Voice:** "put me at Kings Cross".
+
+A drop never lands inside a building. It is moved onto the nearest road
+through GEV's routing proxy (`/api/route`, the same OSRM service as
+Directions), and only to a road within 150 m. If routing is unavailable, a
+drop on a roof moves to the nearest street-level point around it on the
+loaded 3D surface. The Pegman hides while Me Mode is on. Leave with
+**✕ Exit** on the bar at the bottom, or `Esc`.
 
 | Input | Action |
 | --- | --- |
-| `W` `A` `S` `D` / arrow keys | Walk relative to the camera (1.4 m/s) |
-| `Shift` + move | Run (4 m/s) |
-| `V`, or the **First / Third person** button on the hint bar | Toggle first person (eye height 1.6 m, model hidden) |
+| `W` `A` `S` `D` / arrow keys | Walk relative to the camera (2.8 m/s) |
+| `Shift` + move | Run (16 m/s) |
+| `F`, or **🕊 Fly** on the bar | Take off / land (falls to the surface below) |
+| `E` / `Q` while flying | Climb / descend (6 m/s; Shift ×4) |
+| `W` `A` `S` `D` while flying | Fly (15 m/s; Shift ×4, 60 m/s), leaning into the direction of travel |
+| `V`, or **First / Third person** on the bar | Toggle first person (eye height 1.6 m, model hidden) |
 | Drag on the globe | Orbit the camera around the avatar / look around |
 | Mouse wheel | Follow distance, 2–30 m |
-| `Esc` (on the globe) | Leave Me Mode |
+| `Esc` (on the globe), or **✕ Exit** | Leave Me Mode |
+
+Flying never goes below the ground or the roof beneath you, or more than
+3 km above it. Landing drops you where you are, which can be a roof; drag the
+Pegman again to return to the street.
 
 While Me Mode is on it owns the camera and these keys. The HUD shortcuts under
-`W`, `D` and `V` are suspended. Keys typed into text fields are ignored, and
+`W`, `D`, `V`, `F`, `Q` and `E` are suspended. Keys typed into text fields are ignored, and
 arrow keys on a focused panel control keep their normal behaviour, and
-turning the layer off restores the normal GEV camera. If anything else moves
+leaving Me Mode restores the normal GEV camera. If anything else moves
 the camera (a search, a POI key, a voice camera tool, Director playback or
 Cockpit), Me Mode ends and leaves the camera where that move put it, rather
 than pulling it back. A one-frame correction does not count; a jump over 50 m or a move

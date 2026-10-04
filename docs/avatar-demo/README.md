@@ -12,3 +12,4 @@ with `GOOGLE_MAPS_API_KEY` set to capture the photoreal versions.
   over a ground slab (globe hidden): the avatar stays on the ground.
 - `times-square.png`: after voice `place_avatar` to Times Square and a short
   `move_avatar_to` walk north.
+- `pegman-drop.png`: after dragging the Pegman onto the map.

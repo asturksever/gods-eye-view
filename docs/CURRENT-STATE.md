@@ -1,7 +1,8 @@
 # God's Eye View Current State
 
-Me Mode (Utilities → Me Mode, layer id `avatar`, local-only) places one glTF
-avatar at the camera target and owns the camera and WASD/Shift/V/arrow keys
+Me Mode (the Pegman on the map; layer id `avatar`, local-only, not listed in
+the layer panel) places one glTF avatar where the Pegman is dropped, snapped to
+the nearest road, and owns the camera and WASD/Shift/V/F/E/Q/arrow keys
 while enabled; Cesium's camera inputs, the HUD shortcuts underneath and the
 normal camera return when it is turned off, and entering Cockpit turns it off.
 Ground height comes from a downward ray cast from 1.2 m above the feet

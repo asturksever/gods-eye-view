@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+- Me Mode is entered like Street View: drag the Pegman (yellow figure on the
+  map) onto any spot, or click it for the centre of the view; it is no
+  longer a layer-panel row. Drops snap to the nearest road through the
+  routing proxy, or off roofs to street level when routing is unavailable.
+  Walking is 2.8 m/s and running 16 m/s. Fly mode (F, or the Fly button):
+  WASD across the camera heading, E/Q to climb and descend, Shift to boost,
+  never below the surface under you; landing falls under gravity.
+
 - Add Me Mode (demo): a Utilities layer that drops a rigged, animated glTF
   avatar at the camera target and lets you walk it on the photoreal tiles.
   WASD/arrow keys move relative to the camera, Shift runs, V toggles first
