@@ -569,6 +569,20 @@ try {
       flown.pose.height >= climbed.pose.height - 0.5,
     `${flown.pose.height.toFixed(1)} m`,
   );
+  check(
+    'a cape appears while flying',
+    flown.pose.gear === 'cape',
+    String(flown.pose.gear),
+  );
+  await page.keyboard.press('KeyB');
+  await sleep(800);
+  const surfing = await page.evaluate(avatarState);
+  check(
+    'B switches to the surfboard',
+    surfing.pose.flyStyle === 'surf' && surfing.pose.gear === 'surf',
+    `${surfing.pose.flyStyle}/${surfing.pose.gear}`,
+  );
+  await page.keyboard.press('KeyB');
   await page.keyboard.press('KeyF');
   let landed = await page.evaluate(avatarState);
   for (
@@ -580,8 +594,9 @@ try {
     landed = await page.evaluate(avatarState);
   }
   check(
-    'F again lands back on the ground',
+    'F again lands back on the ground, gear put away',
     !landed.pose.flying &&
+      !landed.pose.gear &&
       Math.abs(landed.pose.height - takeoff.pose.height) < 0.3,
     `${landed.pose.height.toFixed(2)} m`,
   );

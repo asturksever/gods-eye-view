@@ -9,6 +9,8 @@
   Walking is 2.8 m/s and running 16 m/s. Fly mode (F, or the Fly button):
   WASD across the camera heading, E/Q to climb and descend, Shift to boost,
   never below the surface under you; landing falls under gravity.
+  Flying pops a cape that streams and flutters with speed; B (or the bar
+  button) switches to surfing a board instead.
 
 - Add Me Mode (demo): a Utilities layer that drops a rigged, animated glTF
   avatar at the camera target and lets you walk it on the photoreal tiles.

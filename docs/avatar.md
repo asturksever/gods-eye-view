@@ -32,6 +32,7 @@ Each drop logs what it did in the browser console, e.g.
 | `F`, or **🕊 Fly** on the bar | Take off / land (falls to the surface below) |
 | `E` / `Q` while flying | Climb / descend (6 m/s; Shift ×4) |
 | `W` `A` `S` `D` while flying | Fly (15 m/s; Shift ×4, 60 m/s), leaning into the direction of travel |
+| `B` while flying, or **🦸 Cape / 🏄 Surf** on the bar | Fly style: a red cape that streams out behind as you fly, or standing on a silver surfboard |
 | `V`, or **First / Third person** on the bar | Toggle first person (eye height 1.6 m, model hidden) |
 | Drag on the globe | Orbit the camera around the avatar / look around |
 | Mouse wheel | Follow distance, 2–30 m |
