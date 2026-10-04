@@ -1264,6 +1264,8 @@ async function moveAvatar(dataManager, action, args = {}, options = {}) {
     mode: 'teleported',
     label: target.label,
     groundConfirmed: pose?.grounded !== false,
+    // Drops are moved off buildings onto the nearest street.
+    movedTo: pose?.snapped || null,
     avatar: avatar.describeForVoice(),
   };
 }

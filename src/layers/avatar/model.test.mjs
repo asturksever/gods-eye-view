@@ -6,9 +6,19 @@ import {
   RUN_SPEED_MPS,
   WALK_SPEED_MPS,
   cameraTakenBy,
+  clipRateForSpeed,
   clipRoleForSpeed,
   descendToGround,
   describePose,
+  fallStep,
+  flyHeight,
+  flyVelocityFromKeys,
+  FLY_BOOST,
+  FLY_SPEED_MPS,
+  parseRoadSnap,
+  ringAround,
+  roadSnapUrl,
+  streetLevelNear,
   easeInOut,
   followGround,
   keyIntent,
@@ -201,7 +211,7 @@ test('keys: text fields and modifiers are left alone, controls keep arrows', () 
     keyIntent(key('KeyV', { repeat: true }), 'surface').toggle,
     false,
   );
-  assert.equal(keyIntent(key('KeyQ'), 'surface'), null);
+  assert.equal(keyIntent(key('KeyZ'), 'surface'), null);
 });
 
 test('keys: Escape exits from the globe but not from panels', () => {
@@ -233,4 +243,80 @@ test('camera hand-off ignores one-frame nudges but not flights or jumps', () => 
   assert.equal(cameraTakenBy({ moved: 2, strikes: 2 }), true);
   // A search or setView jump is another owner at once.
   assert.equal(cameraTakenBy({ moved: 2000, strikes: 1 }), true);
+});
+
+test('speeds: walk 2× and run 4× a person, clips capped', () => {
+  assert.equal(WALK_SPEED_MPS, 2.8);
+  assert.equal(RUN_SPEED_MPS, 16);
+  assert.equal(clipRoleForSpeed(WALK_SPEED_MPS), 'walk');
+  assert.equal(clipRoleForSpeed(RUN_SPEED_MPS), 'run');
+  assert.equal(clipRateForSpeed('walk', WALK_SPEED_MPS), 2);
+  assert.equal(clipRateForSpeed('run', RUN_SPEED_MPS), 2.5);
+});
+
+test('fly: WASD across the camera heading, E/Q climb, Shift boosts', () => {
+  const none = { forward: false, back: false, left: false, right: false };
+  const hover = flyVelocityFromKeys({ ...none, up: true }, 0);
+  assert.equal(hover.speed, 0);
+  assert.ok(hover.up > 0);
+  const boosted = flyVelocityFromKeys(
+    { ...none, forward: true, down: true, run: true },
+    Math.PI / 2,
+  );
+  assert.ok(Math.abs(boosted.east - FLY_SPEED_MPS * FLY_BOOST) < 1e-9);
+  assert.ok(boosted.up < 0);
+  // Never below the floor, never far above it.
+  assert.equal(flyHeight(10, -100, 1, 5), 5);
+  assert.equal(flyHeight(10, 3, 1, 0), 13);
+  assert.equal(flyHeight(10, 1e6, 1, 0), 3000);
+});
+
+test('landing falls under gravity and settles on the ground', () => {
+  let state = { height: 100, fallSpeed: 0 };
+  let frames = 0;
+  while (state.height > 20 && frames++ < 1000)
+    state = fallStep(state.height, state.fallSpeed, 20, 0.05);
+  assert.equal(state.height, 20);
+  assert.equal(state.fallSpeed, 0);
+  assert.ok(frames > 10, 'it falls, it does not teleport');
+});
+
+test('road snap uses a zero-length route and rejects far roads', () => {
+  assert.match(
+    roadSnapUrl(-0.1238, 51.5308),
+    /profile=car&coords=-0\.123800%2C51\.530800%3B-0\.123800%2C51\.530800/,
+  );
+  assert.deepEqual(
+    parseRoadSnap(
+      {
+        ok: true,
+        geometry: [
+          [-0.1239, 51.5309],
+          [-0.1239, 51.5309],
+        ],
+      },
+      -0.1238,
+      51.5308,
+    ),
+    { lon: -0.1239, lat: 51.5309 },
+  );
+  assert.equal(
+    parseRoadSnap({ ok: true, geometry: [[-0.13, 51.54]] }, -0.1238, 51.5308),
+    null,
+  );
+  assert.equal(parseRoadSnap({ ok: false }, 0, 0), null);
+});
+
+test('a drop on a roof moves to the nearest street-level point', () => {
+  const ring = ringAround(0, 0, [6, 12], 4).map((point, index) => ({
+    ...point,
+    // Building to the north and east; street to the south and west.
+    height: index % 4 >= 2 ? 20 : 45,
+  }));
+  const street = streetLevelNear(45, ring);
+  assert.equal(street.height, 20);
+  assert.equal(street.distance, 6);
+  // Already at street level, or on gentle slopes: stay.
+  assert.equal(streetLevelNear(20.5, ring), null);
+  assert.equal(streetLevelNear(45, ring.slice(0, 2)), null);
 });

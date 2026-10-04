@@ -601,7 +601,7 @@ export const ACTION_DESCRIPTIONS = {
   },
   place_avatar: {
     description:
-      'Me Mode: put the user\'s walking avatar on the ground at a place ("put me at Kings Cross", "take me to Shibuya crossing"). Turns Me Mode on if needed and teleports; the camera follows the avatar. The result reports whether the ground height was confirmed.',
+      'Me Mode: put the user\'s walking avatar on the ground at a place ("put me at Kings Cross", "take me to Shibuya crossing"). Turns Me Mode on if needed and teleports onto the nearest street (never inside a building); the camera follows the avatar. The result reports whether the ground height was confirmed and movedTo (road or street-level) when the spot was adjusted.',
     $position: 1,
     parameters: {
       properties: {

@@ -20,6 +20,13 @@ import {
   clipRoleForSpeed,
   descendToGround,
   describePose,
+  fallStep,
+  flyHeight,
+  flyVelocityFromKeys,
+  parseRoadSnap,
+  ringAround,
+  roadSnapUrl,
+  streetLevelNear,
   easeInOut,
   followGround,
   keyIntent,
@@ -49,7 +56,18 @@ const TURN_RATE = 10;
 /** Camera moved by someone else since our last frame: hand it over. */
 const CAMERA_HANDOFF_M = 0.5;
 const CAMERA_HANDOFF_DOT = 0.9995;
-const HINT_TEXT = 'WASD move · Shift run · V view · drag to look · wheel zoom';
+const HINT_TEXT = 'WASD · Shift run · F fly, E/Q up/down · drag to look';
+/** Road snapping gives up after this long and falls back to the tiles. */
+const ROAD_SNAP_TIMEOUT_MS = 3000;
+/** Forward lean while flying at full speed (radians). */
+const FLY_LEAN = 0.9;
+/** A drag shorter than this is a click: drop at the screen centre. */
+const PEGMAN_DRAG_PX = 6;
+const PEGMAN_SVG =
+  '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">' +
+  '<circle cx="12" cy="4.6" r="3.1" fill="#f6c400" stroke="#7a5b00" stroke-width="0.9"/>' +
+  '<path d="M8.3 9.2h7.4l1.6 6.1h-2.3l-.6 7.2h-2.1L12 17.6l-.3 4.9H9.6L9 15.3H6.7z" ' +
+  'fill="#f6c400" stroke="#7a5b00" stroke-width="0.9" stroke-linejoin="round"/></svg>';
 
 /** A model that has not finished loading by then fails the toggle. */
 const MODEL_READY_TIMEOUT_MS = 30000;
@@ -140,6 +158,14 @@ export function createAvatarLayer({
   let _removers = [];
   let _hint = null;
   let _viewButton = null;
+  let _flyButton = null;
+  let _pegman = null;
+  let _initialized = false;
+  let _pegmanRemovers = [];
+  let _flying = false;
+  let _fallSpeed = 0;
+  let _floor = null;
+  let _flyPitch = 0;
   let _savedInputs = null;
   let _savedCollision = null;
   let _takeoverStrikes = 0;
@@ -216,6 +242,8 @@ export function createAvatarLayer({
       if (intent.down && intent.role !== 'run') cancelAutopilot();
     } else if (intent.kind === 'view' && intent.toggle) {
       setView(_firstPerson ? 'third' : 'first');
+    } else if (intent.kind === 'fly' && intent.toggle) {
+      setFlying(!_flying);
     }
     // Claim the key so W (POI), D (detection) and V (clean view) shortcuts
     // do not fire underneath Me Mode.
@@ -321,7 +349,22 @@ export function createAvatarLayer({
       // Hand the keyboard back to the globe so arrows keep walking.
       _viewButton.blur();
     });
-    _hint.append(text, _viewButton);
+    _flyButton = _viewButton.cloneNode();
+    _flyButton.className = 'me-mode-fly-toggle';
+    _flyButton.addEventListener('click', () => {
+      setFlying(!_flying);
+      _flyButton.blur();
+    });
+    const exit = _viewButton.cloneNode();
+    exit.className = 'me-mode-exit';
+    exit.textContent = '✕ Exit';
+    exit.title = 'Leave Me Mode (Esc)';
+    exit.addEventListener('click', () => {
+      if (_dataManager)
+        _dataManager.setEnabled('avatar', false, { origin: 'user' });
+      else layer.disable(_viewer);
+    });
+    _hint.append(text, _flyButton, _viewButton, exit);
     syncViewButton();
     viewer.container.appendChild(_hint);
   }
@@ -335,6 +378,28 @@ export function createAvatarLayer({
       ? 'Switch to the third-person follow camera (V)'
       : 'Switch to first person (V)';
     _viewButton.setAttribute('aria-pressed', String(_firstPerson));
+    syncFlyButton();
+  }
+
+  function syncFlyButton() {
+    if (!_flyButton) return;
+    _flyButton.textContent = _flying ? '🚶 Land' : '🕊 Fly';
+    _flyButton.title = _flying
+      ? 'Land where you are (F)'
+      : 'Fly: WASD, E up, Q down, Shift faster (F)';
+    _flyButton.setAttribute('aria-pressed', String(_flying));
+  }
+
+  /** Take off, or land by falling to whatever surface is below. */
+  function setFlying(flying) {
+    if (flying === _flying || !_groundReady) return;
+    _flying = flying;
+    cancelAutopilot();
+    _fallSpeed = 0;
+    if (flying) _floor = _smoother.value ?? _height;
+    if (!flying && Number.isFinite(_floor)) _smoother.reset(_floor);
+    _lastSampleAt = 0;
+    syncFlyButton();
   }
 
   function setView(view) {
@@ -532,15 +597,69 @@ export function createAvatarLayer({
     };
   }
 
-  async function place(lon, lat) {
+  /** Nearest road via GEV's routing proxy (a zero-length route), or null. */
+  async function snapToRoad(lon, lat) {
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), ROAD_SNAP_TIMEOUT_MS);
+    try {
+      const response = await fetch(roadSnapUrl(lon, lat), {
+        signal: abort.signal,
+      });
+      return response.ok
+        ? parseRoadSnap(await response.json(), lon, lat)
+        : null;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Keep a drop out of buildings: the nearest road when the routing proxy
+   * answers, otherwise the nearest street-level point on the loaded surface
+   * when the drop is on a roof. Returns where to stand and how it was found.
+   */
+  async function streetSpot(lon, lat) {
+    const road = await snapToRoad(lon, lat);
+    if (road) return { ...road, snapped: 'road' };
+    const street = streetLevelNear(
+      sampleTopDown(lon, lat),
+      ringAround(lon, lat).map((point) => ({
+        ...point,
+        height: sampleTopDown(point.lon, point.lat),
+      })),
+    );
+    return street
+      ? { lon: street.lon, lat: street.lat, snapped: 'street-level' }
+      : { lon, lat, snapped: null };
+  }
+
+  /**
+   * Stand the avatar on the ground at a position. Drops (`toStreet`) are
+   * moved onto the nearest street first.
+   * @returns {Promise<{ grounded: boolean, snapped: string|null }>}
+   */
+  async function place(lon, lat, { toStreet = false } = {}) {
     const epoch = ++_placeEpoch;
-    _lon = lon;
-    _lat = lat;
     cancelAutopilot();
     _groundReady = false;
+    _flying = false;
+    _fallSpeed = 0;
+    syncFlyButton();
     if (_model) _model.show = false;
+    let snapped = null;
+    if (toStreet) {
+      const spot = await streetSpot(lon, lat);
+      if (epoch !== _placeEpoch || !_viewer)
+        return { grounded: false, snapped: null };
+      ({ lon, lat, snapped } = spot);
+    }
+    _lon = lon;
+    _lat = lat;
     const exact = await sampleGroundExact(lon, lat);
-    if (epoch !== _placeEpoch || !_viewer) return false;
+    if (epoch !== _placeEpoch || !_viewer)
+      return { grounded: false, snapped: null };
     // Without an exact sample, read whatever has loaded here now; only as a
     // last resort keep the previous height (the rationed samples correct it,
     // and a jump restarts the smoother window).
@@ -553,7 +672,7 @@ export function createAvatarLayer({
     _groundReady = true;
     _lastSampleAt = performance.now();
     if (_model) _model.show = !_firstPerson;
-    return Number.isFinite(exact);
+    return { grounded: Number.isFinite(exact), snapped };
   }
 
   async function loadModel(url) {
@@ -644,7 +763,7 @@ export function createAvatarLayer({
     // heading 0 and heading turns clockwise.
     const hpr = new Cesium.HeadingPitchRoll(
       _heading - Math.PI / 2 + _headingOffset,
-      0,
+      _flyPitch,
       0,
     );
     return Cesium.Transforms.headingPitchRollToFixedFrame(position, hpr);
@@ -668,7 +787,33 @@ export function createAvatarLayer({
     });
   }
 
+  function stepFlying(dt) {
+    const velocity = flyVelocityFromKeys(_keys, _camHeading);
+    _speed = velocity.speed;
+    if (velocity.heading !== null && !_firstPerson)
+      _heading = turnToward(_heading, velocity.heading, TURN_RATE * dt);
+    if (_firstPerson) _heading = _camHeading;
+    if (_speed > 0) {
+      const next = offsetLonLat(
+        _lon,
+        _lat,
+        velocity.east * dt,
+        velocity.north * dt,
+      );
+      _lon = next.lon;
+      _lat = next.lat;
+    }
+    _height = flyHeight(_height, velocity.up, dt, _floor);
+    // Superhero lean into the direction of travel.
+    const lean = velocity.speed > 0 ? FLY_LEAN : 0;
+    _flyPitch += (lean - _flyPitch) * (1 - Math.exp(-dt / 0.3));
+    playClip('idle', 1);
+    _clipSeconds += dt * _clipRate;
+  }
+
   function step(dt) {
+    if (_flying) return stepFlying(dt);
+    _flyPitch += (0 - _flyPitch) * (1 - Math.exp(-dt / 0.2));
     let velocity = velocityFromKeys(_keys, _camHeading);
     if (!velocity.speed && _autopilot) {
       const offset = localOffset(_lon, _lat, _autopilot.lon, _autopilot.lat);
@@ -700,8 +845,18 @@ export function createAvatarLayer({
       _lat = next.lat;
     }
     const target = _smoother.value;
-    if (Number.isFinite(target))
+    if (Number.isFinite(target) && _height - target > 0.5) {
+      // Landing from fly mode (or stepping off a ledge): fall, don't snap.
+      ({ height: _height, fallSpeed: _fallSpeed } = fallStep(
+        _height,
+        _fallSpeed,
+        target,
+        dt,
+      ));
+    } else if (Number.isFinite(target)) {
+      _fallSpeed = 0;
       _height += (target - _height) * (1 - Math.exp(-dt / HEIGHT_EASE_S));
+    }
     const role = clipRoleForSpeed(_speed);
     playClip(role, clipRateForSpeed(role, _speed));
     _clipSeconds += dt * _clipRate;
@@ -717,9 +872,10 @@ export function createAvatarLayer({
     );
     // Keep a third-person camera above the pavement when looking up.
     const range = Math.min(_camRange, _rangeNow);
-    const maxPitch = _firstPerson
-      ? CAMERA_PITCH_MAX
-      : Math.min(CAMERA_PITCH_MAX, Math.asin(Math.min(1, 1.2 / range)));
+    const maxPitch =
+      _firstPerson || _flying
+        ? CAMERA_PITCH_MAX
+        : Math.min(CAMERA_PITCH_MAX, Math.asin(Math.min(1, 1.2 / range)));
     const pitch = Math.min(_camPitch, maxPitch);
     const sh = Math.sin(_camHeading);
     const ch = Math.cos(_camHeading);
@@ -899,10 +1055,17 @@ export function createAvatarLayer({
     if (!_enabled || !_groundReady || _lon === null) return;
     const now = performance.now();
     measureOcclusion(now);
-    const interval = _speed > 0 ? SAMPLE_MOVING_MS : SAMPLE_IDLE_MS;
+    const interval =
+      _speed > 0 || _flying || _fallSpeed > 0
+        ? SAMPLE_MOVING_MS
+        : SAMPLE_IDLE_MS;
     if (now - _lastSampleAt < interval) return;
     _lastSampleAt = now;
-    _smoother.push(sampleGround(_lon, _lat));
+    const ground = sampleGround(_lon, _lat);
+    if (_flying) {
+      // The surface below (ground or roof) is the floor of the flight.
+      if (Number.isFinite(ground)) _floor = ground;
+    } else _smoother.push(ground);
   }
 
   function releaseControls(viewer) {
@@ -917,6 +1080,10 @@ export function createAvatarLayer({
     _hint?.remove();
     _hint = null;
     _viewButton = null;
+    _flyButton = null;
+    _flying = false;
+    _flyPitch = 0;
+    if (_pegman) _pegman.hidden = false;
     const controller = viewer?.scene?.screenSpaceCameraController;
     // Cockpit switches the inputs off before announcing itself; never hand
     // them back underneath it.
@@ -935,16 +1102,177 @@ export function createAvatarLayer({
     );
   }
 
+  /** Ground position under a viewport point (canvas CSS pixels), or null. */
+  function groundAtScreen(x, y) {
+    const scene = _viewer.scene;
+    const point = new Cesium.Cartesian2(x, y);
+    let position;
+    if (scene.pickPositionSupported && !scene.globe?.show) {
+      try {
+        position = scene.pickPosition(point);
+      } catch {
+        position = undefined;
+      }
+    }
+    // Real terrain: pick the globe. The bare-ellipsoid fallback's tile
+    // meshes are unreliable, so there the ellipsoid ray below is exact.
+    if (
+      !position &&
+      scene.globe?.show &&
+      !(_viewer.terrainProvider instanceof Cesium.EllipsoidTerrainProvider)
+    ) {
+      const ray = _viewer.camera.getPickRay(point);
+      if (ray) position = scene.globe.pick(ray, scene);
+    }
+    if (!position) position = _viewer.camera.pickEllipsoid(point);
+    if (!position) return null;
+    const carto = Cesium.Cartographic.fromCartesian(position);
+    return {
+      lon: Cesium.Math.toDegrees(carto.longitude),
+      lat: Cesium.Math.toDegrees(carto.latitude),
+    };
+  }
+
+  /** Drop the avatar at a position: start Me Mode there, or teleport. */
+  function dropAt(position) {
+    if (!position) return;
+    if (_enabled) {
+      layer.setPosition(position.lon, position.lat).catch(() => {});
+      return;
+    }
+    _pendingStart?.reject(new Error('Superseded by a newer drop'));
+    _pendingStart = {
+      lon: position.lon,
+      lat: position.lat,
+      resolve: () => {},
+      reject: () => {},
+    };
+    if (_dataManager)
+      _dataManager.setEnabled('avatar', true, { origin: 'user' });
+    else layer.enable(_viewer);
+  }
+
+  /**
+   * The Pegman: a figure to drag onto the map, Street View style. Dropping it
+   * starts Me Mode there (moved onto the nearest street); a click starts at
+   * the centre of the view.
+   */
+  function createPegman(viewer) {
+    const container = viewer.container;
+    if (!container || !globalThis.document) return;
+    _pegman = document.createElement('button');
+    _pegman.type = 'button';
+    _pegman.className = 'me-mode-pegman';
+    _pegman.title = 'Me Mode: drag onto the map to walk there (or click)';
+    _pegman.setAttribute('aria-label', 'Me Mode: drop yourself on the map');
+    _pegman.innerHTML = PEGMAN_SVG;
+    Object.assign(_pegman.style, {
+      position: 'absolute',
+      right: '24px',
+      bottom: '210px',
+      width: '44px',
+      height: '44px',
+      display: 'grid',
+      placeItems: 'center',
+      padding: '0',
+      borderRadius: '50%',
+      border: '1px solid rgba(246, 196, 0, 0.6)',
+      background: 'rgba(10, 14, 20, 0.82)',
+      boxShadow: '0 2px 10px rgba(0, 0, 0, 0.5)',
+      cursor: 'grab',
+      touchAction: 'none',
+      zIndex: '6',
+    });
+    let drag = null;
+    const ghostAt = (x, y) => {
+      drag.ghost.style.left = `${x - 13}px`;
+      drag.ghost.style.top = `${y - 34}px`;
+    };
+    const on = (target, type, handler) => {
+      target.addEventListener(type, handler);
+      _pegmanRemovers.push(() => target.removeEventListener(type, handler));
+    };
+    on(_pegman, 'pointerdown', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      try {
+        _pegman.setPointerCapture?.(event.pointerId);
+      } catch {
+        // Synthetic or already-released pointer: the drag still works.
+      }
+      const ghost = document.createElement('div');
+      ghost.className = 'me-mode-pegman-ghost';
+      ghost.innerHTML = PEGMAN_SVG;
+      Object.assign(ghost.style, {
+        position: 'fixed',
+        pointerEvents: 'none',
+        transform: 'scale(1.5)',
+        filter: 'drop-shadow(0 3px 3px rgba(0,0,0,0.6))',
+        zIndex: '10000',
+        display: 'none',
+      });
+      document.body.appendChild(ghost);
+      drag = {
+        id: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        ghost,
+        moved: false,
+      };
+    });
+    on(_pegman, 'pointermove', (event) => {
+      if (drag?.id !== event.pointerId) return;
+      if (
+        !drag.moved &&
+        Math.hypot(event.clientX - drag.x, event.clientY - drag.y) >
+          PEGMAN_DRAG_PX
+      ) {
+        drag.moved = true;
+        drag.ghost.style.display = 'block';
+        _pegman.style.cursor = 'grabbing';
+      }
+      if (drag.moved) ghostAt(event.clientX, event.clientY);
+    });
+    const finish = (event, cancelled) => {
+      if (drag?.id !== event.pointerId) return;
+      const { moved, ghost } = drag;
+      drag = null;
+      ghost.remove();
+      _pegman.style.cursor = 'grab';
+      if (cancelled) return;
+      const canvas = viewer.scene.canvas;
+      const rect = canvas.getBoundingClientRect();
+      const x = moved ? event.clientX - rect.left : rect.width / 2;
+      const y = moved ? event.clientY - rect.top : rect.height / 2;
+      if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
+      dropAt(groundAtScreen(x, y));
+    };
+    on(_pegman, 'pointerup', (event) => finish(event, false));
+    on(_pegman, 'pointercancel', (event) => finish(event, true));
+    // Keyboard: Enter / Space start at the centre of the view.
+    on(_pegman, 'keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      const rect = viewer.scene.canvas.getBoundingClientRect();
+      dropAt(groundAtScreen(rect.width / 2, rect.height / 2));
+    });
+    container.appendChild(_pegman);
+  }
+
   const layer = {
     id: 'avatar',
     name: 'Me Mode',
     icon: '🚶',
     source: 'Local avatar',
     updateInterval: -1,
+    // Entered by dragging the Pegman onto the map, not from the layer list.
+    showInTogglePanel: false,
 
     init(viewer) {
-      if (_viewer) throw new Error('Me Mode is already initialized');
+      if (_initialized) throw new Error('Me Mode is already initialized');
+      _initialized = true;
       _viewer = viewer;
+      if (!_pegman) createPegman(viewer);
     },
 
     // Nothing to poll: the avatar is driven per frame while enabled.
@@ -954,6 +1282,12 @@ export function createAvatarLayer({
 
     attachDataManager(dataManager) {
       _dataManager = dataManager;
+      // The manager initializes layers lazily on first enable, but the Pegman
+      // must be on the map from the start: it is how Me Mode is entered.
+      if (!_pegman && dataManager?.viewer) {
+        _viewer = dataManager.viewer;
+        createPegman(dataManager.viewer);
+      }
     },
 
     async enable(viewer = _viewer, { signal } = {}) {
@@ -994,6 +1328,7 @@ export function createAvatarLayer({
       controller.enableCollisionDetection = false;
       _takeoverStrikes = 0;
       render.holdContinuousRender(RENDER_OWNER);
+      if (_pegman) _pegman.hidden = true;
       document.body?.classList.add('me-mode');
       installInput(viewer);
       showHint(viewer);
@@ -1001,10 +1336,10 @@ export function createAvatarLayer({
         new CustomEvent(MODE_EVENT, { detail: { active: true } }),
       );
       try {
-        const placed = place(start.lon, start.lat);
+        const placed = place(start.lon, start.lat, { toStreet: true });
         await loadModel(_modelUrl);
-        const grounded = await placed;
-        pending?.resolve({ ...layer.getPose(), grounded });
+        const { grounded, snapped } = await placed;
+        pending?.resolve({ ...layer.getPose(), grounded, snapped });
         if (signal?.aborted || !_enabled) return false;
         return true;
       } catch (error) {
@@ -1041,8 +1376,12 @@ export function createAvatarLayer({
 
     destroy(viewer = _viewer) {
       layer.disable(viewer);
+      for (const remove of _pegmanRemovers.splice(0)) remove();
+      _pegman?.remove();
+      _pegman = null;
       _pendingStart?.reject(new Error('Me Mode was destroyed'));
       _pendingStart = null;
+      _initialized = false;
       _viewer = null;
       _dataManager = null;
     },
@@ -1063,6 +1402,12 @@ export function createAvatarLayer({
     setViewMode(view) {
       setView(view === 'first' ? 'first' : 'third');
       return _firstPerson ? 'first-person' : 'third-person';
+    },
+
+    /** Take off (true) or land (false). Same as F and the Fly button. */
+    setFlying(flying) {
+      setFlying(Boolean(flying));
+      return _flying;
     },
 
     /** True while Me Mode owns the camera. */
@@ -1092,7 +1437,7 @@ export function createAvatarLayer({
      * returned promise settles once that placement has grounded.
      * @returns {Promise<object>} The grounded pose.
      */
-    async setPosition(lon, lat) {
+    async setPosition(lon, lat, { toStreet = true } = {}) {
       if (!Number.isFinite(lon) || !Number.isFinite(lat))
         throw new TypeError('Me Mode position needs longitude and latitude');
       if (!_enabled) {
@@ -1101,8 +1446,8 @@ export function createAvatarLayer({
           _pendingStart = { lon, lat, resolve, reject };
         });
       }
-      const grounded = await place(lon, lat);
-      return { ...layer.getPose(), grounded };
+      const placed = await place(lon, lat, { toStreet });
+      return { ...layer.getPose(), ...placed };
     },
 
     /**
@@ -1143,6 +1488,7 @@ export function createAvatarLayer({
         heading: (_heading * 180) / Math.PI,
         speed: _speed,
         view: _firstPerson ? 'first-person' : 'third-person',
+        flying: _flying,
         enabled: _enabled,
       };
     },

@@ -24,8 +24,19 @@ export const DEFAULT_CLIP_MAP = Object.freeze({
  */
 export const DEFAULT_HEADING_OFFSET = Math.PI;
 
-export const WALK_SPEED_MPS = 1.4;
-export const RUN_SPEED_MPS = 4;
+/** Ground speeds: brisk walk and a superhuman sprint (2× / 4× a person). */
+export const WALK_SPEED_MPS = 2.8;
+export const RUN_SPEED_MPS = 16;
+/** Speeds the walk/run clips were authored for; playback scales from these
+ *  and is capped so fast travel does not turn the legs into a blur. */
+const CLIP_NATURAL_MPS = Object.freeze({ walk: 1.4, run: 4 });
+const CLIP_RATE_MAX = 2.5;
+/** Fly mode: horizontal and vertical speeds; Shift multiplies both. */
+export const FLY_SPEED_MPS = 15;
+export const FLY_CLIMB_MPS = 6;
+export const FLY_BOOST = 4;
+/** Flying stops this far above the surface below. */
+export const FLY_MAX_ABOVE_GROUND_M = 3000;
 export const EYE_HEIGHT_M = 1.6;
 export const CAMERA_RANGE_MIN_M = 2;
 export const CAMERA_RANGE_MAX_M = 30;
@@ -109,9 +120,9 @@ export function clipRoleForSpeed(speed) {
 
 /** Playback rate that keeps a clip's stride matched to the ground speed. */
 export function clipRateForSpeed(role, speed) {
-  if (role === 'run') return Math.max(0.5, speed / RUN_SPEED_MPS);
-  if (role === 'walk') return Math.max(0.5, speed / WALK_SPEED_MPS);
-  return 1;
+  const natural = CLIP_NATURAL_MPS[role];
+  if (!natural) return 1;
+  return clamp(speed / natural, 0.5, CLIP_RATE_MAX);
 }
 
 /**
@@ -132,6 +143,126 @@ export function velocityFromKeys(keys, cameraHeading) {
     speed,
     heading,
   };
+}
+
+/**
+ * Fly-mode velocity: WASD across the camera heading, E/Q up and down, Shift
+ * boosts both.
+ * @returns {{ east: number, north: number, up: number, speed: number, heading: number|null }}
+ */
+export function flyVelocityFromKeys(keys, cameraHeading) {
+  const boost = keys.run ? FLY_BOOST : 1;
+  const forward = (keys.forward ? 1 : 0) - (keys.back ? 1 : 0);
+  const right = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  const up = ((keys.up ? 1 : 0) - (keys.down ? 1 : 0)) * FLY_CLIMB_MPS * boost;
+  if (!forward && !right)
+    return { east: 0, north: 0, up, speed: 0, heading: null };
+  const heading = normalizeAngle(cameraHeading + Math.atan2(right, forward));
+  const speed = FLY_SPEED_MPS * boost;
+  return {
+    east: Math.sin(heading) * speed,
+    north: Math.cos(heading) * speed,
+    up,
+    speed,
+    heading,
+  };
+}
+
+/**
+ * Next flying height: climb or sink at `up` m/s, never below the surface
+ * under the avatar (`floor`) and never more than FLY_MAX_ABOVE_GROUND_M
+ * above it.
+ */
+export function flyHeight(height, up, dt, floor) {
+  const next = height + up * dt;
+  if (!Number.isFinite(floor)) return next;
+  return clamp(next, floor, floor + FLY_MAX_ABOVE_GROUND_M);
+}
+
+/** Gravity for landing after fly mode, capped like a skydiver. */
+const GRAVITY = 9.81;
+const FALL_MAX_MPS = 50;
+
+/**
+ * One frame of falling toward `ground`. Returns the new height and fall
+ * speed; both settle on the ground.
+ */
+export function fallStep(height, fallSpeed, ground, dt) {
+  if (!Number.isFinite(ground) || height <= ground)
+    return { height: Number.isFinite(ground) ? ground : height, fallSpeed: 0 };
+  const speed = Math.min(FALL_MAX_MPS, fallSpeed + GRAVITY * dt);
+  const next = height - speed * dt;
+  return next <= ground
+    ? { height: ground, fallSpeed: 0 }
+    : { height: next, fallSpeed: speed };
+}
+
+/** A drop is moved to a road only if one is this close (m). */
+export const ROAD_SNAP_MAX_M = 150;
+
+/** `/api/route` request whose zero-length route starts on the nearest road. */
+export function roadSnapUrl(lon, lat, profile = 'car') {
+  const point = `${lon.toFixed(6)},${lat.toFixed(6)}`;
+  return `/api/route?profile=${profile}&coords=${encodeURIComponent(`${point};${point}`)}`;
+}
+
+/**
+ * The road point from a `/api/route` answer for {@link roadSnapUrl}, or null
+ * when there is none within ROAD_SNAP_MAX_M.
+ */
+export function parseRoadSnap(payload, lon, lat) {
+  const first = payload?.ok === true ? payload.geometry?.[0] : null;
+  if (!Array.isArray(first) || !first.every(Number.isFinite)) return null;
+  const [roadLon, roadLat] = first;
+  return localOffset(lon, lat, roadLon, roadLat).distance <= ROAD_SNAP_MAX_M
+    ? { lon: roadLon, lat: roadLat }
+    : null;
+}
+
+/** A drop point this far above the lowest ground nearby is on a building. */
+const ROOF_RISE_M = 2.5;
+/** Street level: within this of the lowest nearby ground. */
+const STREET_TOLERANCE_M = 1;
+
+/**
+ * Offline fallback for keeping a drop off buildings: when the drop point is
+ * well above the lowest surface around it (a roof), return the nearest
+ * street-level sample; otherwise null (stay).
+ * @param {number} centreHeight
+ * @param {{ lon: number, lat: number, height: number, distance: number }[]} samples
+ */
+export function streetLevelNear(centreHeight, samples) {
+  const usable = samples.filter((sample) => Number.isFinite(sample.height));
+  if (!Number.isFinite(centreHeight) || usable.length < 4) return null;
+  const lowest = Math.min(...usable.map((sample) => sample.height));
+  if (centreHeight - lowest < ROOF_RISE_M) return null;
+  return (
+    usable
+      .filter((sample) => sample.height <= lowest + STREET_TOLERANCE_M)
+      .sort((a, b) => a.distance - b.distance)[0] || null
+  );
+}
+
+/** Points on rings around a drop, nearest first, for {@link streetLevelNear}. */
+export function ringAround(
+  lon,
+  lat,
+  radii = [6, 12, 20, 32, 50],
+  directions = 12,
+) {
+  const points = [];
+  for (const distance of radii)
+    for (let i = 0; i < directions; i++) {
+      const bearing = (i / directions) * TWO_PI;
+      const point = offsetLonLat(
+        lon,
+        lat,
+        Math.sin(bearing) * distance,
+        Math.cos(bearing) * distance,
+      );
+      points.push({ ...point, distance });
+    }
+  return points;
 }
 
 /**
@@ -233,6 +364,8 @@ const MOVE_KEYS = Object.freeze({
   ArrowRight: 'right',
   ShiftLeft: 'run',
   ShiftRight: 'run',
+  KeyE: 'up',
+  KeyQ: 'down',
 });
 
 /**
@@ -256,6 +389,8 @@ export function keyIntent(event, focus) {
   }
   if (event.code === 'KeyV')
     return { kind: 'view', toggle: down && !event.repeat, claim: true };
+  if (event.code === 'KeyF')
+    return { kind: 'fly', toggle: down && !event.repeat, claim: true };
   return null;
 }
 
