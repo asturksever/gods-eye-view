@@ -4,15 +4,19 @@
  * the layer in index.js owns every scene resource.
  */
 
-/** Served from `public/avatars/` when present (see `npm run avatar:fetch`). */
-export const DEFAULT_AVATAR_URL = '/avatars/default.glb';
 /**
- * Pinned runtime fallback for the placeholder model when no local copy exists.
- * The model is not committed to this repository (see public/avatars/README.md).
+ * A photoreal human (Microsoft Rocketbox, MIT; see public/models/README.md),
+ * converted by tools/avatar/rocketbox_to_glb.py.
+ */
+export const DEFAULT_AVATAR_URL = '/models/people/rocketbox-male-06.glb';
+/**
+ * Pinned runtime fallback if the default model cannot be loaded: three.js's
+ * Soldier, which is not committed to this repository (see
+ * public/avatars/README.md).
  */
 export const FALLBACK_AVATAR_URL =
   'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r170/examples/models/gltf/Soldier.glb';
-/** Clip names in the placeholder model. */
+/** Clip names in the default (and fallback) model. */
 export const DEFAULT_CLIP_MAP = Object.freeze({
   idle: 'Idle',
   walk: 'Walk',
@@ -20,7 +24,8 @@ export const DEFAULT_CLIP_MAP = Object.freeze({
 });
 /**
  * Extra compass-heading rotation (radians) that turns the model's authored
- * forward axis onto the direction of travel. The placeholder faces glTF −Z.
+ * forward axis onto the direction of travel. The default and fallback models
+ * face glTF −Z.
  */
 export const DEFAULT_HEADING_OFFSET = Math.PI;
 

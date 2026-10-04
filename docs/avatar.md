@@ -1,7 +1,9 @@
 # Me Mode: walk your own avatar on the globe
 
 Me Mode puts a rigged, animated glTF character on the ground where the camera
-is looking and hands you a third-person game camera. It is a demo (Phase 0 of
+is looking and hands you a third-person game camera. The default character is
+a photoreal human from Microsoft's Rocketbox library (MIT) with idle, walk and
+run animations. It is a demo (Phase 0 of
 the human-avatar PRD): one local avatar, no accounts, no upload flow.
 
 ## Using it
@@ -100,7 +102,7 @@ http://localhost:4173/?avatar=/avatars/said.glb&avatarHeading=0
   model with none just slides. The loaded names are logged in the console:
   `[Me Mode] Avatar loaded { clips, available }`.
 - `avatarHeading`: degrees to rotate the model so that it walks forwards. The
-  default is 180, for models that face glTF −Z like the placeholder. Models
+  default is 180, for models that face glTF −Z like the default human. Models
   exported from Blender with "+Y Up" usually face +Z: use `avatarHeading=0`.
 
 From code, the layer also exposes
@@ -112,6 +114,26 @@ transforms, which the glTF spec says to ignore. The common Mixamo/Blender
 layout, a mesh under an armature scaled 0.01 and rotated −90°, would otherwise
 render 1.8 cm tall. Me Mode moves such meshes to the scene root before Cesium
 parses them, which changes nothing for spec-correct viewers.
+
+## Another Rocketbox character
+
+The [Rocketbox library](https://github.com/microsoft/Microsoft-Rocketbox) has
+115 rigged humans that share one skeleton and animation set. Convert one with
+Blender (or `pip install bpy` on Python 3.11):
+
+```sh
+R=Microsoft-Rocketbox/Assets
+python tools/avatar/rocketbox_to_glb.py \
+  --avatar $R/Avatars/Adults/Female_Adult_01/Export/Female_Adult_01.fbx \
+  --idle   $R/Animations/all_animations_max_motextr_static/f_idle_neutral_01.max.fbx \
+  --walk   $R/Animations/all_animations_max_motextr_xy/f_walk_neutral_01.max.fbx \
+  --run    $R/Animations/all_animations_max_motextr_xy/f_run_neutral_01.max.fbx \
+  --out    public/avatars/female-01.glb
+```
+
+Then open `/?avatar=/avatars/female-01.glb`. The script names the clips
+`Idle`, `Walk` and `Run`, removes the clips' forward travel and turns the model
+to face glTF −Z, so no `clips` or `avatarHeading` options are needed.
 
 ## Making a GLB of yourself
 

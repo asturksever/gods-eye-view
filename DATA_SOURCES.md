@@ -70,11 +70,13 @@ How to read this:
 
 The optional Local ADS-B layer and the broadcast-FM receiver use radio you receive yourself: a USB RTL-SDR opened in the browser through WebUSB, or the `aircraft.json` of a decoder you run on your own machine or network (`LOCAL_RECEIVER_FEEDS`). Radio samples, audio and the optional receiver location stay in the browser. Decoder feeds are read by your local GEV server and relayed only to your browser, with about a second of in-memory caching. When you select a local aircraft, its ICAO address (and an airline-style callsign) is looked up, and aircraft that qualify for a 3D model are looked up by ICAO address, through the same adsbdb proxy the public flight layers use; your server caches those answers on disk and treats them as fresh for 24 hours. Received radio data is not stored or redistributed. ADS-B is an unauthenticated public broadcast and may be incomplete, delayed, spoofed or decoded in error; it is not suitable for navigation or operational use.
 
-### Me Mode avatar models (not stored in this repo)
+### Me Mode avatar models
 
-Me Mode loads one rigged glTF avatar. No avatar model is committed: `public/avatars/` is git-ignored apart from its README, so a personal scan or a third-party character dropped there stays on your machine.
+Me Mode loads one rigged glTF avatar.
 
-- **Default placeholder:** three.js's example `Soldier.glb` (Idle/Walk/Run clips), loaded from `public/avatars/default.glb` when you have downloaded it, otherwise fetched at runtime from a pinned jsDelivr copy of the three.js repository (`mrdoob/three.js@r170/examples/models/gltf/Soldier.glb`). The three.js repository is MIT-licensed, but the character and its animations originate from Adobe Mixamo, whose terms allow use in projects but not redistribution of the raw asset, which is why it is fetched rather than bundled. Replace it before any commercial or public demo.
+- **Default:** a photoreal human, `public/models/people/rocketbox-male-06.glb`, converted from the [Microsoft Rocketbox Avatar Library](https://github.com/microsoft/Microsoft-Rocketbox) (MIT): the Male_Adult_06 avatar with its idle, walk and run animations. It is committed; attribution is in [public/models/README.md](public/models/README.md).
+- **Fallback, not stored in this repo:** if the default cannot be loaded, three.js's example `Soldier.glb` (Idle/Walk/Run clips) is fetched at runtime from a pinned jsDelivr copy of the three.js repository (`mrdoob/three.js@r170/examples/models/gltf/Soldier.glb`). The three.js repository is MIT-licensed, but the character and its animations originate from Adobe Mixamo, whose terms allow use in projects but not redistribution of the raw asset, which is why it is fetched rather than bundled.
+- **Local models:** `public/avatars/` is git-ignored apart from its README, so a personal scan or a third-party character dropped there stays on your machine.
 - **Your own model** (`?avatar=/avatars/<file>.glb`) is yours to license. See [docs/avatar.md](docs/avatar.md).
 
 ### Notes on the live sources

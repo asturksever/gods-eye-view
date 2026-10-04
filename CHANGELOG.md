@@ -12,6 +12,12 @@
   Flying pops a cape that streams and flutters with speed; B (or the bar
   button) switches to surfing a board instead.
 
+- Me Mode's default avatar is now a photoreal human (Microsoft Rocketbox,
+  MIT) with idle, walk and run animations, committed at
+  `public/models/people/rocketbox-male-06.glb`. Other Rocketbox characters
+  convert with `tools/avatar/rocketbox_to_glb.py`. three.js's Soldier remains
+  only as a CDN fallback.
+
 - Add Me Mode (demo): a Utilities layer that drops a rigged, animated glTF
   avatar at the camera target and lets you walk it on the photoreal tiles.
   WASD/arrow keys move relative to the camera, Shift runs, V toggles first
