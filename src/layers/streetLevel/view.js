@@ -122,7 +122,7 @@ export function visibleBbox(
     ])
       hits.push(
         Cesium.Cartographic.fromDegrees(
-          lon + dx * dLon,
+          wrapLon(lon + dx * dLon),
           Math.max(-85, Math.min(85, lat + dy * dLat)),
         ),
       );
