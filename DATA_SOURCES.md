@@ -76,7 +76,8 @@ Me Mode loads one rigged glTF avatar.
 
 - **Default:** a photoreal human, `public/models/people/rocketbox-male-06.glb`, converted from the [Microsoft Rocketbox Avatar Library](https://github.com/microsoft/Microsoft-Rocketbox) (MIT): the Male_Adult_06 avatar with its idle, walk and run animations. It is committed; attribution is in [public/models/README.md](public/models/README.md).
 - **Fallback, not stored in this repo:** if the default cannot be loaded, three.js's example `Soldier.glb` (Idle/Walk/Run clips) is fetched at runtime from a pinned jsDelivr copy of the three.js repository (`mrdoob/three.js@r170/examples/models/gltf/Soldier.glb`). The three.js repository is MIT-licensed, but the character and its animations originate from Adobe Mixamo, whose terms allow use in projects but not redistribution of the raw asset, which is why it is fetched rather than bundled.
-- **Local models:** `public/avatars/` is git-ignored apart from its README, so a personal scan or a third-party character dropped there stays on your machine.
+- **Local models:** `public/avatars/` is git-ignored apart from its README, so a personal scan or a third-party character dropped there stays on your machine. `public/avatars/me.glb`, when present, is loaded instead of the default.
+- **Likeness tool (offline, optional):** `tools/avatar/likeness/` uses Google's MediaPipe Face Landmarker model (Apache-2.0), which you download yourself; it is not committed. Your photo is processed locally and is not uploaded anywhere.
 - **Your own model** (`?avatar=/avatars/<file>.glb`) is yours to license. See [docs/avatar.md](docs/avatar.md).
 
 ### Notes on the live sources

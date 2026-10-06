@@ -90,6 +90,8 @@ http://localhost:4173/?avatar=/avatars/spiderman.glb&clips=idle:Breathing,walk:W
 http://localhost:4173/?avatar=/avatars/said.glb&avatarHeading=0
 ```
 
+- With no `avatar` parameter, Me Mode loads `public/avatars/me.glb` if you
+  have one, otherwise the bundled human.
 - `avatar`: a root-relative `.glb`/`.gltf` path on the same server. Other
   hosts are refused, so a shared link cannot make a viewer download from an
   arbitrary site; code can still load one through `setModel`. Files in
@@ -136,6 +138,14 @@ Then open `/?avatar=/avatars/female-01.glb`. The script names the clips
 to face glTF −Z, so no `clips` or `avatarHeading` options are needed.
 
 ## Making a GLB of yourself
+
+**From one photo (quickest).** `tools/avatar/likeness/make_likeness.sh` puts
+the face, beard, hair colour, skin tone and top colour from a frontal photo
+on a Rocketbox character and writes `public/avatars/me.glb`, which Me Mode
+loads automatically instead of the default human. Setup and limits are in
+[tools/avatar/likeness/README.md](../tools/avatar/likeness/README.md).
+
+**From a full 3D reconstruction.**
 
 Target: one GLB, metres, feet at the origin, Y-up, under 15 MB, with idle,
 walk and run clips.

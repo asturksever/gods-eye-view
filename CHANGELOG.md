@@ -17,6 +17,9 @@
   `public/models/people/rocketbox-male-06.glb`. Other Rocketbox characters
   convert with `tools/avatar/rocketbox_to_glb.py`. three.js's Soldier remains
   only as a CDN fallback.
+- Me Mode loads a personal `public/avatars/me.glb` (git-ignored) before the
+  default. `tools/avatar/likeness/` makes one from a single frontal photo:
+  face, beard, hair, skin and clothing colour baked onto a Rocketbox body.
 
 - Add Me Mode (demo): a Utilities layer that drops a rigged, animated glTF
   avatar at the camera target and lets you walk it on the photoreal tiles.

@@ -23,3 +23,6 @@ pinokio/.installed
 public/avatars/*
 !public/avatars/README.md
 __pycache__/
+
+# Downloaded MediaPipe model for tools/avatar/likeness
+tools/avatar/likeness/face_landmarker.task

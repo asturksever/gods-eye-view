@@ -4,6 +4,9 @@ Everything in this folder except this README is git-ignored. Put avatar
 models here; they are served at `/avatars/<file>` and selected with
 `?avatar=/avatars/<file>.glb`. See [docs/avatar.md](../../docs/avatar.md).
 
+`me.glb`, if present, is loaded by Me Mode instead of the default; make one
+from a photo with `tools/avatar/likeness/` (see its README).
+
 The default avatar is not in this folder: it is the committed Rocketbox
 human at `public/models/people/rocketbox-male-06.glb`. If that file cannot be
 loaded, Me Mode fetches three.js's Soldier from a pinned CDN copy instead.

@@ -12,6 +12,7 @@ import {
   DEFAULT_HEADING_OFFSET,
   EYE_HEIGHT_M,
   FALLBACK_AVATAR_URL,
+  PERSONAL_AVATAR_URL,
   HeightSmoother,
   WALK_SPEED_MPS,
   cameraTakenBy,
@@ -761,15 +762,28 @@ export function createAvatarLayer({
         show: false,
       });
     };
+    // The default is a chain: your own avatar if you made one, the bundled
+    // human, then the pinned CDN placeholder.
+    const candidates =
+      url === DEFAULT_AVATAR_URL
+        ? [PERSONAL_AVATAR_URL, DEFAULT_AVATAR_URL, FALLBACK_AVATAR_URL]
+        : [url];
     let model;
-    try {
-      model = await attempt(url);
-    } catch (error) {
-      if (url !== DEFAULT_AVATAR_URL || abort.signal.aborted) throw error;
-      console.info(
-        '[Me Mode] No local default avatar; using the pinned CDN copy.',
-      );
-      model = await attempt(FALLBACK_AVATAR_URL);
+    let loadedUrl;
+    for (const [index, candidate] of candidates.entries()) {
+      try {
+        model = await attempt(candidate);
+        loadedUrl = candidate;
+        if (index > 1)
+          console.info(
+            '[Me Mode] Default avatar unavailable; using',
+            candidate,
+          );
+        break;
+      } catch (error) {
+        if (index === candidates.length - 1 || abort.signal.aborted)
+          throw error;
+      }
     }
     if (epoch !== _modelEpoch || viewer !== _viewer || !_enabled) {
       model.destroy();
@@ -812,6 +826,7 @@ export function createAvatarLayer({
     model.show = _groundReady && !_firstPerson;
     if (previous) viewer.scene.primitives.remove(previous);
     console.info('[Me Mode] Avatar loaded', {
+      url: loadedUrl,
       clips: _clips,
       available: names,
     });

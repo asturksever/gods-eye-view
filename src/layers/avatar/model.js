@@ -10,6 +10,12 @@
  */
 export const DEFAULT_AVATAR_URL = '/models/people/rocketbox-male-06.glb';
 /**
+ * A personal avatar, tried before the default when present. `public/avatars/`
+ * is git-ignored, so a model made from your own photo stays on your machine
+ * (see docs/avatar.md).
+ */
+export const PERSONAL_AVATAR_URL = '/avatars/me.glb';
+/**
  * Pinned runtime fallback if the default model cannot be loaded: three.js's
  * Soldier, which is not committed to this repository (see
  * public/avatars/README.md).

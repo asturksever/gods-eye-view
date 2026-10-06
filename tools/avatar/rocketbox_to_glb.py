@@ -38,6 +38,13 @@ def parse_args():
     parser.add_argument("--run", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--texture-size", type=int, default=1024)
+    parser.add_argument(
+        "--texture",
+        action="append",
+        default=[],
+        metavar="NAME=PATH",
+        help="use PATH instead of the avatar's texture NAME (e.g. m001_head_color.tga=me_head.png)",
+    )
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else sys.argv[1:]
     return parser.parse_args(argv)
 
@@ -48,12 +55,14 @@ def import_fbx(path):
     return [obj for obj in bpy.data.objects if obj not in before]
 
 
-def relink_and_compress_textures(avatar_fbx, size, workdir):
-    """Point images at <avatar>/Textures and re-save them small for the web."""
+def relink_and_compress_textures(avatar_fbx, size, workdir, overrides=None):
+    """Point images at <avatar>/Textures (or an override) and re-save them
+    small for the web."""
     textures = os.path.join(os.path.dirname(os.path.dirname(avatar_fbx)), "Textures")
+    overrides = overrides or {}
     for image in list(bpy.data.images):
         name = os.path.basename(image.filepath.replace("\\", "/"))
-        source = os.path.join(textures, name)
+        source = overrides.get(name) or os.path.join(textures, name)
         if not os.path.exists(source):
             continue
         image.filepath = source
@@ -227,7 +236,11 @@ def main():
     armature.animation_data.action = None
 
     with tempfile.TemporaryDirectory() as workdir:
-        relink_and_compress_textures(args.avatar, args.texture_size, workdir)
+        overrides = dict(
+            (name, os.path.abspath(path))
+            for name, path in (item.split("=", 1) for item in args.texture)
+        )
+        relink_and_compress_textures(args.avatar, args.texture_size, workdir, overrides)
         fix_materials()
         for name, path in (("Idle", args.idle), ("Walk", args.walk), ("Run", args.run)):
             action = add_clip(armature, path, name)
