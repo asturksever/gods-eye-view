@@ -1,19 +1,29 @@
 /**
- * Flight gear for Me Mode: a cape that streams behind the avatar while it
- * flies, or a board it surfs on. Layout is pure math in the avatar's local
- * east/north/up frame (metres from the feet); `createFlightGear` turns it
- * into a few Cesium primitives updated per frame.
+ * Flight gear for Me Mode: a cloth cape that streams and flaps behind the
+ * avatar while it flies (simulated in cloth.js), or a board it surfs on.
+ * Layout is in the avatar's local east/north/up frame (metres from the
+ * feet); `createFlightGear` turns it into Cesium primitives each frame.
  */
+import {
+  clothNormals,
+  createCloth,
+  resetCloth,
+  stepCloth,
+  windAt,
+} from './cloth.js';
 
-/** Cape dimensions (m) and attachment on the avatar's upper back. */
+/** Cape cloth (m) and its attachment across the avatar's shoulders. */
 export const CAPE = Object.freeze({
-  segments: 5,
-  segmentLength: 0.24,
-  width: 0.62,
-  thickness: 0.015,
-  shoulderHeight: 1.42,
-  backOffset: 0.14,
+  cols: 9,
+  rows: 13,
+  topWidth: 0.46,
+  bottomWidth: 0.95,
+  length: 1.3,
+  shoulderHeight: 1.43,
+  backOffset: 0.12,
 });
+/** A teleport or respawn: re-hang the cape instead of whipping it. */
+const CAPE_RESET_M = 30;
 
 /** Surfboard dimensions (m). */
 export const BOARD = Object.freeze({
@@ -35,25 +45,34 @@ const cross = (a, b) => [
   a[2] * b[0] - a[0] * b[2],
   a[0] * b[1] - a[1] * b[0],
 ];
-const normalize = (a) => {
-  const length = Math.hypot(a[0], a[1], a[2]) || 1;
-  return scale(a, 1 / length);
-};
 
 /**
  * The avatar's body axes in the local east/north/up frame.
  * @param {number} heading Compass radians the avatar faces.
  * @param {number} lean Forward lean (radians, positive = head forward).
  */
-export function bodyFrame(heading, lean) {
+export function bodyFrame(heading, lean, roll = 0) {
   const forward = [Math.sin(heading), Math.cos(heading), 0];
-  const right = [Math.cos(heading), -Math.sin(heading), 0];
+  const flatRight = [Math.cos(heading), -Math.sin(heading), 0];
   const up = [0, 0, 1];
+  // Body axis from feet to head, tipped forward by the lean.
+  const leanedUp = add(
+    scale(up, Math.cos(lean)),
+    scale(forward, Math.sin(lean)),
+  );
+  // Bank: the body rolls about the chest axis, head towards the turn.
+  const bodyUp = add(
+    scale(leanedUp, Math.cos(roll)),
+    scale(flatRight, Math.sin(roll)),
+  );
+  const right = add(
+    scale(flatRight, Math.cos(roll)),
+    scale(leanedUp, -Math.sin(roll)),
+  );
   return {
     forward,
     right,
-    // Body axis from feet to head, tipped forward by the lean.
-    bodyUp: add(scale(up, Math.cos(lean)), scale(forward, Math.sin(lean))),
+    bodyUp,
     // Where the chest points, tipped down by the lean.
     bodyForward: add(
       scale(forward, Math.cos(lean)),
@@ -63,57 +82,45 @@ export function bodyFrame(heading, lean) {
 }
 
 /**
- * Cape segments, top to bottom: each a thin box with a centre and its axes
- * (`right` across the cape, `along` down the cape, `normal` out of it).
- * At rest the cape hangs down the back with a slight sway; with speed it
- * streams out behind and flutters faster.
- * @param {{ heading: number, lean: number, speedRatio: number, time: number }} pose
- *   `speedRatio` 0 (hover) … 1 (full flying speed); `time` in seconds.
+ * Where the cape is pinned (one point per cloth column, left to right across
+ * the shoulders) and the body capsules it must stay outside.
+ * @param {{ heading: number, lean: number, roll?: number }} pose
  */
-export function capeLayout({ heading, lean, speedRatio, time }) {
-  const s = Math.min(1, Math.max(0, speedRatio));
-  const { forward, right, bodyUp, bodyForward } = bodyFrame(heading, lean);
-  let start = add(
+export function capeRig({ heading, lean, roll = 0 }) {
+  const { right, bodyUp, bodyForward } = bodyFrame(heading, lean, roll);
+  const shoulders = add(
     scale(bodyUp, CAPE.shoulderHeight),
     scale(bodyForward, -CAPE.backOffset),
   );
-  // The cape swings in the vertical plane through the direction of travel:
-  // straight down when hovering, trailing out behind (against the motion,
-  // not away from the chest, which faces the ground mid-flight) at speed.
-  const down = [0, 0, -1];
-  const behind = scale(forward, -1);
-  const segments = [];
-  for (let i = 0; i < CAPE.segments; i++) {
-    // 0 = straight down; π/2 = horizontal behind; a little past it lifts.
-    const flutter =
-      Math.sin(time * (3 + 9 * s) - i * 0.9) *
-      (0.06 + 0.16 * s) *
-      (i + 1) *
-      0.35;
-    const angle = 0.12 + s * (1.45 + 0.03 * i) + flutter;
-    const along = normalize(
-      add(scale(down, Math.cos(angle)), scale(behind, Math.sin(angle))),
+  const anchors = [];
+  for (let c = 0; c < CAPE.cols; c++) {
+    const across = (c / (CAPE.cols - 1) - 0.5) * CAPE.topWidth;
+    // The cape wraps slightly round the shoulders.
+    const wrap = -0.06 * (1 - (2 * across) ** 2 / CAPE.topWidth ** 2);
+    anchors.push(
+      add(add(shoulders, scale(right, across)), scale(bodyForward, wrap)),
     );
-    const centre = add(start, scale(along, CAPE.segmentLength / 2));
-    segments.push({
-      centre,
-      right,
-      along,
-      normal: normalize(cross(right, along)),
-    });
-    start = add(start, scale(along, CAPE.segmentLength));
   }
-  return segments;
+  const back = (h, offset = 0) =>
+    add(scale(bodyUp, h), scale(bodyForward, offset));
+  const colliders = [
+    { a: back(0.95, 0.0), b: back(1.38, 0.0), radius: 0.2 }, // torso
+    { a: back(0.08, 0.0), b: back(0.92, 0.0), radius: 0.15 }, // legs
+    { a: back(1.5, 0.02), b: back(1.75, 0.02), radius: 0.12 }, // head
+  ];
+  return { anchors, colliders };
 }
 
 /** The board under the feet, along the direction the avatar faces. */
-export function boardLayout({ heading }) {
-  const { forward, right } = bodyFrame(heading, 0);
+export function boardLayout({ heading, roll = 0 }) {
+  // The board carves: it tips with the rider into a turn.
+  const { forward, right } = bodyFrame(heading, 0, roll);
+  const normal = cross(right, forward);
   return {
-    centre: [0, 0, -BOARD.thickness / 2],
+    centre: scale(normal, -BOARD.thickness / 2),
     right,
     along: forward,
-    normal: [0, 0, 1],
+    normal,
   };
 }
 
@@ -124,33 +131,51 @@ export function boardLayout({ heading }) {
  * @param {import('cesium').Scene} scene
  */
 export function createFlightGear(Cesium, scene) {
-  const box = (dimensions, color) => {
-    const primitive = new Cesium.Primitive({
-      geometryInstances: new Cesium.GeometryInstance({
-        geometry: Cesium.BoxGeometry.fromDimensions({
-          dimensions: new Cesium.Cartesian3(...dimensions),
-          vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
-        }),
-        attributes: {
-          color: Cesium.ColorGeometryInstanceAttribute.fromColor(color),
-        },
+  const board = new Cesium.Primitive({
+    geometryInstances: new Cesium.GeometryInstance({
+      geometry: Cesium.BoxGeometry.fromDimensions({
+        dimensions: new Cesium.Cartesian3(
+          BOARD.width,
+          BOARD.length,
+          BOARD.thickness,
+        ),
+        vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
       }),
-      appearance: new Cesium.PerInstanceColorAppearance({ closed: true }),
-      asynchronous: false,
-      show: false,
-    });
-    scene.primitives.add(primitive);
-    return primitive;
-  };
-  const capeColor = Cesium.Color.fromCssColorString('#c8102e');
-  const cape = Array.from({ length: CAPE.segments }, () =>
-    box([CAPE.width, CAPE.segmentLength, CAPE.thickness], capeColor),
-  );
-  const board = box(
-    [BOARD.width, BOARD.length, BOARD.thickness],
-    Cesium.Color.fromCssColorString('#cfd8dc'),
-  );
+      attributes: {
+        color: Cesium.ColorGeometryInstanceAttribute.fromColor(
+          Cesium.Color.fromCssColorString('#cfd8dc'),
+        ),
+      },
+    }),
+    appearance: new Cesium.PerInstanceColorAppearance({ closed: true }),
+    asynchronous: false,
+    allowPicking: false,
+    show: false,
+  });
+  scene.primitives.add(board);
+
+  const cloth = createCloth(CAPE);
+  // Deep red wool: matte, lit on both faces.
+  const capeAppearance = new Cesium.MaterialAppearance({
+    material: Cesium.Material.fromType('Color', {
+      color: Cesium.Color.fromCssColorString('#9e0f1f'),
+    }),
+    faceForward: true,
+    closed: false,
+    translucent: false,
+  });
+  const indices = new Uint16Array(cloth.triangles.flat());
+  const st = new Float32Array(CAPE.cols * CAPE.rows * 2);
+  for (let r = 0; r < CAPE.rows; r++)
+    for (let c = 0; c < CAPE.cols; c++) {
+      st[(r * CAPE.cols + c) * 2] = c / (CAPE.cols - 1);
+      st[(r * CAPE.cols + c) * 2 + 1] = 1 - r / (CAPE.rows - 1);
+    }
+  let cape = null;
+  let lastFeet = null;
+  let lastTime = null;
   const frame = new Cesium.Matrix4();
+  const inverse = new Cesium.Matrix4();
   const local = new Cesium.Matrix4();
 
   // Box axes x/y/z = right/along/normal, positioned at `centre` (local ENU).
@@ -167,35 +192,112 @@ export function createFlightGear(Cesium, scene) {
     );
   };
 
+  const dropCape = () => {
+    if (cape) scene.primitives.remove(cape);
+    cape = null;
+  };
+
+  const drawCape = () => {
+    const geometry = new Cesium.Geometry({
+      attributes: {
+        position: new Cesium.GeometryAttribute({
+          componentDatatype: Cesium.ComponentDatatype.DOUBLE,
+          componentsPerAttribute: 3,
+          values: Float64Array.from(cloth.pos),
+        }),
+        normal: new Cesium.GeometryAttribute({
+          componentDatatype: Cesium.ComponentDatatype.FLOAT,
+          componentsPerAttribute: 3,
+          values: clothNormals(cloth),
+        }),
+        st: new Cesium.GeometryAttribute({
+          componentDatatype: Cesium.ComponentDatatype.FLOAT,
+          componentsPerAttribute: 2,
+          values: st,
+        }),
+      },
+      indices,
+      primitiveType: Cesium.PrimitiveType.TRIANGLES,
+      boundingSphere: Cesium.BoundingSphere.fromVertices(Array.from(cloth.pos)),
+    });
+    const next = new Cesium.Primitive({
+      geometryInstances: new Cesium.GeometryInstance({ geometry }),
+      appearance: capeAppearance,
+      modelMatrix: Cesium.Matrix4.clone(frame),
+      asynchronous: false,
+      allowPicking: false,
+      compressVertices: false,
+    });
+    scene.primitives.add(next);
+    dropCape();
+    cape = next;
+  };
+
   return {
     /** Every gear primitive, so ground probes can ignore them. */
-    primitives: [...cape, board],
+    get primitives() {
+      return cape ? [board, cape] : [board];
+    },
 
     /**
      * @param {object} state
      * @param {import('cesium').Cartesian3} state.feet
      * @param {'cape'|'surf'|null} state.style null hides all gear
      * @param {boolean} state.firstPerson cape hidden from the eye's view
+     * @param {number} state.heading compass radians the avatar faces
+     * @param {number} state.lean forward lean (radians)
+     * @param {number} [state.roll] bank (radians, positive = right side down)
+     * @param {number} state.time seconds (drives the wind)
      * @returns {'cape'|'surf'|null} the gear now showing
      */
-    update({ feet, style, firstPerson, heading, lean, speedRatio, time }) {
+    update({ feet, style, firstPerson, heading, lean, roll = 0, time }) {
       const showCape = style === 'cape' && !firstPerson;
       const showBoard = style === 'surf';
-      cape.forEach((segment) => (segment.show = showCape));
       board.show = showBoard;
-      if (!showCape && !showBoard) return null;
+      const dt =
+        lastTime === null ? 0 : Math.max(0, Math.min(0.25, time - lastTime));
+      lastTime = time;
       Cesium.Transforms.eastNorthUpToFixedFrame(feet, undefined, frame);
-      if (showCape)
-        capeLayout({ heading, lean, speedRatio, time }).forEach((layout, i) =>
-          place(cape[i], layout),
+      if (showCape) {
+        const rig = capeRig({ heading, lean, roll });
+        // Express the cloth relative to the feet' new position: it keeps its
+        // own velocity in the world, so moving the avatar drags it behind.
+        let shift = [0, 0, 0];
+        if (lastFeet) {
+          Cesium.Matrix4.inverseTransformation(frame, inverse);
+          const old = Cesium.Matrix4.multiplyByPoint(
+            inverse,
+            lastFeet,
+            new Cesium.Cartesian3(),
+          );
+          if (Cesium.Cartesian3.magnitude(old) > CAPE_RESET_M)
+            cloth.ready = false;
+          else shift = [old.x, old.y, old.z];
+        }
+        if (!cloth.ready) resetCloth(cloth, rig.anchors);
+        stepCloth(
+          cloth,
+          {
+            anchors: rig.anchors,
+            colliders: rig.colliders,
+            wind: (t) => windAt(t),
+            shift,
+          },
+          dt,
         );
-      if (showBoard) place(board, boardLayout({ heading }));
-      return showCape ? 'cape' : 'surf';
+        drawCape();
+      } else {
+        dropCape();
+        cloth.ready = false;
+      }
+      lastFeet = Cesium.Cartesian3.clone(feet, lastFeet ?? undefined);
+      if (showBoard) place(board, boardLayout({ heading, roll }));
+      return showCape ? 'cape' : showBoard ? 'surf' : null;
     },
 
     destroy() {
-      for (const primitive of [...cape, board])
-        scene.primitives.remove(primitive);
+      dropCape();
+      scene.primitives.remove(board);
     },
   };
 }

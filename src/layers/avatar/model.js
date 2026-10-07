@@ -180,6 +180,82 @@ export function flyVelocityFromKeys(keys, cameraHeading) {
 }
 
 /**
+ * Flight as a body with thrust, drag and inertia. Thrust pushes along the
+ * keys' direction (WASD across the camera heading, E/Q up/down); quadratic
+ * drag sets the top speed (FLY_SPEED_MPS, or ×FLY_BOOST streamlined with
+ * Shift) and a little linear drag lets the flier coast to a stop.
+ */
+export const FLY_ACCEL_MPS2 = 9;
+export const FLY_CLIMB_ACCEL_MPS2 = 7;
+const FLY_COAST_PER_S = 0.35;
+
+/**
+ * One physics step of flight.
+ * @param {{ east: number, north: number, up: number }} velocity m/s
+ * @param {object} keys
+ * @param {number} cameraHeading
+ * @param {number} dt
+ * @returns {{ east: number, north: number, up: number, accelEast: number, accelNorth: number }}
+ */
+export function flightStep(velocity, keys, cameraHeading, dt) {
+  const boost = keys.run ? FLY_BOOST : 1;
+  const forward = (keys.forward ? 1 : 0) - (keys.back ? 1 : 0);
+  const right = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  const vertical = (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
+  let thrustEast = 0;
+  let thrustNorth = 0;
+  if (forward || right) {
+    const heading = cameraHeading + Math.atan2(right, forward);
+    // Terminal speed v = sqrt(thrust / k): thrust scales with boost², so
+    // the time to reach top speed stays about the same.
+    const thrust = FLY_ACCEL_MPS2 * boost * boost;
+    thrustEast = Math.sin(heading) * thrust;
+    thrustNorth = Math.cos(heading) * thrust;
+  }
+  const thrustUp = vertical * FLY_CLIMB_ACCEL_MPS2 * boost * boost;
+  // Quadratic drag k so that thrust = k·v² + coast·v at the top speed v.
+  const dragFor = (accel, top) =>
+    Math.max(0, accel * boost * boost - FLY_COAST_PER_S * top * boost) /
+    (top * boost) ** 2;
+  const kHorizontal = dragFor(FLY_ACCEL_MPS2, FLY_SPEED_MPS);
+  const kVertical = dragFor(FLY_CLIMB_ACCEL_MPS2, FLY_CLIMB_MPS);
+  const horizontal = Math.hypot(velocity.east, velocity.north);
+  const dragH = kHorizontal * horizontal + FLY_COAST_PER_S;
+  const dragV = kVertical * Math.abs(velocity.up) + FLY_COAST_PER_S;
+  const accelEast = thrustEast - dragH * velocity.east;
+  const accelNorth = thrustNorth - dragH * velocity.north;
+  const accelUp = thrustUp - dragV * velocity.up;
+  // Semi-implicit drag keeps big steps stable.
+  const integrate = (v, thrust, drag) => (v + thrust * dt) / (1 + drag * dt);
+  return {
+    east: integrate(velocity.east, thrustEast, dragH),
+    north: integrate(velocity.north, thrustNorth, dragH),
+    up: integrate(velocity.up, thrustUp, dragV),
+    accelEast,
+    accelNorth,
+    accelUp,
+  };
+}
+
+/**
+ * The body's attitude in flight from its motion: lean forward with speed
+ * (superhero), less when climbing, more when diving; bank into turns like an
+ * aircraft (tan roll = lateral acceleration / g).
+ * @returns {{ pitch: number, roll: number }}
+ */
+export function flightAttitude(velocity, accel, heading, maxLean) {
+  const speed = Math.hypot(velocity.east, velocity.north);
+  const fullSpeed = clamp(speed / FLY_SPEED_MPS, 0, 1);
+  const climb = Math.atan2(velocity.up, Math.max(speed, 1));
+  const pitch = clamp(maxLean * fullSpeed - climb * fullSpeed, -0.4, 1.35);
+  // Acceleration across the heading (right positive).
+  const lateral =
+    accel.accelEast * Math.cos(heading) - accel.accelNorth * Math.sin(heading);
+  const roll = clamp(Math.atan2(lateral, 9.81), -0.75, 0.75);
+  return { pitch, roll };
+}
+
+/**
  * Next flying height: climb or sink at `up` m/s, never below the surface
  * under the avatar (`floor`) and never more than FLY_MAX_ABOVE_GROUND_M
  * above it.

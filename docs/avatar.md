@@ -32,13 +32,25 @@ Each drop logs what it did in the browser console, e.g.
 | `W` `A` `S` `D` / arrow keys | Walk relative to the camera (2.8 m/s) |
 | `Shift` + move | Run (16 m/s) |
 | `F`, or **🕊 Fly** on the bar | Take off / land (falls to the surface below) |
-| `E` / `Q` while flying | Climb / descend (6 m/s; Shift ×4) |
-| `W` `A` `S` `D` while flying | Fly (15 m/s; Shift ×4, 60 m/s), leaning into the direction of travel |
-| `B` while flying, or **🦸 Cape / 🏄 Surf** on the bar | Fly style: a red cape that streams out behind as you fly, or standing on a silver surfboard |
+| `E` / `Q` while flying | Climb / descend (top speed 6 m/s; Shift ×4) |
+| `W` `A` `S` `D` while flying | Fly (top speed 15 m/s; Shift ×4, 60 m/s) |
+| `B` while flying, or **🦸 Cape / 🏄 Surf** on the bar | Fly style: a cloth cape, or standing on a silver surfboard |
 | `V`, or **First / Third person** on the bar | Toggle first person (eye height 1.6 m, model hidden) |
 | Drag on the globe | Orbit the camera around the avatar / look around |
 | Mouse wheel | Follow distance, 2–30 m |
 | `Esc` (on the globe), or **✕ Exit** | Leave Me Mode |
+
+Flight is physical. Thrust accelerates you (about 4 s to top speed) against
+air drag, and letting go of the keys glides you to a stop. You face the way
+you are moving, lean forward with speed (less when climbing), and bank into
+turns by the lateral acceleration, like an aircraft; on the board you carve.
+
+The cape is a simulated cloth (`cloth.js`): a 9 × 13 grid of particles pinned
+across the shoulders, with gravity, aerodynamic drag on each panel (so it
+billows, streams out behind and flutters in gusts), and the body as capsules
+it cannot pass through. It hangs and sways when you hover, swings out on
+turns, and re-hangs after a teleport. The simulation runs at 120 Hz
+independently of the frame rate.
 
 Flying never goes below the ground or the roof beneath you, or more than
 3 km above it. Landing drops you where you are, which can be a roof; drag the

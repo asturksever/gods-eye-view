@@ -328,3 +328,32 @@ test('keys: B switches the fly style', () => {
     claim: true,
   });
 });
+
+test('flight has inertia: accelerates to top speed, boosts, coasts', async () => {
+  const { flightStep, FLY_SPEED_MPS, FLY_BOOST } = await import('./model.js');
+  let v = { east: 0, north: 0, up: 0 };
+  for (let i = 0; i < 60; i++) v = flightStep(v, { forward: true }, 0, 1 / 60);
+  assert.ok(v.north > 4 && v.north < 10, `after 1 s ${v.north}`);
+  for (let i = 0; i < 600; i++) v = flightStep(v, { forward: true }, 0, 1 / 60);
+  assert.ok(Math.abs(v.north - FLY_SPEED_MPS) < 0.3);
+  let boosted = v;
+  for (let i = 0; i < 900; i++)
+    boosted = flightStep(boosted, { forward: true, run: true }, 0, 1 / 60);
+  assert.ok(Math.abs(boosted.north - FLY_SPEED_MPS * FLY_BOOST) < 1);
+  let coast = v;
+  for (let i = 0; i < 60; i++) coast = flightStep(coast, {}, 0, 1 / 60);
+  assert.ok(coast.north > 3 && coast.north < v.north, 'glides, then stops');
+});
+
+test('flight attitude banks into turns and leans with speed', async () => {
+  const { flightAttitude, FLY_SPEED_MPS } = await import('./model.js');
+  const cruising = { east: 0, north: FLY_SPEED_MPS, up: 0 };
+  const straight = flightAttitude(cruising, { accelEast: 0, accelNorth: 0 }, 0, 0.9);
+  assert.ok(Math.abs(straight.pitch - 0.9) < 1e-9);
+  assert.equal(straight.roll, 0);
+  // Heading north, accelerating east (turning right): bank right.
+  const turning = flightAttitude(cruising, { accelEast: 6, accelNorth: 0 }, 0, 0.9);
+  assert.ok(turning.roll > 0.4);
+  const climbing = flightAttitude({ ...cruising, up: 6 }, { accelEast: 0, accelNorth: 0 }, 0, 0.9);
+  assert.ok(climbing.pitch < straight.pitch);
+});

@@ -21,10 +21,10 @@ import {
   clipRoleForSpeed,
   descendToGround,
   describePose,
-  FLY_SPEED_MPS,
   fallStep,
   flyHeight,
-  flyVelocityFromKeys,
+  flightAttitude,
+  flightStep,
   parseRoadSnap,
   ringAround,
   roadSnapUrl,
@@ -173,6 +173,10 @@ export function createAvatarLayer({
   let _fallSpeed = 0;
   let _floor = null;
   let _flyPitch = 0;
+  /** Bank into turns (radians, positive = right side down). */
+  let _flyRoll = 0;
+  /** Flight velocity (m/s, east/north/up): flight has momentum. */
+  let _flyVel = { east: 0, north: 0, up: 0 };
   let _flyStyle = 'cape';
   let _gear = null;
   let _styleButton = null;
@@ -427,6 +431,7 @@ export function createAvatarLayer({
     _flying = flying;
     cancelAutopilot();
     _fallSpeed = 0;
+    _flyVel = { east: 0, north: 0, up: 0 };
     if (flying) _floor = _smoother.value ?? _height;
     if (!flying && Number.isFinite(_floor)) _smoother.reset(_floor);
     _lastSampleAt = 0;
@@ -841,10 +846,12 @@ export function createAvatarLayer({
     );
     // Compass heading → Cesium model heading: the model's +X points east at
     // heading 0 and heading turns clockwise.
+    // Cesium rolls about the model's x axis, which points backwards here:
+    // a bank to the right (head right) is a negative roll.
     const hpr = new Cesium.HeadingPitchRoll(
       _heading - Math.PI / 2 + _headingOffset,
       _flyPitch,
-      0,
+      -_flyRoll,
     );
     return Cesium.Transforms.headingPitchRollToFixedFrame(position, hpr);
   }
@@ -868,28 +875,39 @@ export function createAvatarLayer({
   }
 
   function stepFlying(dt) {
-    const velocity = flyVelocityFromKeys(_keys, _camHeading);
-    _speed = velocity.speed;
-    if (velocity.heading !== null && !_firstPerson)
-      _heading = turnToward(_heading, velocity.heading, TURN_RATE * dt);
+    const v = flightStep(_flyVel, _keys, _camHeading, dt);
+    const horizontal = Math.hypot(v.east, v.north);
+    _speed = horizontal;
+    // Face the way you are flying once there is real motion, turning at a
+    // finite rate; in first person the camera decides.
     if (_firstPerson) _heading = _camHeading;
-    if (_speed > 0) {
-      const next = offsetLonLat(
-        _lon,
-        _lat,
-        velocity.east * dt,
-        velocity.north * dt,
+    else if (horizontal > 1.5)
+      _heading = turnToward(
+        _heading,
+        Math.atan2(v.east, v.north),
+        TURN_RATE * dt,
       );
+    if (horizontal > 0) {
+      const next = offsetLonLat(_lon, _lat, v.east * dt, v.north * dt);
       _lon = next.lon;
       _lat = next.lat;
     }
-    _height = flyHeight(_height, velocity.up, dt, _floor);
-    // Cape: superhero lean into the direction of travel. Surf: stand on the
-    // board, weight slightly back.
-    const lean =
-      _flyStyle === 'surf' ? SURF_LEAN : velocity.speed > 0 ? FLY_LEAN : 0;
+    const height = flyHeight(_height, v.up, dt, _floor);
+    // Hitting the floor or the ceiling stops vertical motion.
+    if (height !== _height + v.up * dt) v.up = 0;
+    _height = height;
+    _flyVel = { east: v.east, north: v.north, up: v.up };
+    const attitude = flightAttitude(v, v, _heading, FLY_LEAN);
+    // Cape: superhero lean into the flight. Surf: stand on the board,
+    // weight slightly back, carving into turns.
+    const pitch = _flyStyle === 'surf' ? SURF_LEAN : attitude.pitch;
+    const roll = _firstPerson
+      ? 0
+      : attitude.roll * (_flyStyle === 'surf' ? 0.8 : 1);
+    const ease = 1 - Math.exp(-dt / 0.25);
+    _flyPitch += (pitch - _flyPitch) * ease;
+    _flyRoll += (roll - _flyRoll) * ease;
     _flyClock += dt;
-    _flyPitch += (lean - _flyPitch) * (1 - Math.exp(-dt / 0.3));
     playClip('idle', 1);
     _clipSeconds += dt * _clipRate;
   }
@@ -897,6 +915,7 @@ export function createAvatarLayer({
   function step(dt) {
     if (_flying) return stepFlying(dt);
     _flyPitch += (0 - _flyPitch) * (1 - Math.exp(-dt / 0.2));
+    _flyRoll += (0 - _flyRoll) * (1 - Math.exp(-dt / 0.2));
     let velocity = velocityFromKeys(_keys, _camHeading);
     if (!velocity.speed && _autopilot) {
       const offset = localOffset(_lon, _lat, _autopilot.lon, _autopilot.lat);
@@ -1130,7 +1149,7 @@ export function createAvatarLayer({
       firstPerson: _firstPerson,
       heading: _heading,
       lean: _flyPitch,
-      speedRatio: _speed / FLY_SPEED_MPS,
+      roll: _flyRoll,
       time: _flyClock,
     });
     // Obstructions pull the camera in at once; it eases back out after.
@@ -1176,6 +1195,8 @@ export function createAvatarLayer({
     _styleButton = null;
     _flying = false;
     _flyPitch = 0;
+    _flyRoll = 0;
+    _flyVel = { east: 0, north: 0, up: 0 };
     if (_pegman) _pegman.hidden = false;
     const controller = viewer?.scene?.screenSpaceCameraController;
     // Cockpit switches the inputs off before announcing itself; never hand
