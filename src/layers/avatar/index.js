@@ -70,11 +70,24 @@ const STREET_CHECK_DIRECTIONS = 12;
 const FLY_LEAN = 0.9;
 /** A drag shorter than this is a click: drop at the screen centre. */
 const PEGMAN_DRAG_PX = 6;
+/**
+ * The entry button: GEV's eye with you as the pupil, i.e. step inside the
+ * view. Brand cyan (#00f6ff) on the HUD's dark glass.
+ */
 const PEGMAN_SVG =
-  '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">' +
-  '<circle cx="12" cy="4.6" r="3.1" fill="#f6c400" stroke="#7a5b00" stroke-width="0.9"/>' +
-  '<path d="M8.3 9.2h7.4l1.6 6.1h-2.3l-.6 7.2h-2.1L12 17.6l-.3 4.9H9.6L9 15.3H6.7z" ' +
-  'fill="#f6c400" stroke="#7a5b00" stroke-width="0.9" stroke-linejoin="round"/></svg>';
+  '<svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">' +
+  '<path d="M2 16C5.6 9.4 10.6 6 16 6s10.4 3.4 14 10c-3.6 6.6-8.6 10-14 10S5.6 22.6 2 16z" ' +
+  'fill="rgba(68,84,114,0.45)" stroke="#00f6ff" stroke-width="1.6" stroke-linejoin="round"/>' +
+  '<circle cx="16" cy="16" r="7.4" fill="rgba(0,246,255,0.14)" stroke="#00f6ff" stroke-width="1.3"/>' +
+  '<circle cx="16" cy="12.6" r="2.3" fill="#00f6ff"/>' +
+  '<path d="M11.6 21.4c0.5-3.1 2.2-4.8 4.4-4.8s3.9 1.7 4.4 4.8z" fill="#00f6ff"/></svg>';
+/** Dragging: a map pin with you in it; its tip is where you drop in. */
+const PEGMAN_GHOST_SVG =
+  '<svg viewBox="0 0 36 48" width="36" height="48" aria-hidden="true">' +
+  '<path d="M18 47C18 47 3 29.5 3 18a15 15 0 0 1 30 0C33 29.5 18 47 18 47z" ' +
+  'fill="rgba(10,14,20,0.88)" stroke="#00f6ff" stroke-width="2"/>' +
+  '<circle cx="18" cy="13.6" r="3.6" fill="#00f6ff"/>' +
+  '<path d="M11.2 26.5c0.7-4.8 3.4-7.4 6.8-7.4s6.1 2.6 6.8 7.4z" fill="#00f6ff"/></svg>';
 
 /** A model that has not finished loading by then fails the toggle. */
 const MODEL_READY_TIMEOUT_MS = 30000;
@@ -1277,8 +1290,9 @@ export function createAvatarLayer({
     _pegman = document.createElement('button');
     _pegman.type = 'button';
     _pegman.className = 'me-mode-pegman';
-    _pegman.title = 'Me Mode: drag onto the map to walk there (or click)';
-    _pegman.setAttribute('aria-label', 'Me Mode: drop yourself on the map');
+    _pegman.title =
+      "Step into God's Eye View: drag onto the map to drop in there (or click)";
+    _pegman.setAttribute('aria-label', 'Me Mode: step into the map');
     _pegman.innerHTML = PEGMAN_SVG;
     Object.assign(_pegman.style, {
       position: 'absolute',
@@ -1290,17 +1304,19 @@ export function createAvatarLayer({
       placeItems: 'center',
       padding: '0',
       borderRadius: '50%',
-      border: '1px solid rgba(246, 196, 0, 0.6)',
+      border: '1px solid rgba(0, 246, 255, 0.55)',
       background: 'rgba(10, 14, 20, 0.82)',
-      boxShadow: '0 2px 10px rgba(0, 0, 0, 0.5)',
+      boxShadow:
+        '0 2px 10px rgba(0, 0, 0, 0.5), 0 0 12px rgba(0, 246, 255, 0.28)',
       cursor: 'grab',
       touchAction: 'none',
       zIndex: '6',
     });
     let drag = null;
     const ghostAt = (x, y) => {
-      drag.ghost.style.left = `${x - 13}px`;
-      drag.ghost.style.top = `${y - 34}px`;
+      // The pin's tip (bottom centre) sits on the pointer.
+      drag.ghost.style.left = `${x - 18}px`;
+      drag.ghost.style.top = `${y - 48}px`;
     };
     const on = (target, type, handler) => {
       target.addEventListener(type, handler);
@@ -1316,12 +1332,12 @@ export function createAvatarLayer({
       }
       const ghost = document.createElement('div');
       ghost.className = 'me-mode-pegman-ghost';
-      ghost.innerHTML = PEGMAN_SVG;
+      ghost.innerHTML = PEGMAN_GHOST_SVG;
       Object.assign(ghost.style, {
         position: 'fixed',
         pointerEvents: 'none',
-        transform: 'scale(1.5)',
-        filter: 'drop-shadow(0 3px 3px rgba(0,0,0,0.6))',
+        filter:
+          'drop-shadow(0 3px 3px rgba(0,0,0,0.6)) drop-shadow(0 0 6px rgba(0,246,255,0.45))',
         zIndex: '10000',
         display: 'none',
       });

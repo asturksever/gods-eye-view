@@ -8,10 +8,12 @@ the human-avatar PRD): one local avatar, no accounts, no upload flow.
 
 ## Using it
 
-Me Mode works like Street View's Pegman. The yellow figure sits on the right
-of the map, above the HUD readouts:
+Me Mode works like Street View's Pegman. The **Step in** button (GEV's cyan
+eye with a person as its pupil) sits on the right of the map, above the HUD
+readouts:
 
-- **Drag the Pegman** onto any spot on the globe and let go: the avatar is
+- **Drag it** onto any spot on the globe (it becomes a map pin whose tip marks
+  the spot) and let go: the avatar is
   dropped there.
 - **Click it** (or press Enter on it): the avatar is dropped at the centre of
   the view.
@@ -24,7 +26,7 @@ drop on a roof moves to the nearest street-level point around it on the
 loaded 3D surface. That street-level check (up to 85 m around) also runs
 after a road snap, so a spot that is still up on a structure is corrected.
 Each drop logs what it did in the browser console, e.g.
-`[Me Mode] Drop: moved 23 m to road` or the reason the road lookup failed. The Pegman hides while Me Mode is on. Leave with
+`[Me Mode] Drop: moved 23 m to road` or the reason the road lookup failed. The Step in button hides while Me Mode is on. Leave with
 **✕ Exit** on the bar at the bottom, or `Esc`.
 
 | Input | Action |
@@ -54,7 +56,7 @@ independently of the frame rate.
 
 Flying never goes below the ground or the roof beneath you, or more than
 3 km above it. Landing drops you where you are, which can be a roof; drag the
-Pegman again to return to the street.
+Step in button again to return to the street.
 
 While Me Mode is on it owns the camera and these keys. The HUD shortcuts under
 `W`, `D`, `V`, `F`, `Q` and `E` are suspended. Keys typed into text fields are ignored, and

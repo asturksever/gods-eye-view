@@ -1,6 +1,6 @@
 # God's Eye View Current State
 
-Me Mode (the Pegman on the map; layer id `avatar`, local-only, not listed in
+Me Mode (the Step in button, an eye with a person as its pupil, on the map; layer id `avatar`, local-only, not listed in
 the layer panel) places one glTF avatar where the Pegman is dropped, snapped to
 the nearest road, and owns the camera and WASD/Shift/V/F/E/Q/arrow keys
 while enabled; Cesium's camera inputs, the HUD shortcuts underneath and the
