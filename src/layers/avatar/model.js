@@ -256,6 +256,26 @@ export function flightAttitude(velocity, accel, heading, maxLean) {
 }
 
 /**
+ * Which clip to play in the air, and how fast. With the cape you stride
+ * through the air: walk while moving, run when boosting past cruising speed,
+ * idle while hovering. On the board you stand still. Strides quicken gently
+ * with speed (the legs do not carry you, so they never spin like on foot).
+ * @returns {{ role: 'idle'|'walk'|'run', rate: number }}
+ */
+export function flightClip({ speed, boosting, style }) {
+  if (style === 'surf' || speed < 0.8) return { role: 'idle', rate: 1 };
+  if (boosting && speed > FLY_SPEED_MPS * 1.2)
+    return {
+      role: 'run',
+      rate: clamp(0.8 + (0.6 * speed) / (FLY_SPEED_MPS * FLY_BOOST), 0.8, 1.4),
+    };
+  return {
+    role: 'walk',
+    rate: clamp(0.6 + (0.6 * speed) / FLY_SPEED_MPS, 0.6, 1.3),
+  };
+}
+
+/**
  * Next flying height: climb or sink at `up` m/s, never below the surface
  * under the avatar (`floor`) and never more than FLY_MAX_ABOVE_GROUND_M
  * above it.

@@ -24,6 +24,7 @@ import {
   fallStep,
   flyHeight,
   flightAttitude,
+  flightClip,
   flightStep,
   parseRoadSnap,
   ringAround,
@@ -921,7 +922,12 @@ export function createAvatarLayer({
     _flyPitch += (pitch - _flyPitch) * ease;
     _flyRoll += (roll - _flyRoll) * ease;
     _flyClock += dt;
-    playClip('idle', 1);
+    const clip = flightClip({
+      speed: horizontal,
+      boosting: Boolean(_keys.run),
+      style: _flyStyle,
+    });
+    playClip(clip.role, clip.rate);
     _clipSeconds += dt * _clipRate;
   }
 

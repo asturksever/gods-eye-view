@@ -17,6 +17,8 @@
   `public/models/people/rocketbox-male-06.glb`. Other Rocketbox characters
   convert with `tools/avatar/rocketbox_to_glb.py`. three.js's Soldier remains
   only as a CDN fallback.
+- Me Mode flying with the cape walks through the air (run when boosting,
+  idle when hovering); surfing stays standing.
 - The Me Mode Pegman is now a **Step in** button: GEV's cyan eye with a
   person as its pupil; dragged, it becomes a map pin whose tip marks the
   drop point.

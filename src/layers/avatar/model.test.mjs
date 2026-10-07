@@ -357,3 +357,18 @@ test('flight attitude banks into turns and leans with speed', async () => {
   const climbing = flightAttitude({ ...cruising, up: 6 }, { accelEast: 0, accelNorth: 0 }, 0, 0.9);
   assert.ok(climbing.pitch < straight.pitch);
 });
+
+test('in the air: stride with the cape, run when boosting, stand on the board', async () => {
+  const { flightClip, FLY_SPEED_MPS, FLY_BOOST } = await import('./model.js');
+  assert.deepEqual(flightClip({ speed: 0, boosting: false, style: 'cape' }), { role: 'idle', rate: 1 });
+  const cruise = flightClip({ speed: FLY_SPEED_MPS, boosting: false, style: 'cape' });
+  assert.equal(cruise.role, 'walk');
+  assert.ok(cruise.rate > 1 && cruise.rate <= 1.3);
+  const slow = flightClip({ speed: 3, boosting: false, style: 'cape' });
+  assert.ok(slow.rate < cruise.rate);
+  const boost = flightClip({ speed: FLY_SPEED_MPS * FLY_BOOST, boosting: true, style: 'cape' });
+  assert.equal(boost.role, 'run');
+  // Shift held but not yet fast: still striding.
+  assert.equal(flightClip({ speed: 10, boosting: true, style: 'cape' }).role, 'walk');
+  assert.equal(flightClip({ speed: 30, boosting: true, style: 'surf' }).role, 'idle');
+});

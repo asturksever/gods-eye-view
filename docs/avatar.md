@@ -46,6 +46,9 @@ Flight is physical. Thrust accelerates you (about 4 s to top speed) against
 air drag, and letting go of the keys glides you to a stop. You face the way
 you are moving, lean forward with speed (less when climbing), and bank into
 turns by the lateral acceleration, like an aircraft; on the board you carve.
+With the cape you stride through the air: the walk clip while moving (its
+pace rising gently with speed), the run clip when boosting past cruising
+speed, idle while hovering. On the board you stand still.
 
 The cape is a simulated cloth (`cloth.js`): a 9 × 13 grid of particles pinned
 across the shoulders, with gravity, aerodynamic drag on each panel (so it
