@@ -295,3 +295,34 @@ export function createHorizonCull({ getViewer, items, onChange }) {
 
   return { update, stop };
 }
+
+/**
+ * The ground under a screen position as {lon, lat}: the rendered surface
+ * (Google 3D, terrain) where it was picked, else the ellipsoid. Null over sky
+ * or for a pick that names no place (`isWorldPosition` rejects it).
+ */
+export function groundPointAt(viewer, screenPosition, { isWorldPosition }) {
+  const scene = viewer?.scene;
+  let cartesian = null;
+  if (scene?.pickPositionSupported) {
+    try {
+      cartesian = scene.pickPosition(screenPosition);
+    } catch {
+      cartesian = null;
+    }
+  }
+  if (!isWorldPosition(cartesian)) {
+    try {
+      cartesian = viewer?.camera?.pickEllipsoid(screenPosition);
+    } catch {
+      cartesian = null;
+    }
+  }
+  if (!isWorldPosition(cartesian)) return null;
+  const carto = Cesium.Cartographic.fromCartesian(cartesian);
+  if (!carto) return null;
+  return {
+    lon: Cesium.Math.toDegrees(carto.longitude),
+    lat: Cesium.Math.toDegrees(carto.latitude),
+  };
+}

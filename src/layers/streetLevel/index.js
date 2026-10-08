@@ -10,6 +10,7 @@ import { normalizeFilter, resolveFilter, sameFilter } from './filter.js';
 import { decodeParams, encodeParams } from './params.js';
 import { composeUIState, summarizeCoverage } from './uiState.js';
 import { cameraHeightAboveGround, viewCentre, whenIdle } from './view.js';
+import { createGroundClick } from './groundClick.js';
 import { createGroundCaster, nextSurfaceMode } from './groundCast.js';
 import { createMeshSampler } from './meshSampler.js';
 
@@ -66,6 +67,11 @@ export function createStreetLevelLayer({
       entry.instance.clearSequence?.();
   };
   parts.selection = createSelection(context);
+  parts.openAtGround = createGroundClick({
+    state,
+    parts,
+    openNearest: (point, options) => layer.openNearest(point, options),
+  });
 
   let notifyQueued = false;
   function notify() {
@@ -119,7 +125,7 @@ export function createStreetLevelLayer({
     const entry = {
       def,
       instance: null,
-      on: true,
+      on: def.defaultOn !== false,
       status: null,
       /** The error this provider last reported, until it withdraws it. */
       reportedError: null,
@@ -472,8 +478,11 @@ export function createStreetLevelLayer({
     /** Imagery filter for coverage, cones and nearest-image lookups. */
     setCoverageFilter,
     openImage,
-    /** Open the nearest image any active provider has around a point. */
-    async openNearest(point) {
+    /**
+     * Open the nearest image any active provider (or only `providerIds`)
+     * has around a point, by default the view centre.
+     */
+    async openNearest(point, { providerIds = null } = {}) {
       const view = point || viewCentre(state.viewer);
       if (!Number.isFinite(view?.lat) || !Number.isFinite(view?.lon))
         return false;
@@ -485,7 +494,10 @@ export function createStreetLevelLayer({
       state.street.error = null;
       notify();
       let lastError = null;
-      for (const entry of activeEntries()) {
+      const entries = activeEntries().filter(
+        (entry) => !providerIds || providerIds.includes(entry.def.id),
+      );
+      for (const entry of entries) {
         let imageId = null;
         try {
           imageId = await entry.instance.nearestImage(
@@ -508,10 +520,13 @@ export function createStreetLevelLayer({
       }
       if (nearestLookup === lookup) nearestLookup = null;
       // Switched off while it looked: nothing to open, nothing to report.
-      if (state.enabled && activeEntries().length)
+      const stillOn = activeEntries().some(
+        (entry) => !providerIds || providerIds.includes(entry.def.id),
+      );
+      if (state.enabled && stillOn)
         state.street.error =
           lastError?.message ||
-          `No street-level imagery within ${NEAREST_RADIUS_M} m of the view centre`;
+          `No street-level imagery within ${NEAREST_RADIUS_M} m of ${point ? 'that point' : 'the view centre'}`;
       state.street.loading = false;
       notify();
       return false;

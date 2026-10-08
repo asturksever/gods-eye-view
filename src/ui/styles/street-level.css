@@ -207,6 +207,10 @@ button.sl-status:focus-visible {
   border-radius: 999px;
 }
 
+.sl-seg[hidden] {
+  display: none;
+}
+
 .sl-seg-btn {
   font-family: var(--font-mono);
   font-size: var(--sl-text-small);

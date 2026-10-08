@@ -9,6 +9,8 @@
  * @property {string} pickPrefix    Every primitive id the provider creates starts with it.
  * @property {{coverage: string}} colors   The source's one colour, from policy.js PROVIDER_COLORS.
  * @property {{html: string}} credit   On-globe attribution while the provider is active.
+ * @property {boolean} [groundClick]   No coverage to click: a click on the ground at street zoom opens its nearest image.
+ * @property {boolean} [defaultOn]     Switched on until the user says otherwise (default true); match the share-link option default.
  * @property {(context: ProviderContext) => ProviderInstance} create
  *
  * @typedef {object} ProviderContext   Handed to `create()` once by the core.
@@ -63,6 +65,8 @@
  * @property {number|null} altitude
  * @property {boolean} isPano
  * @property {number|null} capturedAt   Epoch milliseconds.
+ * @property {'day'|'month'} [capturedAtPrecision]   How exactly the provider dates images (default 'day').
+ * @property {string|null} [title]     A place name for the caption, e.g. the address.
  * @property {string|null} creator
  * @property {string|null} sequenceId
  * @property {string} externalUrl      Deep link to the image on the provider's site.

@@ -18,6 +18,12 @@ export function freshStreet() {
     altitude: null,
     isPano: false,
     capturedAt: null,
+    /** 'day', or 'month' for providers that date images by month (Google). */
+    capturedAtPrecision: 'day',
+    /** A place name for the caption (Google's address), or null. */
+    title: null,
+    /** Whether the open viewer has FIT/FILL render modes. */
+    renderModes: true,
     sequenceId: null,
     creator: null,
     externalUrl: null,

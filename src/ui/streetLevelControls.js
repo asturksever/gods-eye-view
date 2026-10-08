@@ -577,6 +577,9 @@ export class StreetLevelControls {
       el.renderButtons,
       (button) => button.dataset.slRender === viewer.renderMode,
     );
+    // Google's viewer always fills its frame: no FIT/FILL to offer.
+    const renderGroup = el.renderButtons[0]?.parentElement;
+    if (renderGroup) setProp(renderGroup, 'hidden', !viewer.renderModes);
     if (!viewer.open) return;
     setProp(el.imageBy, 'textContent', viewer.captionLeft);
     setProp(el.imageWhen, 'textContent', viewer.captionRight);
