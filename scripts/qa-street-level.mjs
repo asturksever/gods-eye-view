@@ -2000,6 +2000,10 @@ async function main() {
             );
           } finally {
             await closePhoto();
+            // Off Google 3D the Street View chip is hidden: return to it
+            // before switching the chip, or the cleanup throws and hides
+            // the step's own result.
+            await stacks.set('photoreal');
             await setOn(chip, 'mapillary', true);
             await setOn(googleChip, 'google', false);
             await stacks.set(original);
