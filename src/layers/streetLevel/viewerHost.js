@@ -79,7 +79,6 @@ export function createViewerHost({ state, parts }) {
       warm.unmount();
     }
     const adapter = entry.instance.viewer;
-    state.street.renderModes = typeof adapter.setRenderMode === 'function';
     const promise = (async () => {
       await adapter.mount(state.street.host);
       if (mounting?.promise !== promise) {
@@ -139,6 +138,8 @@ export function createViewerHost({ state, parts }) {
     try {
       const adapter = await mount(entry);
       if (!current()) return false;
+      // Per open: close() resets it, and a reopen skips mount().
+      state.street.renderModes = typeof adapter.setRenderMode === 'function';
       await adapter.open(String(imageId));
       if (!current()) return false;
       if (ticket && !state.street.follow) parts.follow.lookAtPosition(ticket);
@@ -201,9 +202,11 @@ export function createViewerHost({ state, parts }) {
       } catch {
         /* the real open reports errors */
       }
-      if (active?.id === entry.def.id) continue;
-      // Switched off while it loaded: release it now rather than keep it.
-      if (!state.enabled || !entry.on) adapter.unmount();
+      if (active?.id === entry.def.id || mounting?.id === entry.def.id)
+        continue;
+      // Switched off while it loaded, or another provider's viewer took the
+      // host meanwhile: release it now rather than keep it under that one.
+      if (!state.enabled || !entry.on || active || mounting) adapter.unmount();
       else warmed.set(entry.def.id, adapter);
     }
   }

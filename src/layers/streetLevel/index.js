@@ -10,7 +10,7 @@ import { normalizeFilter, resolveFilter, sameFilter } from './filter.js';
 import { decodeParams, encodeParams } from './params.js';
 import { composeUIState, summarizeCoverage } from './uiState.js';
 import { cameraHeightAboveGround, viewCentre, whenIdle } from './view.js';
-import { createGroundClick } from './groundClick.js';
+import { createGroundClick, groundClickHeightOk } from './groundClick.js';
 import { createGroundCaster, nextSurfaceMode } from './groundCast.js';
 import { createMeshSampler } from './meshSampler.js';
 
@@ -69,8 +69,8 @@ export function createStreetLevelLayer({
   parts.selection = createSelection(context);
   parts.openAtGround = createGroundClick({
     state,
-    parts,
     openNearest: (point, options) => layer.openNearest(point, options),
+    isAvailable: (entry) => providerAvailable(entry),
   });
 
   let notifyQueued = false;
@@ -147,6 +147,33 @@ export function createStreetLevelLayer({
   }
 
   /**
+   * A provider that names a map stack (Google Street View: Google's terms
+   * forbid its imagery beside non-Google maps) is usable only on that stack.
+   */
+  function providerAvailable(entry) {
+    const required = entry.def.requiresMapStack;
+    return !required || mapStack?.getActiveId?.() === required;
+  }
+
+  /** Leaving a provider's map stack closes the image it shows. */
+  function syncProviderAvailability() {
+    const owner = state.providers.get(state.street.providerId);
+    if (state.street.open && owner && !providerAvailable(owner))
+      layer.closeViewer();
+    notify();
+  }
+
+  /** Whether a ground click can open an image: the camera is at street zoom. */
+  function syncGroundClickReady() {
+    const ready =
+      state.enabled &&
+      groundClickHeightOk(state.viewer, parts.groundCaster?.groundAt);
+    if (ready === state.groundClickReady) return;
+    state.groundClickReady = ready;
+    notify();
+  }
+
+  /**
    * Camera height above bare earth, for the surface mode. A cold grid cell is
    * fetched once and the mode rechecked when it lands.
    */
@@ -168,6 +195,7 @@ export function createStreetLevelLayer({
 
   /** Cast overlays to bare earth on Google 3D at street zoom; drape them elsewhere. */
   function syncSurface() {
+    syncGroundClickReady();
     const available = Boolean(parts.groundCaster) && state.enabled;
     const photoreal = mapStack?.getActiveId?.() === FOLLOW_MAP_STACK_ID;
     const mode = nextSurfaceMode(state.surface, {
@@ -247,9 +275,20 @@ export function createStreetLevelLayer({
     nearestLookup = null;
   }
 
-  function openImage(providerId, imageId) {
+  /** `frame: false` keeps the camera where it is (the user picked the spot). */
+  function openImage(providerId, imageId, { frame = true } = {}) {
     abortNearest();
-    return parts.viewerHost.open(providerId, imageId);
+    const entry = state.providers.get(providerId);
+    if (entry && !providerAvailable(entry)) {
+      state.street.error = unavailableReason(entry);
+      notify();
+      return Promise.resolve(false);
+    }
+    return parts.viewerHost.open(providerId, imageId, { frame });
+  }
+
+  function unavailableReason(entry) {
+    return `${entry.def.name} needs the Google 3D map: choose it under MAP SOURCE`;
   }
 
   function setProviderEnabled(providerId, on) {
@@ -276,9 +315,18 @@ export function createStreetLevelLayer({
     notify();
   }
 
+  /** The hint a ground-click provider shows, or the provider's own. */
+  function hintFor(entry, stats) {
+    if (!providerAvailable(entry)) return '';
+    if (entry.def.groundClick && stats.hint && !state.groundClickReady)
+      return `zoom in to a street to open ${entry.def.name}`;
+    return stats.hint || '';
+  }
+
   function providerSnapshots() {
     return [...state.providers.values()].map((entry) => {
       const stats = entry.instance.coverageStats();
+      const available = providerAvailable(entry);
       return {
         id: entry.def.id,
         name: entry.def.name,
@@ -291,9 +339,11 @@ export function createStreetLevelLayer({
         requiresKeyId: entry.def.requiresKeyId || null,
         loading: stats.loading === true,
         count: stats.count || 0,
-        hint: stats.hint || '',
+        hint: hintFor(entry, stats),
         error: stats.error || null,
         color: entry.def.colors.coverage,
+        /** Why the provider cannot be used right now, or null. */
+        unavailable: available ? null : unavailableReason(entry),
       };
     });
   }
@@ -336,7 +386,13 @@ export function createStreetLevelLayer({
     source: definitionsFrozen.map((def) => def.name).join(' · '),
     updateInterval: 0,
     statsRefreshInterval: 1000,
-    requiresKeyId: requiresKeyIdFor(definitionsFrozen),
+    /** The key the switched-on providers share (or null), for the layer row. */
+    get requiresKeyId() {
+      const on = [...state.providers.values()].filter((entry) => entry.on);
+      return requiresKeyIdFor(
+        on.length ? on.map((entry) => entry.def) : definitionsFrozen,
+      );
+    },
     /** Registered providers, in chip order. */
     providerIds: definitionsFrozen.map((def) => def.id),
 
@@ -437,9 +493,11 @@ export function createStreetLevelLayer({
       unsubscribeMapStack =
         mapStack?.subscribe?.(() => {
           syncFollowAvailability();
+          syncProviderAvailability();
           syncSurface();
         }) || null;
       syncFollowAvailability();
+      syncProviderAvailability();
       syncSurface();
     },
 
@@ -482,7 +540,7 @@ export function createStreetLevelLayer({
      * Open the nearest image any active provider (or only `providerIds`)
      * has around a point, by default the view centre.
      */
-    async openNearest(point, { providerIds = null } = {}) {
+    async openNearest(point, { providerIds = null, frame = true } = {}) {
       const view = point || viewCentre(state.viewer);
       if (!Number.isFinite(view?.lat) || !Number.isFinite(view?.lon))
         return false;
@@ -494,9 +552,10 @@ export function createStreetLevelLayer({
       state.street.error = null;
       notify();
       let lastError = null;
-      const entries = activeEntries().filter(
-        (entry) => !providerIds || providerIds.includes(entry.def.id),
-      );
+      const asked = (entry) =>
+        (!providerIds || providerIds.includes(entry.def.id)) &&
+        providerAvailable(entry);
+      const entries = activeEntries().filter(asked);
       for (const entry of entries) {
         let imageId = null;
         try {
@@ -516,13 +575,11 @@ export function createStreetLevelLayer({
         // This provider was switched off while it looked: try the next.
         if (!imageId || !entry.on) continue;
         nearestLookup = null;
-        return openImage(entry.def.id, imageId);
+        return openImage(entry.def.id, imageId, { frame });
       }
       if (nearestLookup === lookup) nearestLookup = null;
       // Switched off while it looked: nothing to open, nothing to report.
-      const stillOn = activeEntries().some(
-        (entry) => !providerIds || providerIds.includes(entry.def.id),
-      );
+      const stillOn = activeEntries().some(asked);
       if (state.enabled && stillOn)
         state.street.error =
           lastError?.message ||

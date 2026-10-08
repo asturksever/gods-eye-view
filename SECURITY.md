@@ -26,7 +26,7 @@ The golden rule: **secret-bearing API keys stay on the server side.** The dev/pr
 
 These are designed to be used directly in the browser (like a Mapbox public token). They are injected into the client bundle via Vite's `define`, so they **will** be visible in browser devtools. Scope and restrict them rather than trying to hide them:
 
-1. **Google Maps API key** — loads Photorealistic 3D Tiles directly and powers GEV place search and Street View (Maps JavaScript API). **Restrict it** (HTTP referrer + API restriction to the required Google APIs) in the Google Cloud Console. An unrestricted key in a public deployment can be abused and billed to you.
+1. **Google Maps API key** — loads Photorealistic 3D Tiles directly and powers GEV place search and Street View (Maps JavaScript API; add it to the key's API restrictions). **Restrict it** (HTTP referrer + API restriction to the required Google APIs) in the Google Cloud Console. An unrestricted key in a public deployment can be abused and billed to you.
 2. **Cesium ion token** (`CESIUM_ION_TOKEN`, optional — for ion-hosted Google Photorealistic 3D Tiles, Bing world imagery, and world terrain) — used as `Cesium.Ion.defaultAccessToken` client-side. Use a public **`assets:read`** token with **URL restrictions** for any hosted deployment. The Community plan has eligibility and usage limits; a public token is not a secret, but it can still consume the account's quota.
 3. **Mapillary client token** (`MAPILLARY_CLIENT_TOKEN`, optional, Street Level) — used by the MapillaryJS viewer and Graph API lookups in the browser, and by the server's coverage-tile proxy. Mapillary client tokens are meant for browser use.
 

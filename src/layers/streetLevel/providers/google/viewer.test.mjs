@@ -153,7 +153,128 @@ test('a key Google refuses fails the open at once, not after the timeout', async
     panorama.pano = id;
     queueMicrotask(() => loader.refuseKey());
   };
-  await assert.rejects(viewer.open('pano-a'), /enable the Maps JavaScript API/);
-  await assert.rejects(viewer.open('pano-b'), /enable the Maps JavaScript API/);
+  await assert.rejects(viewer.open('pano-a'), /Maps JavaScript API is enabled/);
+  await assert.rejects(viewer.open('pano-b'), /Maps JavaScript API is enabled/);
   assert.equal(loader.listenerCount(), 0, 'no auth listener is left behind');
+});
+
+test('a viewer unmounted while the library loads builds no panorama (none is billed)', async () => {
+  const fake = fakeStreetViewLibrary({ panoramas: PANORAMAS });
+  const loader = fakeMapsLoader(fake.library, { deferred: true });
+  const viewer = createGoogleViewer({ loader });
+  const host = fakeHost();
+  const mounting = viewer.mount(host);
+  viewer.unmount();
+  loader.release();
+  await assert.rejects(mounting, /unmounted/);
+  assert.equal(fake.built.length, 0);
+  assert.equal(host.children.length, 0);
+});
+
+test('a date that arrives after the photo was closed emits nothing', async () => {
+  const { fake, viewer, poses, host } = setup();
+  await viewer.mount(host);
+  await viewer.open('pano-a');
+  const [panorama] = fake.built;
+  let answer;
+  fake.library.StreetViewService.prototype.getPanorama = () =>
+    new Promise((resolve) => {
+      answer = resolve;
+    });
+  panorama.setPano('pano-b'); // Google's arrow; its date is still unknown
+  await settle();
+  assert.equal(poses.at(-1).imageId, 'pano-b', 'the step shows at once');
+  assert.equal(
+    poses.at(-1).capturedAt,
+    null,
+    'undated until the lookup answers',
+  );
+  viewer.close();
+  const count = poses.length;
+  answer({ data: { imageDate: '2019-08' } });
+  await settle();
+  assert.equal(poses.length, count);
+});
+
+test('an open never waits on the date lookup', async () => {
+  const { fake, viewer, poses, host } = setup();
+  await viewer.mount(host);
+  fake.library.StreetViewService.prototype.getPanorama = () =>
+    new Promise(() => {}); // the metadata never answers
+  await viewer.open('pano-a');
+  assert.equal(poses.at(-1).imageId, 'pano-a');
+});
+
+test('closing while a panorama loads settles the open and drops its listeners', async () => {
+  const { fake, loader, viewer, host } = setup();
+  await viewer.mount(host);
+  const [panorama] = fake.built;
+  const before = panorama.listenerCount();
+  panorama.setPano = (id) => {
+    panorama.pano = id; // still loading
+  };
+  const opening = viewer.open('pano-a');
+  await settle();
+  viewer.close();
+  await opening;
+  assert.equal(panorama.listenerCount(), before);
+  assert.equal(loader.listenerCount(), 0);
+});
+
+test('a second open whose status stays OK still resolves, on the new position', async () => {
+  const { fake, viewer, poses, host } = setup();
+  await viewer.mount(host);
+  await viewer.open('pano-a');
+  assert.equal(fake.built[0].getStatus(), 'OK');
+  await viewer.open('pano-b'); // OK → OK: no status_changed
+  assert.equal(poses.at(-1).imageId, 'pano-b');
+});
+
+test('Google answering with a newer id for the place shows that id', async () => {
+  const fake = fakeStreetViewLibrary({
+    panoramas: PANORAMAS,
+    substitutes: { 'old-id': 'pano-a' },
+  });
+  const viewer = createGoogleViewer({ loader: fakeMapsLoader(fake.library) });
+  const poses = [];
+  viewer.onPose((pose) => poses.push(pose));
+  await viewer.mount(fakeHost());
+  await viewer.open('old-id');
+  assert.equal(poses.at(-1).imageId, 'pano-a');
+});
+
+test('a panorama that never shows fails after the timeout and leaves no listener', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { OPEN_TIMEOUT_MS, NO_ANSWER_MESSAGE } = await import('./policy.js');
+  const { fake, loader, viewer, host } = setup();
+  await viewer.mount(host);
+  const [panorama] = fake.built;
+  const before = panorama.listenerCount();
+  panorama.setPano = (id) => {
+    panorama.pano = id; // Google never answers
+  };
+  const opening = viewer.open('pano-a');
+  await Promise.resolve();
+  await Promise.resolve();
+  t.mock.timers.tick(OPEN_TIMEOUT_MS);
+  await assert.rejects(opening, { message: NO_ANSWER_MESSAGE });
+  assert.equal(panorama.listenerCount(), before);
+  assert.equal(loader.listenerCount(), 0);
+});
+
+test('a date lookup that failed is asked again on the next view change', async () => {
+  const { fake, viewer, poses, host } = setup();
+  await viewer.mount(host);
+  const getPanorama = fake.library.StreetViewService.prototype.getPanorama;
+  let failures = 1;
+  fake.library.StreetViewService.prototype.getPanorama = function (request) {
+    if (failures-- > 0) return Promise.reject(new Error('offline'));
+    return getPanorama.call(this, request);
+  };
+  await viewer.open('pano-a');
+  assert.equal(poses.at(-1).capturedAt, null, 'undated while it failed');
+  fake.built[0].setPov({ heading: 10, pitch: 0 });
+  await settle();
+  await settle();
+  assert.equal(poses.at(-1).capturedAt, Date.UTC(2024, 4, 1));
 });

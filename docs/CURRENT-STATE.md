@@ -3088,16 +3088,25 @@ Google Street View (`providers/google/`) runs on the Maps JavaScript API with
 the browser `GOOGLE_MAPS_API_KEY`, which needs that API enabled; it is loaded
 on first use (`mapsLoader.js`, CSP `script-src https://maps.googleapis.com`).
 Its chip starts off (`defaultOn: false`, option default `g` off) because every
-panorama load is billed to the key. Google offers no coverage layer for
-other maps, so it draws none: with it on, a click on bare ground (nothing
-picked, so a Mapillary line under the pointer wins; no tool holding the
-pointer; camera below 3 km) opens its nearest
-Google-collected outdoor panorama within 50 m (`groundClick.js`). The viewer
-is Google's `StreetViewPanorama` in its own element in the viewer host,
-without Google's fullscreen, close and address controls (the address goes in
-the caption); its poses carry the month the panorama was taken. A key Google
-refuses (`gm_authFailure`) reads KEY REJECTED and fails a pending open at
-once. The gate's Street View steps skip with `no Google key` in CI.
+panorama load is billed to the key. Google's terms forbid Street View beside
+non-Google maps, so the provider declares `requiresMapStack: 'photoreal'`:
+off Google 3D its chip is dashed with the reason, lookups and opens skip it,
+and leaving Google 3D closes its panorama. Google offers no coverage layer
+for other maps, so it draws none: with it on, a click on the map itself
+(`scenePick.isSurfacePick`: nothing picked or Google 3D tile content, so a
+Mapillary line under the pointer wins; no tool holding the pointer; camera
+below 3 km) opens its nearest Google-collected outdoor panorama within 50 m
+and leaves the camera where it is (`groundClick.js`). Higher up the hint
+says to zoom in. The viewer is Google's `StreetViewPanorama` in its own
+element in the viewer host, without Google's fullscreen, close and address
+controls (the address goes in the caption); a pose goes out at once and
+again when the panorama's month, photographer and address arrive (one
+lookup per panorama per session, seeded by the nearest lookup). A key
+Google refuses (`gm_authFailure`: the API not enabled, a referrer it does
+not allow, billing off) reads KEY REJECTED and fails a pending open at
+once; a lookup or open Google never answers fails after 10 or 20 s. In CI
+(no Google key, no Google 3D) only the chip and share-link step runs; the
+click step skips as `no Google key`.
 
 Street Level has two browser gates. `npm run qa:street-level -- --url <server>`
 runs against real Mapillary and needs `MAPILLARY_CLIENT_TOKEN`. `npm run

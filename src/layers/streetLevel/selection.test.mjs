@@ -67,7 +67,8 @@ function harness({ selected = false } = {}) {
     parts: {
       router: { ownsPick: (id) => id === 'mly:seq:1', resolve: () => null },
       hasSelectedSequence: () => sequences.selected,
-      openAtGround: (position) => groundClicks.push(position),
+      openAtGround: (position, picked) =>
+        groundClicks.push({ position, picked }),
       clearSequences() {
         sequences.cleared++;
         sequences.selected = false;
@@ -264,15 +265,19 @@ test('Esc in a text field or rich-text editor keeps the selection (M61)', () => 
   }
 });
 
-test('a click on bare ground goes to the ground handler; a click on anything with an id does not', () => {
+test('a click on nothing of ours goes to the ground handler with the pick, which decides', () => {
   const h = harness();
   try {
     h.click(5);
-    assert.deepEqual(h.groundClicks, [{ x: 5, y: 10 }]);
-    // Another layer's aircraft, or an id nobody registered: not the ground.
     h.scene.under = 'flight:abc';
     h.click(6);
-    assert.equal(h.groundClicks.length, 1);
+    assert.deepEqual(
+      h.groundClicks.map(({ position, picked }) => [position.x, picked?.id]),
+      [
+        [5, undefined],
+        [6, 'flight:abc'],
+      ],
+    );
   } finally {
     h.restore();
   }

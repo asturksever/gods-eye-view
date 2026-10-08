@@ -21,9 +21,9 @@ export function createSelection({ state, parts }) {
       ? picking.resolvePickId(picked)
       : picked?.id;
     const route = parts.router.resolve(id);
-    // Nothing of ours, nor anyone else's: the ground itself.
+    // Not ours: the ground handler decides whether it is the map itself.
     if (!route?.instance) {
-      if (!id) parts.openAtGround?.(click.position);
+      parts.openAtGround?.(click.position, picked);
       return;
     }
     const entry = state.providers.get(route.providerId);

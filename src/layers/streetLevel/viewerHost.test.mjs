@@ -633,3 +633,29 @@ test('a pose can date its image by month and name its place', async () => {
     ['day', null],
   );
 });
+
+test('a prewarm that lands after another provider took the host is released, not built under it', async () => {
+  const { state, host, mapillary } = twoProviders();
+  let release;
+  mapillary.prewarm = () =>
+    new Promise((resolve) => {
+      release = resolve;
+    });
+  const warming = host.prewarm([state.providers.get('mapillary')]);
+  await host.open('google', 'g-1'); // the user opens Street View meanwhile
+  release();
+  await warming;
+  assert.equal(mapillary.calls.unmount, 1, 'released at once');
+  // Not kept warm: the next Mapillary open mounts afresh.
+  await host.open('mapillary', 'm-1');
+  assert.equal(state.street.providerId, 'mapillary');
+});
+
+test('FIT/FILL stays hidden for a second Street View panorama after a close', async () => {
+  const { state, host } = twoProviders();
+  await host.open('google', 'g-1');
+  assert.equal(state.street.renderModes, false);
+  host.close();
+  await host.open('google', 'g-2');
+  assert.equal(state.street.renderModes, false);
+});

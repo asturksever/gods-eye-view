@@ -19,9 +19,13 @@ export function createMapsLoader({
   /** The script load in flight or done; cleared when it fails, so a retry can. */
   let loading = null;
   let authFailed = false;
+  let authHandlerInstalled = false;
   const authListeners = new Set();
 
+  /** Once per loader: a retried load must not wrap its own handler again. */
   function installAuthHandler() {
+    if (authHandlerInstalled) return;
+    authHandlerInstalled = true;
     const previous = global.gm_authFailure;
     global.gm_authFailure = () => {
       authFailed = true;

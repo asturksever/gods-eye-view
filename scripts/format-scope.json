@@ -899,6 +899,7 @@
   "src/layers/streetLevel/providers/google/viewer.js",
   "src/layers/streetLevel/providers/google/mapsLoader.js",
   "src/layers/streetLevel/groundClick.test.mjs",
+  "src/app/layers/streetLevel.test.mjs",
   "src/layers/streetLevel/providers/google/provider.test.mjs",
   "src/layers/streetLevel/providers/google/viewer.test.mjs",
   "src/layers/streetLevel/providers/google/mapsLoader.test.mjs",

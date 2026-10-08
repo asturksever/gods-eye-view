@@ -1,4 +1,5 @@
 import { passesImageryFilter } from '../../filter.js';
+import { FOLLOW_MAP_STACK_ID } from '../../policy.js';
 import { createMapsLoader } from './mapsLoader.js';
 import { createGoogleViewer } from './viewer.js';
 import {
@@ -8,13 +9,14 @@ import {
   GOOGLE_LABEL,
   GOOGLE_NAME,
   GOOGLE_PROVIDER_ID,
+  FLAT_FILTER_HINT,
   GROUND_CLICK_HINT,
   KEY_REJECTED_MESSAGE,
   NEAREST_RADIUS_M,
   NEAREST_TIMEOUT_MS,
   NO_ANSWER_MESSAGE,
   PICK_PREFIX,
-  imageDateMs,
+  imageMonthEndMs,
 } from './policy.js';
 
 /**
@@ -69,6 +71,8 @@ export function createGoogleProvider({
     colors: COLORS,
     credit: Object.freeze({ html: GOOGLE_CREDIT_HTML }),
     groundClick: true,
+    // Google's terms forbid Street View beside non-Google maps.
+    requiresMapStack: FOLLOW_MAP_STACK_ID,
     // Every panorama is billed to the Maps key: the user lights the chip.
     defaultOn: false,
 
@@ -76,12 +80,21 @@ export function createGoogleProvider({
       let keyRequired = !getApiKey();
       let active = false;
       let service = null;
+      /** The one StreetViewService the lookups and the viewer share. */
+      async function getService() {
+        const lib = await loader.importLibrary('streetView');
+        service ||= new lib.StreetViewService();
+        return service;
+      }
       const viewer = createGoogleViewer({
         loader,
+        getService,
         render: context.services?.render,
       });
       const stopAuthWatch = loader.onAuthFailure(() => {
-        context.actions.reportError(KEY_REJECTED_MESSAGE);
+        // Switched off since: its chip says so; no error over another photo.
+        if (context.isActive?.())
+          context.actions.reportError(KEY_REJECTED_MESSAGE);
         context.notify();
       });
 
@@ -120,7 +133,11 @@ export function createGoogleProvider({
             kind: null,
             loading: false,
             hint:
-              active && !keyRequired && !keyRejected ? GROUND_CLICK_HINT : '',
+              !active || keyRequired || keyRejected
+                ? ''
+                : context.getFilter().pano === 'flat'
+                  ? FLAT_FILTER_HINT
+                  : GROUND_CLICK_HINT,
             error: keyRejected ? KEY_REJECTED_MESSAGE : null,
             keyRequired,
             keyRejected,
@@ -140,13 +157,14 @@ export function createGoogleProvider({
           if (filter.pano === 'flat') return null;
           const lookup = (async () => {
             const lib = await loader.importLibrary('streetView');
-            service ||= new lib.StreetViewService();
+            await getService();
             const { GOOGLE, OUTDOOR } = lib.StreetViewSource;
             try {
               const { data } = await service.getPanorama({
                 location: { lat, lng: lon },
                 radius: NEAREST_RADIUS_M,
-                sources: GOOGLE ? [GOOGLE, OUTDOOR] : [OUTDOOR],
+                // Both: Google's own imagery, outdoors (sources intersect).
+                sources: [GOOGLE, OUTDOOR],
                 preference: lib.StreetViewPreference.NEAREST,
               });
               return data;
@@ -163,10 +181,12 @@ export function createGoogleProvider({
           const panoId = data?.location?.pano;
           if (!panoId) return null;
           const passes = passesImageryFilter(
-            { isPano: true, capturedAt: imageDateMs(data.imageDate) ?? 0 },
+            { isPano: true, capturedAt: imageMonthEndMs(data.imageDate) ?? 0 },
             filter,
           );
-          return passes ? panoId : null;
+          if (!passes) return null;
+          viewer.remember(panoId, data);
+          return panoId;
         },
 
         viewer,

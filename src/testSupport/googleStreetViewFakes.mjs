@@ -1,7 +1,11 @@
 /**
  * Stand-ins for the Google Maps JavaScript API's Street View library and the
- * loader that hands it out. Panoramas are {id: {lat, lng, imageDate, copyright}};
- * `nearest(location, radius)` answers location lookups with an id or null.
+ * loader that hands it out. Panoramas are {id: {lat, lng, imageDate,
+ * copyright, description}}; `nearest(location, radius)` answers location
+ * lookups with an id or null; `substitutes` maps an id Google answers with a
+ * newer one. Like Google, `setPano` sets the id (pano_changed) at once, and
+ * the position and status follow when the data arrives; status_changed fires
+ * only when the status changes.
  */
 
 function latLng(lat, lng) {
@@ -11,6 +15,7 @@ function latLng(lat, lng) {
 export function fakeStreetViewLibrary({
   panoramas = {},
   nearest = () => null,
+  substitutes = {},
 } = {}) {
   const built = [];
   const lookups = [];
@@ -22,6 +27,7 @@ export function fakeStreetViewLibrary({
       this.visible = options?.visible ?? true;
       this.pano = null;
       this.status = null;
+      this.position = null;
       this.pov = { heading: 0, pitch: 0 };
       this.listeners = new Map();
       built.push(this);
@@ -43,18 +49,27 @@ export function fakeStreetViewLibrary({
       return count;
     }
 
-    /** Like Google: the panorama loads asynchronously, then reports. */
+    /** Like Google: the id is set at once; the data loads asynchronously. */
     setPano(id) {
       this.pano = id;
+      this.fire('pano_changed');
       queueMicrotask(() => {
         if (this.pano !== id) return;
-        const known = panoramas[id];
-        this.status = known ? 'OK' : 'ZERO_RESULTS';
-        if (known) {
+        const shownId = substitutes[id] ?? id;
+        const known = panoramas[shownId];
+        const status = known ? 'OK' : 'ZERO_RESULTS';
+        if (shownId !== id) {
+          this.pano = shownId;
           this.fire('pano_changed');
+        }
+        if (known) {
+          this.position = latLng(known.lat, known.lng);
           this.fire('position_changed');
         }
-        this.fire('status_changed');
+        if (status !== this.status) {
+          this.status = status;
+          this.fire('status_changed');
+        }
       });
     }
 
@@ -67,8 +82,7 @@ export function fakeStreetViewLibrary({
     }
 
     getPosition() {
-      const known = panoramas[this.pano];
-      return known ? latLng(known.lat, known.lng) : null;
+      return this.position;
     }
 
     getPov() {
@@ -121,17 +135,28 @@ export function fakeStreetViewLibrary({
   };
 }
 
-/** A loader over `library`; `refuseKey()` plays Google's gm_authFailure. */
-export function fakeMapsLoader(library) {
+/**
+ * A loader over `library`; `refuseKey()` plays Google's gm_authFailure. With
+ * `deferred`, imports wait for `release()`.
+ */
+export function fakeMapsLoader(library, { deferred = false } = {}) {
   let failed = false;
   const listeners = new Set();
   const imports = [];
+  let release = null;
+  const gate = deferred
+    ? new Promise((resolve) => {
+        release = resolve;
+      })
+    : null;
   return {
     imports,
     async importLibrary(name) {
       imports.push(name);
+      await gate;
       return library;
     },
+    release: () => release?.(),
     authFailed: () => failed,
     onAuthFailure(listener) {
       listeners.add(listener);

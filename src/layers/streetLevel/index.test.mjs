@@ -482,3 +482,96 @@ test('switching a provider on while the layer is off activates nothing (M01)', a
   assert.equal(provider.calls.activate, 1);
   assert.equal(viewer.credits.length, 1);
 });
+
+/** The real Google provider over the Street View fakes, beside a Mapillary stand-in. */
+async function withStreetView(t, { mapStack = 'photoreal', nearest } = {}) {
+  const { createGoogleProvider } = await import('./providers/google/index.js');
+  const { fakeHost, fakeMapsLoader, fakeStreetViewLibrary } =
+    await import('../../testSupport/googleStreetViewFakes.mjs');
+  const fake = fakeStreetViewLibrary({
+    panoramas: {
+      'pano-a': { lat: 38.5816, lng: -121.4944, imageDate: '2024-05' },
+    },
+    nearest: nearest ?? (() => 'pano-a'),
+  });
+  const mapillaryLookups = [];
+  const mapillary = fakeProvider({
+    nearestImage: async (point) => {
+      mapillaryLookups.push(point);
+      return null;
+    },
+  });
+  mapillary.requiresKeyId = 'mapillary';
+  const google = createGoogleProvider({
+    getApiKey: () => 'browser-key',
+    loader: fakeMapsLoader(fake.library),
+  });
+  const { layer, viewer } = await enabledLayer(t, [mapillary, google]);
+  const stack = fakeMapStack(mapStack);
+  layer.attachMapStackController(stack);
+  layer.attachViewerHost(fakeHost());
+  return { layer, viewer, stack, fake, mapillaryLookups };
+}
+
+test('Street View starts off, and the layer row names the key of the providers that are on', async (t) => {
+  const { layer } = await withStreetView(t);
+  const google = () =>
+    layer.getUIState().providers.find((p) => p.id === 'google');
+  assert.equal(google().on, false);
+  assert.equal(layer.requiresKeyId, 'mapillary');
+  layer.setProviderEnabled('google', true);
+  assert.equal(layer.requiresKeyId, null, 'two keys: each chip names its own');
+});
+
+test('Street View opens only on the Google 3D map, and leaving that map closes it', async (t) => {
+  const { layer, stack } = await withStreetView(t, {
+    mapStack: 'esri-imagery',
+  });
+  layer.setProviderEnabled('google', true);
+  await settle();
+  const google = () =>
+    layer.getUIState().providers.find((p) => p.id === 'google');
+  assert.match(google().unavailable, /needs the Google 3D map/);
+  assert.equal(google().hint, '', 'no "click a street" off Google 3D');
+  assert.equal(await layer.openImage('google', 'pano-a'), false);
+  assert.match(layer.getUIState().street.error, /needs the Google 3D map/);
+
+  stack.switchTo('photoreal');
+  assert.equal(google().unavailable, null);
+  assert.equal(await layer.openImage('google', 'pano-a'), true);
+  assert.equal(layer.getUIState().street.providerId, 'google');
+
+  stack.switchTo('bing');
+  await settle();
+  assert.equal(layer.getUIState().street.open, false, 'closed with the map');
+});
+
+test('a lookup for the click-to-open providers asks only them and reports "that point"', async (t) => {
+  const { layer, mapillaryLookups } = await withStreetView(t, {
+    nearest: () => null,
+  });
+  layer.setProviderEnabled('google', true);
+  await settle();
+  const opened = await layer.openNearest(
+    { lat: 38.58, lon: -121.49 },
+    { providerIds: ['google'], frame: false },
+  );
+  assert.equal(opened, false);
+  assert.deepEqual(mapillaryLookups, [], 'Mapillary was not asked');
+  assert.equal(
+    layer.getUIState().street.error,
+    'No street-level imagery within 50 m of that point',
+  );
+});
+
+test('an image opened from a ground click leaves the camera where it is', async (t) => {
+  const { layer, viewer } = await withStreetView(t);
+  layer.setProviderEnabled('google', true);
+  await settle();
+  await layer.openNearest(
+    { lat: 38.58, lon: -121.49 },
+    { providerIds: ['google'], frame: false },
+  );
+  assert.equal(layer.getUIState().street.imageId, 'pano-a');
+  assert.equal(viewer.flights.started, 0, 'no framing flight');
+});

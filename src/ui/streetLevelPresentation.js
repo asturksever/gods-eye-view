@@ -80,6 +80,8 @@ function presentProviders(state) {
     else if (keyRequired && provider.requiresKeyId)
       title = `${provider.name}: ${keySetupRequirement(provider.requiresKeyId)}`;
     else if (provider.error) title = `${provider.name}: ${provider.error}`;
+    // Usable only on another map stack (Street View off Google 3D).
+    else if (provider.unavailable) title = provider.unavailable;
     return {
       id: provider.id,
       label: provider.label,
@@ -89,11 +91,13 @@ function presentProviders(state) {
       disabled: false,
       state: keyRequired
         ? 'error'
-        : on && provider.loading
-          ? 'loading'
-          : on
-            ? 'active'
-            : 'idle',
+        : on && provider.unavailable
+          ? 'warn'
+          : on && provider.loading
+            ? 'loading'
+            : on
+              ? 'active'
+              : 'idle',
       busy: on && provider.loading === true,
     };
   });

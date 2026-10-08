@@ -12,6 +12,7 @@ import { PROVIDER_COLORS } from '../../policy.js';
 import { requiresKeyIdFor, validateProviders } from '../../registry.js';
 import { createMapillaryProvider } from '../mapillary/index.js';
 import {
+  fakeHost,
   fakeMapsLoader,
   fakeStreetViewLibrary,
 } from '../../../../testSupport/googleStreetViewFakes.mjs';
@@ -28,13 +29,27 @@ function setup({ key = 'browser-key', nearest = () => 'fresh' } = {}) {
   const def = createGoogleProvider({ getApiKey: () => apiKey, loader });
   const reported = [];
   let filter = { pano: 'all', sinceMs: null };
+  let active = false;
   const context = {
     services: {},
     getFilter: () => filter,
+    isActive: () => active,
     notify() {},
     actions: { reportError: (message) => reported.push(message) },
   };
-  const instance = def.create(context);
+  const created = def.create(context);
+  // The core switches it on and off; mirror that for isActive().
+  const instance = {
+    ...created,
+    activate() {
+      active = true;
+      created.activate();
+    },
+    deactivate() {
+      active = false;
+      created.deactivate();
+    },
+  };
   return {
     def,
     instance,
@@ -106,7 +121,7 @@ test('no panorama nearby, or one the imagery filter excludes, is null', async ()
   assert.equal(await instance.nearestImage({ lat: 0, lon: 0 }), 'old');
 });
 
-test('an aborted lookup gives up before and after asking Google', async () => {
+test('an aborted lookup gives up before asking Google', async () => {
   const { instance } = setup();
   const controller = new AbortController();
   controller.abort();
@@ -189,4 +204,53 @@ test('aborting a lookup in flight gives up at once', async () => {
   );
   controller.abort();
   await assert.rejects(lookup, { name: 'AbortError' });
+});
+
+test('a Google outage is an error, not "no imagery here"', async () => {
+  const { instance, fake } = setup();
+  fake.library.StreetViewService.prototype.getPanorama = () =>
+    Promise.reject(
+      Object.assign(new Error('UNKNOWN_ERROR'), {
+        code: 'UNKNOWN_ERROR',
+        endpoint: 'STREETVIEW_GET_PANORAMA',
+      }),
+    );
+  await assert.rejects(instance.nearestImage({ lat: 0, lon: 0 }), {
+    code: 'UNKNOWN_ERROR',
+  });
+});
+
+test('a refusal while the provider is off reports no error over another photo', () => {
+  const { instance, loader, reported } = setup();
+  loader.refuseKey();
+  assert.deepEqual(reported, []);
+  assert.equal(
+    instance.coverageStats().keyRejected,
+    true,
+    'its chip still says so',
+  );
+});
+
+test('a since window keeps a panorama taken any time in its cut-off month', async () => {
+  const { instance, setFilter } = setup({ nearest: () => 'fresh' }); // 2025-06
+  setFilter({ pano: 'all', sinceMs: Date.UTC(2025, 5, 20) });
+  assert.equal(await instance.nearestImage({ lat: 0, lon: 0 }), 'fresh');
+  setFilter({ pano: 'all', sinceMs: Date.UTC(2025, 6, 1) });
+  assert.equal(await instance.nearestImage({ lat: 0, lon: 0 }), null);
+});
+
+test('the panorama a lookup found is dated without a second lookup', async () => {
+  const { instance, fake } = setup();
+  await instance.nearestImage({ lat: 38.58, lon: -121.49 });
+  const host = fakeHost();
+  const poses = [];
+  instance.viewer.onPose((pose) => poses.push(pose));
+  await instance.viewer.mount(host);
+  await instance.viewer.open('fresh');
+  assert.equal(poses.at(-1).capturedAt, Date.UTC(2025, 5, 1));
+  assert.deepEqual(
+    fake.lookups.filter((request) => request.pano),
+    [],
+    'no getPanorama({pano}) for a panorama the lookup already described',
+  );
 });

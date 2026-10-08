@@ -56,6 +56,9 @@ export function createState({ services }) {
       ...freshStreet(),
     },
 
+    /** Whether the camera is low enough for a ground click to open an image. */
+    groundClickReady: false,
+
     /** 'terrain' on Google 3D at street zoom (overlays on the bare earth), else 'draped'. */
     surface: 'draped',
 

@@ -93,3 +93,21 @@ test("Google's refusal of the key reaches every listener and the page's own hand
   page.global.gm_authFailure();
   assert.deepEqual(heard, ['a']);
 });
+
+test('a retried load still reports a refusal once, and the page handler once', async () => {
+  const page = fakePage();
+  let before = 0;
+  page.global.gm_authFailure = () => before++;
+  const loader = createMapsLoader({ getApiKey: () => 'k', ...page });
+  const heard = [];
+  loader.onAuthFailure(() => heard.push('a'));
+  const failed = loader.importLibrary('streetView');
+  await settle();
+  page.scripts[0].onerror();
+  await assert.rejects(failed);
+  loader.importLibrary('streetView');
+  await settle();
+  page.global.gm_authFailure();
+  assert.deepEqual(heard, ['a']);
+  assert.equal(before, 1);
+});
