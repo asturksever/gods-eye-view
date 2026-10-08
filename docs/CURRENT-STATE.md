@@ -3108,7 +3108,8 @@ disabled until the camera is at street zoom. The viewer is Google's `StreetViewP
 element in the viewer host, without Google's fullscreen, close and address
 controls (the address goes in the caption); a pose goes out at once and
 again when the panorama's month, photographer and address arrive (one
-lookup per panorama per session, seeded by the nearest lookup). A key
+successful lookup per panorama per session, seeded by the nearest lookup;
+failed details lookups wait five seconds before a view event can retry). A key
 Google refuses (`gm_authFailure`: the API not enabled, a referrer it does
 not allow, billing off) reads KEY REJECTED and fails a pending open at
 once; a lookup or open Google never answers fails after 10 or 20 s. In CI

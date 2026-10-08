@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createGoogleViewer } from './viewer.js';
+import { DETAILS_RETRY_COOLDOWN_MS } from './policy.js';
 import {
   fakeHost,
   fakeMapsLoader,
@@ -265,19 +266,66 @@ test('a panorama that never shows fails after the timeout and leaves no listener
   assert.equal(loader.listenerCount(), 0);
 });
 
-test('a date lookup that failed is asked again on the next view change', async () => {
+test('failed details lookups cool down through repeated drags and retry after the pause', async (t) => {
+  let now = 1_000;
+  t.mock.method(Date, 'now', () => now);
   const { fake, viewer, poses, host } = setup();
   await viewer.mount(host);
   const getPanorama = fake.library.StreetViewService.prototype.getPanorama;
-  let failures = 1;
+  let failures = 2;
+  let calls = 0;
   fake.library.StreetViewService.prototype.getPanorama = function (request) {
+    calls++;
     if (failures-- > 0) return Promise.reject(new Error('offline'));
     return getPanorama.call(this, request);
   };
   await viewer.open('pano-a');
   assert.equal(poses.at(-1).capturedAt, null, 'undated while it failed');
+  assert.equal(calls, 1);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    for (let heading = 0; heading < 20; heading++) {
+      fake.built[0].setPov({ heading, pitch: 0 });
+      await settle();
+    }
+    assert.equal(calls, attempt + 1, 'drags do not retry during the pause');
+    assert.equal(poses.at(-1).bearing, 19, 'pose updates still follow drags');
+    now += DETAILS_RETRY_COOLDOWN_MS - 1;
+    fake.built[0].setPov({ heading: 20, pitch: 0 });
+    await settle();
+    assert.equal(calls, attempt + 1, 'still paused just before the deadline');
+    now++;
+    fake.built[0].setPov({ heading: 21, pitch: 0 });
+    await settle();
+    assert.equal(calls, attempt + 2, 'one retry at the deadline');
+  }
+  assert.equal(poses.at(-1).capturedAt, Date.UTC(2024, 4, 1));
+  now += DETAILS_RETRY_COOLDOWN_MS;
   fake.built[0].setPov({ heading: 10, pitch: 0 });
   await settle();
+  assert.equal(calls, 3, 'successful details stay cached');
+});
+
+test('a failed panorama does not delay details for another panorama', async (t) => {
+  t.mock.method(Date, 'now', () => 1_000);
+  const { fake, viewer, poses, host } = setup();
+  await viewer.mount(host);
+  const getPanorama = fake.library.StreetViewService.prototype.getPanorama;
+  const requests = [];
+  fake.library.StreetViewService.prototype.getPanorama = function (request) {
+    requests.push(request.pano);
+    if (request.pano === 'pano-a') return Promise.reject(new Error('offline'));
+    return getPanorama.call(this, request);
+  };
+  await viewer.open('pano-a');
+  fake.built[0].setPano('pano-b');
   await settle();
-  assert.equal(poses.at(-1).capturedAt, Date.UTC(2024, 4, 1));
+  assert.deepEqual(requests, ['pano-a', 'pano-b']);
+  assert.equal(poses.at(-1).creator, 'Ada');
+  fake.built[0].setPano('pano-a');
+  await settle();
+  assert.deepEqual(
+    requests,
+    ['pano-a', 'pano-b'],
+    'returning respects the pause',
+  );
 });

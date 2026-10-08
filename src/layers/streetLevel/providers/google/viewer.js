@@ -1,4 +1,5 @@
 import {
+  DETAILS_RETRY_COOLDOWN_MS,
   GOOGLE_PROVIDER_ID,
   KEY_REJECTED_MESSAGE,
   NO_ANSWER_MESSAGE,
@@ -50,6 +51,8 @@ export function createGoogleViewer({ loader, getService, render } = {}) {
   const described = new Map();
   /** Panorama ids whose lookup is in flight. */
   const lookingUp = new Set();
+  /** Panorama id → earliest retry time after a failed details lookup. */
+  const retryAfter = new Map();
   const listeners = new Set();
 
   function requestRender() {
@@ -81,11 +84,12 @@ export function createGoogleViewer({ loader, getService, render } = {}) {
 
   /**
    * Look up a panorama's date, photographer and address once; the pose
-   * already out is sent again with them. A failed lookup is asked again on
-   * the next event.
+   * already out is sent again with them. After a failure, view events can
+   * retry once the cooldown expires.
    */
   async function describe(panoId) {
     if (described.has(panoId) || lookingUp.has(panoId)) return;
+    if (Date.now() < (retryAfter.get(panoId) ?? 0)) return;
     lookingUp.add(panoId);
     try {
       service ||= getService
@@ -93,7 +97,9 @@ export function createGoogleViewer({ loader, getService, render } = {}) {
         : new (await ensureLibrary()).StreetViewService();
       const { data } = await service.getPanorama({ pano: panoId });
       described.set(panoId, metaFrom(data));
+      retryAfter.delete(panoId);
     } catch {
+      retryAfter.set(panoId, Date.now() + DETAILS_RETRY_COOLDOWN_MS);
       return;
     } finally {
       lookingUp.delete(panoId);

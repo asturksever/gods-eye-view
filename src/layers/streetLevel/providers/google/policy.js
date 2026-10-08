@@ -31,6 +31,8 @@ export const KEY_REJECTED_MESSAGE =
 export const NEAREST_TIMEOUT_MS = 10_000;
 /** A panorama that has not shown by then has failed to open. */
 export const OPEN_TIMEOUT_MS = 20_000;
+/** Minimum pause after a failed panorama-details lookup before a view can retry. */
+export const DETAILS_RETRY_COOLDOWN_MS = 5_000;
 
 /** Google answered nothing: the network, or a key Google ignores. */
 export const NO_ANSWER_MESSAGE =
