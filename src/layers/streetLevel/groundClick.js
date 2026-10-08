@@ -15,15 +15,24 @@ export function groundClickHeightOk(viewer, groundAt) {
  * street zoom opens the nearest image of the active, available providers
  * that have no coverage to click (`groundClick`, Google Street View). The
  * camera stays put: the user chose the spot.
- * @param {{state: object, openNearest: Function, isAvailable: (entry: object) => boolean}} options
+ * The height is measured at the click, not read from the cached flag.
+ * @param {{state: object, openNearest: Function, isAvailable: (entry: object) => boolean, groundAt?: Function}} options
  * @returns {(screenPosition: {x: number, y: number}, picked?: object) => Promise<boolean>|false}
  */
-export function createGroundClick({ state, openNearest, isAvailable }) {
+export function createGroundClick({
+  state,
+  openNearest,
+  isAvailable,
+  groundAt = null,
+}) {
   return function openAtGround(screenPosition, picked) {
     const scenePick = state.services.scenePick;
     if (!state.enabled || !state.viewer || !scenePick?.pickGroundPosition)
       return false;
-    if (!scenePick.isSurfacePick(picked) || !state.groundClickReady)
+    if (
+      !scenePick.isSurfacePick(picked) ||
+      !groundClickHeightOk(state.viewer, groundAt)
+    )
       return false;
     const providerIds = [...state.providers.values()]
       .filter(

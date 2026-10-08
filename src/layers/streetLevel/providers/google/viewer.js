@@ -254,15 +254,6 @@ export function createGoogleViewer({ loader, getService, render } = {}) {
       }
     },
 
-    /** Load the library ahead of the first panorama; a panorama is billed, so none is built. */
-    async prewarm() {
-      try {
-        await ensureLibrary();
-      } catch {
-        /* the real open reports errors */
-      }
-    },
-
     onPose(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

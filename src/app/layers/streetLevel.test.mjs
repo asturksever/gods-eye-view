@@ -16,12 +16,9 @@ test('each provider starts as its share-link option does, so a fresh page and a 
     },
   });
   const options = createDefaultLayerState().options['street-level'];
-  const providers = layer.getUIState().providers;
-  assert.deepEqual(
-    providers.map((p) => p.id),
-    layer.providerIds,
-  );
-  for (const provider of providers)
-    assert.equal(provider.on, options[provider.id], provider.id);
+  // Every registered provider, listed on this map or not.
+  const started = layer.getParams();
+  for (const id of layer.providerIds)
+    assert.equal(started[id], options[id], id);
   assert.equal(options.google, false, 'Street View is billed: off');
 });

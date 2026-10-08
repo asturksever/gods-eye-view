@@ -434,3 +434,52 @@ test('the meta line keeps the sequence count and adds the other providers’ hin
     `${(2514).toLocaleString()} sequences in view · click a line for its photos · click a street to open Street View`,
   );
 });
+
+test('OPEN STREET VIEW shows while Street View is on, and waits for street zoom', () => {
+  const streetView = provider({
+    id: 'google',
+    name: 'Google Street View',
+    label: 'STREET VIEW',
+    groundClick: true,
+    requiresKeyId: 'google-maps',
+  });
+  const view = (overrides) =>
+    presentStreetLevelPanel(
+      snapshot({
+        enabled: true,
+        providers: [provider(), streetView],
+        ...overrides,
+      }),
+    ).nearest;
+  const ready = view({ groundClickReady: true });
+  assert.deepEqual(ready, {
+    visible: true,
+    label: 'OPEN STREET VIEW',
+    title: 'Open Google Street View at the centre of the view',
+    disabled: false,
+    providerIds: ['google'],
+  });
+  const high = view({ groundClickReady: false });
+  assert.equal(high.disabled, true);
+  assert.equal(
+    high.title,
+    'Zoom in to a street to open Google Street View here',
+  );
+  // Hidden with Street View off, without its key, or with the layer off
+  // (off Google 3D the provider is not listed at all).
+  assert.equal(
+    view({ providers: [provider(), { ...streetView, on: false }] }).visible,
+    false,
+  );
+  assert.equal(
+    view({ providers: [provider(), { ...streetView, keyRequired: true }] })
+      .visible,
+    false,
+  );
+  assert.equal(view({ providers: [provider()] }).visible, false);
+  assert.equal(
+    presentStreetLevelPanel(snapshot({ providers: [provider(), streetView] }))
+      .nearest.visible,
+    false,
+  );
+});

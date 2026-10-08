@@ -66,7 +66,8 @@
 - Street Level: Google Street View is the second provider. On the Google 3D
   map (Google's terms keep it off other maps), light its chip (off by
   default: every panorama is billed to the Google Maps key, which needs the
-  Maps JavaScript API) and click a street to open Google's own panorama in
+  Maps JavaScript API) and click a street, or press OPEN STREET VIEW, to
+  open Google's own panorama in
   the panel, with its arrows, the address and month in the caption, a link
   to Google Maps and FOLLOW. Share links carry it as `g`.
 

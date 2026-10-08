@@ -80,8 +80,6 @@ function presentProviders(state) {
     else if (keyRequired && provider.requiresKeyId)
       title = `${provider.name}: ${keySetupRequirement(provider.requiresKeyId)}`;
     else if (provider.error) title = `${provider.name}: ${provider.error}`;
-    // Usable only on another map stack (Street View off Google 3D).
-    else if (provider.unavailable) title = provider.unavailable;
     return {
       id: provider.id,
       label: provider.label,
@@ -91,13 +89,11 @@ function presentProviders(state) {
       disabled: false,
       state: keyRequired
         ? 'error'
-        : on && provider.unavailable
-          ? 'warn'
-          : on && provider.loading
-            ? 'loading'
-            : on
-              ? 'active'
-              : 'idle',
+        : on && provider.loading
+          ? 'loading'
+          : on
+            ? 'active'
+            : 'idle',
       busy: on && provider.loading === true,
     };
   });
@@ -131,6 +127,36 @@ function presentViewer(state) {
           ? 'Camera follows view: move the globe camera wherever the street-level view looks'
           : 'Camera follow needs the Google 3D map: choose Google 3D under MAP SOURCE',
     },
+  };
+}
+
+/**
+ * A button for the providers with no coverage to click (Street View): opens
+ * their nearest image at the view centre, so they need no pointer.
+ */
+function presentNearest(state) {
+  const targets = (state.providers || []).filter(
+    (provider) =>
+      provider.on && provider.groundClick && provider.keyRequired !== true,
+  );
+  if (state.enabled !== true || !targets.length)
+    return {
+      visible: false,
+      label: '',
+      title: '',
+      disabled: true,
+      providerIds: [],
+    };
+  const names = targets.map((provider) => provider.name).join(' or ');
+  const ready = state.groundClickReady === true;
+  return {
+    visible: true,
+    label: `OPEN ${targets.map((provider) => provider.label).join(' / ')}`,
+    title: ready
+      ? `Open ${names} at the centre of the view`
+      : `Zoom in to a street to open ${names} here`,
+    disabled: !ready || state.street.loading === true,
+    providerIds: targets.map((provider) => provider.id),
   };
 }
 
@@ -173,6 +199,7 @@ export function presentStreetLevelPanel(state, { now = Date.now() } = {}) {
     legend: state.legend || [],
     viewer: presentViewer(state),
     meta: presentMeta(state),
+    nearest: presentNearest(state),
     wantsOpen: state.street.open === true,
   };
 }

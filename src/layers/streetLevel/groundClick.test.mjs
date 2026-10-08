@@ -16,7 +16,7 @@ function harness({
     { id: 'mapillary', groundClick: false },
     { id: 'google', groundClick: true },
   ],
-  ready = true,
+  height = 400,
   enabled = true,
   picked = GROUND,
   ellipsoid = undefined,
@@ -24,7 +24,6 @@ function harness({
   const opened = [];
   const state = {
     enabled,
-    groundClickReady: ready,
     services: { scenePick },
     providers: new Map(
       providers.map(
@@ -42,7 +41,14 @@ function harness({
     ),
     viewer: {
       scene: { pickPositionSupported: true, pickPosition: () => picked },
-      camera: { pickEllipsoid: () => ellipsoid },
+      camera: {
+        pickEllipsoid: () => ellipsoid,
+        positionCartographic: Cesium.Cartographic.fromDegrees(
+          -121.4944,
+          38.5816,
+          height,
+        ),
+      },
     },
   };
   const openAtGround = createGroundClick({
@@ -87,7 +93,7 @@ test('nothing opens over another layer’s object, the sky, from high up, off it
     { picked: { id: { id: 'flight:1' } }, label: 'an entity' },
     { picked: { id: 'cctv:7', primitive: TILESET }, label: 'an id on a tile' },
     { options: { picked: null, ellipsoid: undefined }, label: 'the sky' },
-    { options: { ready: false }, label: 'high up' },
+    { options: { height: 5000 }, label: 'high up' },
     {
       options: {
         providers: [{ id: 'google', groundClick: true, available: false }],

@@ -45,6 +45,7 @@ export function summarizeCoverage(providers) {
  */
 export function composeUIState({
   enabled,
+  groundClickReady = false,
   filter,
   providers,
   street,
@@ -63,6 +64,8 @@ export function composeUIState({
     legend.push({ key: 'selected', label: 'Selected', color: COLORS.selected });
   return {
     enabled,
+    /** The camera is at street zoom: a ground-click provider can open here. */
+    groundClickReady: groundClickReady === true,
     keyRequired,
     keyRejected,
     filter: { ...filter },

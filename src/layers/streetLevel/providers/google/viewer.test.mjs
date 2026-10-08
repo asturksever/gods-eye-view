@@ -130,11 +130,8 @@ test('an open overtaken by a newer one only shows the newer panorama', async () 
   assert.ok(!poses.some((pose) => pose.imageId === 'pano-a'));
 });
 
-test('unmounting removes the element and every listener; prewarm builds no panorama', async () => {
-  const { fake, loader, viewer, host } = setup();
-  await viewer.prewarm(host);
-  assert.deepEqual(loader.imports, ['streetView']);
-  assert.equal(fake.built.length, 0, 'a panorama is billed: none on prewarm');
+test('unmounting removes the element and every listener', async () => {
+  const { fake, viewer, host } = setup();
   await viewer.mount(host);
   const [panorama] = fake.built;
   assert.ok(panorama.listenerCount() > 0);
@@ -142,6 +139,12 @@ test('unmounting removes the element and every listener; prewarm builds no panor
   assert.equal(host.children.length, 0);
   assert.equal(panorama.listenerCount(), 0);
   await assert.rejects(viewer.open('pano-a'), /not mounted/);
+});
+
+test('there is no prewarm: Google\u2019s script loads on first use only, never on another map', () => {
+  const { viewer, loader } = setup();
+  assert.equal(viewer.prewarm, undefined);
+  assert.deepEqual(loader.imports, []);
 });
 
 test('a key Google refuses fails the open at once, not after the timeout', async () => {
