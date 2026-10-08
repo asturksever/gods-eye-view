@@ -9,7 +9,11 @@ import { createViewerHost } from './viewerHost.js';
 import { requiresKeyIdFor, validateProviders } from './registry.js';
 import { normalizeFilter, resolveFilter, sameFilter } from './filter.js';
 import { decodeParams, encodeParams } from './params.js';
-import { composeUIState, summarizeCoverage } from './uiState.js';
+import {
+  composeUIState,
+  keyAlternatives,
+  summarizeCoverage,
+} from './uiState.js';
 import { cameraHeightAboveGround, viewCentre, whenIdle } from './view.js';
 import { createGroundClick, groundClickHeightOk } from './groundClick.js';
 import { createGroundCaster, nextSurfaceMode } from './groundCast.js';
@@ -501,7 +505,8 @@ export function createStreetLevelLayer({
 
     getStats() {
       // The lifecycle polls this every second: summarise, don't snapshot.
-      const coverage = summarizeCoverage(providerSnapshots());
+      const snapshots = providerSnapshots();
+      const coverage = summarizeCoverage(snapshots);
       let loadingLabel = '';
       const keyLabel = coverage.keyRejected ? 'KEY REJECTED' : 'KEY REQUIRED';
       if (coverage.keyRequired) loadingLabel = keyLabel;
@@ -512,6 +517,8 @@ export function createStreetLevelLayer({
         count: coverage.count,
         loading: coverage.loading,
         keyRequired: coverage.keyRequired,
+        /** Switched-off sources that would draw with a key already set. */
+        keyAlternatives: keyAlternatives(snapshots),
         error: coverage.keyRequired
           ? coverage.keyRejected
             ? coverage.error || keyLabel

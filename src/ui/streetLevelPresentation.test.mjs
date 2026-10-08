@@ -483,3 +483,42 @@ test('OPEN STREET VIEW shows while Street View is on, and waits for street zoom'
     false,
   );
 });
+
+test('KEY REQUIRED points at Street View when it would draw with the Google key', () => {
+  const view = presentStreetLevelPanel(
+    snapshot({
+      enabled: true,
+      keyRequired: true,
+      providers: [
+        provider({ keyRequired: true, configured: false }),
+        provider({
+          id: 'google',
+          name: 'Google Street View',
+          label: 'STREET VIEW',
+          on: false,
+          configured: true,
+          requiresKeyId: 'google-maps',
+        }),
+      ],
+      keyAlternatives: [
+        { id: 'google', label: 'STREET VIEW', requiresKeyId: 'google-maps' },
+      ],
+    }),
+  );
+  const guidance =
+    'Needs MAPILLARY_CLIENT_TOKEN — add it in Provider Settings, or light STREET VIEW to use your Google Maps key';
+  assert.equal(view.status.text, 'KEY REQUIRED');
+  assert.equal(view.status.title, guidance);
+  assert.equal(view.meta, guidance);
+  // Off Google 3D Street View is not listed: plain KEY REQUIRED.
+  const plain = presentStreetLevelPanel(
+    snapshot({
+      enabled: true,
+      keyRequired: true,
+      providers: [provider({ keyRequired: true, configured: false })],
+      keyAlternatives: [],
+    }),
+  );
+  assert.equal(plain.status.text, 'KEY REQUIRED');
+  assert.notEqual(plain.meta, guidance);
+});

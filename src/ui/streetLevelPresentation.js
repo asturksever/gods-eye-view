@@ -1,4 +1,7 @@
-import { keySetupRequirement } from '../keySetupCore.mjs';
+import {
+  keySetupRequirement,
+  keySetupWithAlternatives,
+} from '../keySetupCore.mjs';
 
 // Street Level UI state to panel strings and flags. Pure, so it is testable.
 
@@ -54,13 +57,33 @@ function formatDate(ms, precision = 'day') {
   }
 }
 
+/**
+ * What the key-gated layer needs: each switched-on provider's key, and the
+ * switched-off ones that would draw with a key already set.
+ */
+function keyGuidance(state) {
+  const needs = (state.providers || [])
+    .filter((p) => p.on && p.keyRequired && p.requiresKeyId)
+    .map((p) => keySetupRequirement(p.requiresKeyId))
+    .filter(Boolean);
+  return keySetupWithAlternatives(
+    [...new Set(needs)].join('; '),
+    state.keyAlternatives || [],
+  );
+}
+
 function presentStatus(state) {
   const pressed = state.enabled === true;
   const title = pressed ? 'Turn Street Level off' : 'Turn Street Level on';
   if (state.keyRejected)
     return { text: 'KEY REJECTED', tone: 'warn', pressed, title };
   if (state.keyRequired)
-    return { text: 'KEY REQUIRED', tone: 'warn', pressed, title };
+    return {
+      text: 'KEY REQUIRED',
+      tone: 'warn',
+      pressed,
+      title: keyGuidance(state) || title,
+    };
   if (state.coverage.loading)
     return { text: 'LOADING', tone: 'busy', pressed, title };
   return pressed
@@ -162,6 +185,9 @@ function presentNearest(state) {
 
 function presentMeta(state) {
   if (!state.enabled) return 'Switch a provider on to draw its coverage.';
+  // Key-gated with another source ready: say how to use it.
+  if (state.keyRequired && state.keyAlternatives?.length)
+    return keyGuidance(state);
   if (state.sequence.selectedId)
     return state.sequence.loading
       ? 'Loading this sequence…'

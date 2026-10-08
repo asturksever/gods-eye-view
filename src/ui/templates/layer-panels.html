@@ -113,7 +113,6 @@
             <div class="sl-providers" role="group" aria-label="Imagery providers">
               <span class="cctv-summary-label">PROVIDERS</span>
               <div id="sl-provider-chips" class="sl-chips"></div>
-              <button id="sl-nearest-btn" class="scene-btn sl-nearest-btn" type="button" hidden>OPEN STREET VIEW</button>
             </div>
             <div id="sl-error" class="sl-error" role="alert" hidden><span aria-hidden="true">⚠</span> <span id="sl-error-text"></span></div>
             <!-- A missing key gates the filters only: the chips above stay
@@ -134,7 +133,11 @@
               </div>
             </fieldset>
             <ul id="sl-legend" class="sl-legend" aria-label="Coverage colours"></ul>
-            <div id="sl-coverage-meta" class="sl-meta"></div>
+            <!-- The hint says how to open imagery; the button does it without a pointer. -->
+            <div class="sl-meta-row">
+              <div id="sl-coverage-meta" class="sl-meta"></div>
+              <button id="sl-nearest-btn" class="scene-btn sl-nearest-btn" type="button" hidden>OPEN STREET VIEW</button>
+            </div>
           </div>
         </div>
       </div>

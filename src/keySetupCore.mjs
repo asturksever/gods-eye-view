@@ -353,6 +353,30 @@ export function keySetupRequirement(id) {
 }
 
 /**
+ * Key guidance that also names the switched-off sources the layer could use
+ * with a key that is already set: `[{label, requiresKeyId}]`, e.g. Street
+ * View beside a Mapillary layer with no token.
+ * @param {string} requirement What `keySetupRequirement` said ('' allowed).
+ * @param {Array<{label: string, requiresKeyId?: string|null}>} [alternatives]
+ */
+export function keySetupWithAlternatives(requirement, alternatives = []) {
+  const options = alternatives.map(({ label, requiresKeyId }) => {
+    const entry = KEY_SETUP_KEYS.find(
+      (candidate) => candidate.id === requiresKeyId,
+    );
+    const name = entry
+      ? entry.title
+          .toLowerCase()
+          .replace(/\b\w/g, (letter) => letter.toUpperCase())
+      : null;
+    return name ? `light ${label} to use your ${name} key` : `light ${label}`;
+  });
+  if (!options.length) return requirement;
+  const offer = `or ${options.join(', or ')}`;
+  return requirement ? `${requirement}, ${offer}` : offer.replace(/^or l/, 'L');
+}
+
+/**
  * Decide whether a live provider value belongs to a source outside the store
  * Provider Settings is allowed to edit. `wasExternalAtBoot` carries source
  * provenance without carrying the credential itself; it closes the otherwise

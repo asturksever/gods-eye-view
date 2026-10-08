@@ -3063,7 +3063,11 @@ The header pill is the layer switch. With one provider its chip is a layer
 switch too; with several, darkening the last lit chip turns the layer off. A
 chip without a usable key explains the key instead of lighting (or of
 switching the layer off as the last lit chip); it still darkens beside a lit
-one, and the other chips keep switching. The
+one, and the other chips keep switching. When the switched-on providers lack
+their keys but a switched-off one would draw with a key already set (no
+Mapillary token, Street View on Google 3D with a Google key), the layer
+reports it (`keyAlternatives`), and the panel's KEY REQUIRED, its coverage
+line and the layer row's tooltip say to light it. The
 viewer sits under the header with EXPAND, FIT/FILL, FOLLOW and close above the
 image. FOLLOW needs the Google 3D map stack (`attachMapStackController`) and
 stops when the stack changes. Camera moves go through the application's
@@ -3102,7 +3106,7 @@ for other maps, so it draws none: with it on, a click on the map itself
 Mapillary line under the pointer wins; no tool holding the pointer; camera
 below 3 km) opens its nearest Google-collected outdoor panorama within 50 m
 and leaves the camera where it is (`groundClick.js`). Higher up the hint
-says to zoom in. **OPEN STREET VIEW** in the PROVIDERS row (`#sl-nearest-btn`)
+says to zoom in. **OPEN STREET VIEW** beside that hint (`#sl-nearest-btn`)
 does the same at the view centre, so Street View needs no pointer; it is
 disabled until the camera is at street zoom. The viewer is Google's `StreetViewPanorama` in its own
 element in the viewer host, without Google's fullscreen, close and address

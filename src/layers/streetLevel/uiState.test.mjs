@@ -168,3 +168,27 @@ test('every switched-on provider’s hint is kept, once each', async () => {
     'zoom in for sequences · click a street to open Street View',
   );
 });
+
+test('a key-gated layer offers the switched-off sources that would draw with a key already set', async () => {
+  const { keyAlternatives } = await import('./uiState.js');
+  const mapillary = providerSnapshot({ keyRequired: true, configured: false });
+  const streetView = providerSnapshot({
+    id: 'google',
+    label: 'STREET VIEW',
+    on: false,
+    configured: true,
+    requiresKeyId: 'google-maps',
+  });
+  assert.deepEqual(keyAlternatives([mapillary, streetView]), [
+    { id: 'google', label: 'STREET VIEW', requiresKeyId: 'google-maps' },
+  ]);
+  // Nothing to offer: Mapillary has its key, or Street View has none either.
+  assert.deepEqual(keyAlternatives([providerSnapshot(), streetView]), []);
+  assert.deepEqual(
+    keyAlternatives([
+      mapillary,
+      { ...streetView, configured: false, keyRequired: true },
+    ]),
+    [],
+  );
+});

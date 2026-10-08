@@ -39,6 +39,20 @@ export function summarizeCoverage(providers) {
 }
 
 /**
+ * Switched-off providers that would draw with a key already set, offered
+ * while the switched-on ones lack theirs (Street View beside a Mapillary
+ * layer with no token).
+ * @param {Array<ProviderSnapshot>} providers
+ * @returns {Array<{id: string, label: string, requiresKeyId: string|null}>}
+ */
+export function keyAlternatives(providers) {
+  if (!summarizeCoverage(providers).keyRequired) return [];
+  return providers
+    .filter((p) => !p.on && p.configured === true && p.keyRequired !== true)
+    .map(({ id, label, requiresKeyId }) => ({ id, label, requiresKeyId }));
+}
+
+/**
  * The panel snapshot from core state and provider snapshots. The legend has
  * one swatch per active source, then the shared selection colour.
  * @param {{enabled: boolean, filter: object, providers: Array<ProviderSnapshot>, street: object, sequence: object}} input
@@ -67,6 +81,7 @@ export function composeUIState({
     /** The camera is at street zoom: a ground-click provider can open here. */
     groundClickReady: groundClickReady === true,
     keyRequired,
+    keyAlternatives: keyAlternatives(providers),
     keyRejected,
     filter: { ...filter },
     providers: providers.map((p) => ({ ...p })),

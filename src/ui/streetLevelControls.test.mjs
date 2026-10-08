@@ -305,7 +305,6 @@ function panelDom() {
   const settings = add(main, 'div', { classes: ['sl-settings'] });
   for (const id of ['sl-provider-chips', 'sl-error', 'sl-error-text'])
     add(settings, 'div', { id });
-  add(settings, 'button', { id: 'sl-nearest-btn' });
   // A missing key gates the filters only; the chips stay outside the gate.
   const controls = add(settings, 'fieldset', { id: 'sl-controls' });
   for (const pano of ['all', 'pano', 'flat'])
@@ -313,7 +312,9 @@ function panelDom() {
   add(controls, 'input', { id: 'sl-since' });
   add(controls, 'output', { id: 'sl-since-label' });
   add(settings, 'ul', { id: 'sl-legend' });
-  add(settings, 'div', { id: 'sl-coverage-meta' });
+  const metaRow = add(settings, 'div', { classes: ['sl-meta-row'] });
+  add(metaRow, 'div', { id: 'sl-coverage-meta' });
+  add(metaRow, 'button', { id: 'sl-nearest-btn' });
   // The globe's canvas is focusable too (tabindex=0).
   const globe = add(
     add(document.body, 'div', { id: 'cesiumContainer' }),

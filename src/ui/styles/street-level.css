@@ -183,8 +183,20 @@ button.sl-status:focus-visible {
   border-color: rgba(255, 179, 0, 0.55);
 }
 
+/* The coverage hint and OPEN STREET VIEW share a line; the hint wraps. */
+.sl-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sl-meta-row .sl-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .sl-nearest-btn {
-  margin-left: auto;
+  flex: 0 0 auto;
 }
 
 .sl-nearest-btn[hidden] {

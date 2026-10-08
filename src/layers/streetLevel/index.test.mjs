@@ -484,7 +484,10 @@ test('switching a provider on while the layer is off activates nothing (M01)', a
 });
 
 /** The real Google provider over the Street View fakes, beside a Mapillary stand-in. */
-async function withStreetView(t, { mapStack = 'photoreal', nearest } = {}) {
+async function withStreetView(
+  t,
+  { mapStack = 'photoreal', nearest, mapillaryKeyless = false } = {},
+) {
   const { createGoogleProvider } = await import('./providers/google/index.js');
   const { fakeHost, fakeMapsLoader, fakeStreetViewLibrary } =
     await import('../../testSupport/googleStreetViewFakes.mjs');
@@ -502,6 +505,14 @@ async function withStreetView(t, { mapStack = 'photoreal', nearest } = {}) {
     },
   });
   mapillary.requiresKeyId = 'mapillary';
+  if (mapillaryKeyless) {
+    mapillary.stats.keyRequired = true;
+    const create = mapillary.create;
+    mapillary.create = (context) => ({
+      ...create(context),
+      status: async () => ({ configured: false }),
+    });
+  }
   const loader = fakeMapsLoader(fake.library);
   const google = createGoogleProvider({
     getApiKey: () => 'browser-key',
@@ -636,4 +647,21 @@ test('the button’s “centre of the view” is the ground under the middle of 
   assert.equal(lookups.length, 1);
   assert.ok(Math.abs(lookups[0].lat - 38.5799) < 1e-9);
   assert.ok(Math.abs(lookups[0].lon - -121.4937) < 1e-9);
+});
+
+test('with no Mapillary token, the layer points at Street View, on Google 3D only', async (t) => {
+  const { layer, stack } = await withStreetView(t, { mapillaryKeyless: true });
+  await settle();
+  const stats = layer.getStats();
+  assert.equal(stats.keyRequired, true);
+  assert.deepEqual(stats.keyAlternatives, [
+    { id: 'google', label: 'STREET VIEW', requiresKeyId: 'google-maps' },
+  ]);
+  assert.deepEqual(layer.getUIState().keyAlternatives, stats.keyAlternatives);
+  stack.switchTo('esri-imagery');
+  assert.deepEqual(layer.getStats().keyAlternatives, [], 'not off Google 3D');
+  // Lit, Street View draws: the layer is no longer key-gated.
+  stack.switchTo('photoreal');
+  layer.setProviderEnabled('google', true);
+  assert.equal(layer.getStats().keyRequired, false);
 });

@@ -384,23 +384,33 @@ async function main() {
     // Grow it from the corner once the restored window holds still, with the
     // pointer really on the handle (a press beside it selects page text).
     let chosen = await readPanel();
+    const tried = [];
     for (
       let attempt = 0;
       attempt < 3 && chosen.height <= MIN_SIZE.height + 150;
       attempt++
     ) {
       await settle();
-      const corner = handlePoint(await readPanel(), 'se');
-      const onHandle = await page.evaluate(
-        ({ x, y }) => document.elementFromPoint(x, y)?.dataset?.dir === 'se',
-        corner,
+      const box = await readPanel();
+      const corner = handlePoint(box, 'se');
+      const hit = await page.evaluate(({ x, y }) => {
+        const node = document.elementFromPoint(x, y);
+        return {
+          dir: node?.dataset?.dir || null,
+          target: node
+            ? `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ''}.${[...node.classList].join('.')}`
+            : 'nothing',
+        };
+      }, corner);
+      tried.push(
+        `${Math.round(corner.x)},${Math.round(corner.y)} on ${hit.target} (box ${Math.round(box.left)},${Math.round(box.top)} ${Math.round(box.width)}x${Math.round(box.height)})`,
       );
-      if (onHandle) await drag(corner, 0, 200);
+      if (hit.dir === 'se') await drag(corner, 0, 200);
       chosen = await readPanel();
     }
     assert.ok(
       chosen.height > MIN_SIZE.height + 150,
-      `the window grew to ${chosen.height}px`,
+      `the window grew to ${chosen.height}px; tried ${tried.join('; ')}`,
     );
     await setCollapsed(true);
     const strip = await readPanel();
