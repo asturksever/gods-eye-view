@@ -17,6 +17,10 @@
   `public/models/people/rocketbox-male-06.glb`. Other Rocketbox characters
   convert with `tools/avatar/rocketbox_to_glb.py`. three.js's Soldier remains
   only as a CDN fallback.
+- Me Mode drops land exactly under the pin unless the spot is on a roof;
+  only then are they moved to a road (now within 80 m) or the nearest street
+  level. Pointer picking falls back to a ray into the 3D tiles, not the
+  ellipsoid, so tilted views no longer land behind the pointer.
 - Me Mode flying with the cape walks through the air (run when boosting,
   idle when hovering); surfing stays standing.
 - The Me Mode Pegman is now a **Step in** button: GEV's cyan eye with a

@@ -694,24 +694,31 @@ export function createAvatarLayer({
   }
 
   /**
-   * Keep a drop out of buildings. First the nearest road (routing proxy);
-   * then, always, a street-level check of the resulting spot on the loaded
-   * 3D surface, which also catches a road lookup that failed or answered
-   * with a point that is still up on a structure. Logs what it did.
+   * Keep a drop out of buildings without moving it needlessly: a drop that is
+   * already at street level (pavement, road, plaza, park) stays exactly where
+   * it was dropped. Only a drop on a roof moves: onto the nearest road within
+   * ROAD_SNAP_MAX_M (routing proxy), then, if that is still up on a
+   * structure or there is no road, to the nearest street-level point on the
+   * loaded 3D surface. Logs what it did.
    */
   async function streetSpot(lon, lat) {
+    const roof = streetLevelCheck(lon, lat);
+    if (!roof) {
+      console.info('[Me Mode] Drop: at street level, kept the exact spot');
+      return { lon, lat, snapped: null };
+    }
     const road = await snapToRoad(lon, lat);
     let spot = road.point ? { ...road.point } : { lon, lat };
-    const steps = [];
+    const steps = ['on a roof'];
     if (road.point)
       steps.push(
         `moved ${Math.round(localOffset(lon, lat, spot.lon, spot.lat).distance)} m to road`,
       );
     else steps.push(`no road snap (${road.reason})`);
-    const street = streetLevelCheck(spot.lon, spot.lat);
+    const street = road.point ? streetLevelCheck(spot.lon, spot.lat) : roof;
     if (street) {
       steps.push(
-        `moved ${Math.round(street.distance)} m off a roof to street level`,
+        `moved ${Math.round(localOffset(lon, lat, street.lon, street.lat).distance)} m to street level`,
       );
       spot = { lon: street.lon, lat: street.lat };
     }
@@ -1239,8 +1246,14 @@ export function createAvatarLayer({
   function groundAtScreen(x, y) {
     const scene = _viewer.scene;
     const point = new Cesium.Cartesian2(x, y);
+    // The bare-ellipsoid fallback globe's tile meshes are unreliable: only
+    // trust rendered surfaces when the globe is hidden (photoreal tiles) or
+    // carries real terrain.
+    const trustworthy =
+      !scene.globe?.show ||
+      !(_viewer.terrainProvider instanceof Cesium.EllipsoidTerrainProvider);
     let position;
-    if (scene.pickPositionSupported && !scene.globe?.show) {
+    if (scene.pickPositionSupported && trustworthy) {
       try {
         position = scene.pickPosition(point);
       } catch {
@@ -1256,6 +1269,20 @@ export function createAvatarLayer({
     ) {
       const ray = _viewer.camera.getPickRay(point);
       if (ray) position = scene.globe.pick(ray, scene);
+    }
+    // The depth buffer can miss (tiles still streaming, translucent pixels):
+    // cast the pointer's ray into the loaded 3D tiles instead. The bare
+    // ellipsoid is the last resort; it lies below the city, so on a tilted
+    // view it lands well behind the spot under the pointer.
+    if (!position && trustworthy && typeof scene.pickFromRay === 'function') {
+      try {
+        const ray = _viewer.camera.getPickRay(point);
+        position = ray
+          ? scene.pickFromRay(ray, excluded())?.position
+          : undefined;
+      } catch {
+        position = undefined;
+      }
     }
     if (!position) position = _viewer.camera.pickEllipsoid(point);
     if (!position) return null;

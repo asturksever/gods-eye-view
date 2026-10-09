@@ -19,14 +19,16 @@ readouts:
   the view.
 - **Voice:** "put me at Kings Cross".
 
-A drop never lands inside a building. It is moved onto the nearest road
-through GEV's routing proxy (`/api/route`, the same OSRM service as
-Directions), and only to a road within 150 m. If routing is unavailable, a
-drop on a roof moves to the nearest street-level point around it on the
-loaded 3D surface. That street-level check (up to 85 m around) also runs
-after a road snap, so a spot that is still up on a structure is corrected.
+A drop lands exactly where the pin's tip points whenever that spot is at
+street level (road, pavement, plaza, park). Only a drop on a roof is moved:
+onto the nearest road within 80 m through GEV's routing proxy (`/api/route`,
+the same OSRM service as Directions), and if there is no road or it is still
+up on a structure, to the nearest street-level point on the loaded 3D surface
+(up to 85 m around). The spot under the pointer is read from the depth buffer,
+or from a ray cast into the loaded 3D tiles when that misses.
 Each drop logs what it did in the browser console, e.g.
-`[Me Mode] Drop: moved 23 m to road` or the reason the road lookup failed. The Step in button hides while Me Mode is on. Leave with
+`[Me Mode] Drop: at street level, kept the exact spot` or
+`[Me Mode] Drop: on a roof; moved 23 m to road`. The Step in button hides while Me Mode is on. Leave with
 **✕ Exit** on the bar at the bottom, or `Esc`.
 
 | Input | Action |

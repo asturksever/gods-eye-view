@@ -305,7 +305,7 @@ export function fallStep(height, fallSpeed, ground, dt) {
 }
 
 /** A drop is moved to a road only if one is this close (m). */
-export const ROAD_SNAP_MAX_M = 150;
+export const ROAD_SNAP_MAX_M = 80;
 
 /** `/api/route` request whose zero-length route starts on the nearest road. */
 export function roadSnapUrl(lon, lat, profile = 'car') {
