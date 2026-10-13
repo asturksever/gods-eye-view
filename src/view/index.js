@@ -78,6 +78,29 @@ export const VIEW_STREET_LEVEL_PROVIDERS = Object.freeze([
 ]);
 const STREET_LEVEL_MAP = Object.freeze({ google: 'photoreal' });
 const STREET_LEVEL_PARAM = 'sl';
+const EARTH_RADIUS_M = 6_371_000;
+
+/**
+ * The ground point a camera looks at: straight below it when it looks down,
+ * else ahead along its heading by altitude / tan(pitch), capped at ten
+ * altitudes. The inverse of a tilted area framing.
+ */
+function lookAtPoint(camera) {
+  const pitch = Number(camera.pitch_deg ?? -90);
+  const altitude = Number(camera.altitude_m ?? 800_000);
+  if (!(pitch > -89) || !(altitude > 0))
+    return { lat: camera.lat, lon: camera.lon };
+  const down = Math.tan((-pitch * Math.PI) / 180);
+  const ground = Math.min(altitude / Math.max(down, 1e-6), 10 * altitude);
+  const heading = ((Number(camera.heading_deg) || 0) * Math.PI) / 180;
+  const dLat =
+    ((ground * Math.cos(heading)) / EARTH_RADIUS_M) * (180 / Math.PI);
+  const cosLat = Math.cos((camera.lat * Math.PI) / 180) || 1e-6;
+  const dLon =
+    ((ground * Math.sin(heading)) / (EARTH_RADIUS_M * cosLat)) *
+    (180 / Math.PI);
+  return { lat: camera.lat + dLat, lon: camera.lon + dLon };
+}
 
 /** Annotation kinds the app draws, as in its annotate_map action. */
 export const VIEW_ANNOTATION_TYPES = Object.freeze([
@@ -180,8 +203,9 @@ export const VIEW_PROPERTIES = Object.freeze({
     type: 'object',
     description:
       'Open street-level photos at a point: Google Street View (google; the ' +
-      'map becomes Google 3D) or Mapillary. lat/lon default to the view ' +
-      'centre. The app flies there and opens the nearest photo.',
+      'map becomes Google 3D) or Mapillary. lat/lon default to the spot the ' +
+      'camera looks at. The app flies there and opens the nearest photo. ' +
+      'Not with follow.',
     properties: {
       provider: { type: 'string', enum: [...VIEW_STREET_LEVEL_PROVIDERS] },
       lat: { type: 'number', minimum: -90, maximum: 90 },
@@ -293,6 +317,10 @@ export function createView({
     throw new TypeError(`A ${follow.kind} has no cockpit view`);
   let street = null;
   if (streetLevel) {
+    if (follow)
+      throw new TypeError(
+        'A view cannot both follow an entity and open street-level photos',
+      );
     const provider = streetLevel.provider ?? null;
     if (provider !== null && !VIEW_STREET_LEVEL_PROVIDERS.includes(provider))
       throw new TypeError(`Unknown street-level source: ${provider}`);
@@ -302,9 +330,11 @@ export function createView({
         `${provider} street-level imagery shows only on the ${needs} map`,
       );
     if (needs) map = needs;
-    // The point defaults to the camera's: a view "of X" opens photos at X.
-    const lat = latitude(streetLevel.lat) ?? camera.lat;
-    const lon = longitude(streetLevel.lon) ?? camera.lon;
+    // The point defaults to where the camera looks: a view "of X" opens
+    // photos at X, also when the camera sits behind it.
+    const seen = lookAtPoint(camera);
+    const lat = latitude(streetLevel.lat) ?? seen.lat;
+    const lon = longitude(streetLevel.lon) ?? seen.lon;
     street = Object.freeze({
       ...(provider ? { provider } : {}),
       lat: round(clamp(lat, -90, 90), 5),
@@ -422,11 +452,13 @@ export function annotationsFromParams(params) {
 export function streetLevelFromParams(params) {
   const raw = params.get(STREET_LEVEL_PARAM);
   if (!raw || raw.length > 64) return null;
-  const [provider, lat, lon] = raw.split(',');
+  const parts = raw.split(',');
+  if (parts.length !== 3) return null;
+  const [provider, lat, lon] = parts;
   if (provider && !VIEW_STREET_LEVEL_PROVIDERS.includes(provider)) return null;
   const point = {
-    lat: latitude(Number.parseFloat(lat)),
-    lon: longitude(Number.parseFloat(lon)),
+    lat: latitude(lat.trim() ? Number(lat) : NaN),
+    lon: longitude(lon.trim() ? Number(lon) : NaN),
   };
   if (point.lat === undefined || point.lon === undefined) return null;
   return { ...(provider ? { provider } : {}), ...point };
@@ -449,6 +481,10 @@ export function viewFromParams(params) {
       follow = { kind, id: String(id) };
   }
   const map = params.get('map');
+  // A link is untrusted input: its photos win over a map their source cannot
+  // show on, and a followed entity keeps the camera.
+  const street = follow ? null : streetLevelFromParams(params);
+  const needs = street?.provider ? STREET_LEVEL_MAP[street.provider] : null;
   return createView({
     camera: {
       lat,
@@ -459,10 +495,10 @@ export function viewFromParams(params) {
     },
     layers: state?.enabledLayerIds ?? [],
     style: STYLES_BY_URL_NAME[params.get('style')] ?? null,
-    map: VIEW_MAPS.includes(map) ? map : null,
+    map: needs ? needs : VIEW_MAPS.includes(map) ? map : null,
     follow,
     annotations: annotationsFromParams(params),
-    street_level: streetLevelFromParams(params),
+    street_level: street,
   });
 }
 

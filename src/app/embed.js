@@ -23,6 +23,7 @@ export const EMBED_VIEW_MESSAGE = 'gev:view';
 export const EMBED_APPLIED_MESSAGE = 'gev:view-applied';
 export const EMBED_READY_MESSAGE = 'gev:ready';
 
+const STREET_LEVEL_LAYER = 'street-level';
 const FOLLOW_LAYERS = {
   aircraft: 'flights',
   military_aircraft: 'military',
@@ -190,6 +191,8 @@ export async function applyView(
       await act('set_layer_visibility', { layerId: layer.id, enabled: false });
   }
   for (const layerId of view.layers) {
+    // The street-level action lights its source first, then the layer.
+    if (view.street_level && layerId === STREET_LEVEL_LAYER) continue;
     if (!dataManager.isEnabled(layerId))
       await act('set_layer_visibility', { layerId, enabled: true });
   }
@@ -201,8 +204,14 @@ export async function applyView(
     await act('annotate_map', { annotations: [...view.annotations] });
   if (view.street_level) {
     // The photos frame the camera: the action flies to the point at street
-    // level, lights the source and opens the nearest photo.
-    await act('show_street_level', streetLevelArgs(view.street_level));
+    // level, lights the source and opens the nearest photo. When it fails
+    // before flying, the view's own camera still applies.
+    const result = await act(
+      'show_street_level',
+      streetLevelArgs(view.street_level),
+    );
+    if (result?.ok !== true && !result?.location)
+      steps.push({ step: 'camera', ok: await flyTo(viewer, view.camera) });
     return steps;
   }
   if (!view.follow) {
@@ -255,18 +264,22 @@ export function installViews({
   const hashParams = new URLSearchParams(
     String(location?.hash || '').replace(/^#/, ''),
   );
+  // What the link itself asks for runs first, one thing at a time; posted
+  // views queue behind it.
+  let queue = ready;
   const linked = annotationsFromParams(hashParams);
   if (linked.length)
-    void ready.then(() => {
-      if (!signal?.aborted) void run('annotate_map', { annotations: linked });
+    queue = queue.then(async () => {
+      if (!signal?.aborted) await run('annotate_map', { annotations: linked });
     });
   // A link to street-level photos opens them once the link has restored.
   const streetLevel = streetLevelFromParams(hashParams);
   if (streetLevel)
-    void ready.then(() => {
+    queue = queue.then(async () => {
       if (!signal?.aborted)
-        void run('show_street_level', streetLevelArgs(streetLevel));
+        await run('show_street_level', streetLevelArgs(streetLevel));
     });
+  queue = queue.catch(() => {});
   if (!isEmbedded(location)) return () => {};
 
   windowRef.document.body.classList.add('ui-embed');
@@ -284,7 +297,6 @@ export function installViews({
       peer.postMessage(message, origin);
   };
   // Views apply one at a time, in the order they arrive.
-  let queue = ready;
   const onMessage = (event) => {
     if (event.source !== peer || event.data?.type !== EMBED_VIEW_MESSAGE)
       return;

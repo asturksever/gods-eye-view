@@ -648,8 +648,13 @@ export class StreetLevelControls {
     // Other size changes reach the viewer through the ResizeObserver; opening
     // asks for one resize because the element may not have a size yet.
     const open = state.street.open === true;
-    if (open && !this._wasStreetOpen)
+    if (open && !this._wasStreetOpen) {
       this.setCollapsed(false, { persist: false });
+      // Embed mode hides the rail the panel sits in: a photo is only visible
+      // lifted out of it, over the globe.
+      if (document.body?.classList?.contains('ui-embed'))
+        this.setViewerExpanded(true);
+    }
     this._wasStreetOpen = open;
   }
 

@@ -39,6 +39,9 @@ export const CORE_PHRASES = Object.freeze([
   { phrase: 'Show me the Eiffel Tower on Street View', expect: 'show_street_level', typedArgs: [where('show_street_level', (a) => a.provider === 'google' && /eiffel/i.test(a.query || ''))] },
   { phrase: 'Street view of 10th Street in Sacramento', expect: 'show_street_level', typedArgs: [where('show_street_level', (a) => a.provider === 'google')] },
   { phrase: 'Show me Times Square on Mapillary', expect: 'show_street_level', typedArgs: [where('show_street_level', (a) => a.provider === 'mapillary')] },
+  { phrase: 'Switch to Google Street View', expect: 'show_street_level', typedArgs: [where('show_street_level', (a) => a.provider === 'google' && !a.query)] },
+  { phrase: 'Show me the Eiffel Tower', expect: 'fly_to_location' },
+  { phrase: 'Turn on street level', expect: 'set_layer_visibility', typedArgs: [where('set_layer_visibility', (a) => a.layerId === 'street-level' && a.enabled === true)] },
 
   // — the satellites trap: data layer, never basemap —
   { phrase: 'Show me the satellites', expect: { oneOf: ['set_layer_visibility', 'frame_overhead'] } },

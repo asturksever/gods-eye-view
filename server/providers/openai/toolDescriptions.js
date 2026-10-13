@@ -67,7 +67,7 @@ export const ACTION_DESCRIPTIONS = {
   },
   show_street_level: {
     description:
-      'Street-level photos of a place: "show me X on Street View", "X on Mapillary", "street-level imagery of X". One call flies there, switches the map when the source needs it (Google Street View shows only on Google 3D; each panorama is billed to the Google Maps key), lights the source in STREET LEVEL, turns the layer on and opens the nearest photo. Do not also call fly_to_location, set_map_stack or set_layer_visibility.',
+      'Street-level photos of a place: "show me X on Street View", "X on Mapillary", "street-level imagery of X". One call flies there, switches the map when the source needs it (Google Street View shows only on Google 3D; each panorama is billed to the Google Maps key), lights the source in STREET LEVEL, turns the layer on and opens the nearest photo. No query: the view centre.',
     $position: 1,
     parameters: {
       properties: {
@@ -75,14 +75,6 @@ export const ACTION_DESCRIPTIONS = {
           description:
             'Place name or address. "pointer" = the spot under the cursor.',
           $position: 1,
-        },
-        latitude: {
-          description: 'With longitude, instead of query.',
-          $position: 2,
-        },
-        longitude: {
-          description: 'With latitude.',
-          $position: 2,
         },
         provider: {
           description:

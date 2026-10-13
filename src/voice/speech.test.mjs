@@ -468,7 +468,7 @@ test('street-level speech names the source and the place, and says which step fa
     providerName: 'Google Street View',
     label: '10th Street, Sacramento',
     title: '1000 10th St, Sacramento, CA',
-    capturedAt: Date.UTC(2024, 4, 15),
+    capturedAt: Date.UTC(2024, 4, 1), // Google dates: the first of the month, UTC
   });
   assert.equal(ok.say, 'Google Street View at 1000 10th St, Sacramento, CA.');
   assertSpeakable(ok.say);
@@ -477,7 +477,7 @@ test('street-level speech names the source and the place, and says which step fa
 
   const stages = {
     location: "Couldn't find Nowhere.",
-    map: "Couldn't switch the map for Google Street View.",
+    map: "Google Street View needs the Google 3D map, which isn't available.",
     key: 'Google Street View needs its key.',
     layer: "Couldn't turn on Street Level.",
     imagery: 'No Google Street View imagery near Nowhere.',

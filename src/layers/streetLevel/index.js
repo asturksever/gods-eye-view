@@ -479,6 +479,27 @@ export function createStreetLevelLayer({
       const def = definitionsFrozen.find((entry) => entry.id === providerId);
       return def?.requiresMapStack || null;
     },
+    /**
+     * A provider's name and key state on any map (the panel lists a provider
+     * only on the map it needs). `configured` is null until its status call
+     * answers; `keyRequired` covers a missing or refused key.
+     */
+    providerStatus(providerId) {
+      const entry = state.providers.get(providerId);
+      if (!entry) return null;
+      const stats = entry.instance.coverageStats();
+      return {
+        id: entry.def.id,
+        name: entry.def.name,
+        on: entry.on,
+        configured: entry.status ? entry.status.configured === true : null,
+        keyRequired: stats.keyRequired === true || stats.keyRejected === true,
+        keyRejected: stats.keyRejected === true,
+        groundClick: entry.def.groundClick === true,
+        available: providerAvailable(entry),
+        error: stats.error || null,
+      };
+    },
     getSourceAvailability() {
       const available = definitionsFrozen.length > 0;
       return {
@@ -648,12 +669,20 @@ export function createStreetLevelLayer({
      * a point, else the view centre, or with `aim: 'screen-centre'` the ground
      * under the screen centre (sky: nothing). `radiusM` widens the search for
      * providers that can (a geocoded landmark is rarely within 50 m of a
-     * street); clicks keep the default.
+     * street); clicks keep the default. A caller's `signal` retires the
+     * lookup: nothing opens after it fires.
      */
     async openNearest(
       point,
-      { providerIds = null, frame = true, aim = 'view', radiusM = null } = {},
+      {
+        providerIds = null,
+        frame = true,
+        aim = 'view',
+        radiusM = null,
+        signal: callerSignal = null,
+      } = {},
     ) {
+      if (callerSignal?.aborted) return false;
       const radius = Number.isFinite(radiusM)
         ? Math.min(NEAREST_RADIUS_MAX_M, Math.max(1, radiusM))
         : NEAREST_RADIUS_M;
@@ -675,6 +704,18 @@ export function createStreetLevelLayer({
       const lookup = new AbortController();
       nearestLookup = lookup;
       const { signal } = lookup;
+      const onCallerAbort = () => lookup.abort();
+      callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
+      const retired = () => {
+        callerSignal?.removeEventListener('abort', onCallerAbort);
+        // The caller moved on: the panel shows nothing of this lookup.
+        if (nearestLookup === lookup) nearestLookup = null;
+        if (state.street.loading && !state.street.open) {
+          state.street.loading = false;
+          notify();
+        }
+        return false;
+      };
       state.street.loading = true;
       state.street.error = null;
       notify();
@@ -693,19 +734,23 @@ export function createStreetLevelLayer({
               : { signal, radiusM: radius },
           );
         } catch (error) {
+          if (callerSignal?.aborted) return retired();
           // Overtaken: whatever replaced it owns the panel, errors included.
           if (signal.aborted) return false;
           // One provider failing (no key, offline) must not hide the others.
           lastError = error;
           continue;
         }
+        if (callerSignal?.aborted) return retired();
         if (signal.aborted) return false;
         if (!state.enabled) break;
         // Switched off, or its map left, while it looked: try the next.
         if (!imageId || !entry.on || !providerAvailable(entry)) continue;
         nearestLookup = null;
+        callerSignal?.removeEventListener('abort', onCallerAbort);
         return openImage(entry.def.id, imageId, { frame });
       }
+      callerSignal?.removeEventListener('abort', onCallerAbort);
       if (nearestLookup === lookup) nearestLookup = null;
       // Switched off while it looked: nothing to open, nothing to report.
       const stillOn = entries.some(

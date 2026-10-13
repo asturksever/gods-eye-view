@@ -543,7 +543,7 @@ Source factories have dedicated `layers/<family>/source` exports. ALPR and earth
 
 Voice controls bind to a protocol-independent session factory. The default WebRTC adapter preserves the existing Realtime connection, push-to-talk, cost controls and radio handoff. Session subscriptions expose state, transcript, action call/progress/result, interruption, completion and turn-metrics events; stopping or replacing a session cancels pending actions. Alternate adapters can use the same controls and action runner.
 
-Voice action argument schemas have one portable owner under `src/voice/actionSchemas.js`. The Realtime provider builds 30 tools using separate description-only metadata. Description customization cannot replace argument types, enum values or required fields.
+Voice action argument schemas have one portable owner under `src/voice/actionSchemas.js`. The Realtime provider builds 31 tools using separate description-only metadata. Description customization cannot replace argument types, enum values or required fields.
 
 `src/voice/layerManifest.js` declares each catalog layer's voice capabilities: spoken aliases, `toggle`, in-view `context`, `track`, and analyst `query` fields with type and unit, or `noQuery` with the reason. The `set_layer_visibility`, `show_data_layers_menu`, `get_entity_context` and `analyst_query` layer enums, the runner's alias table and the analyst field hints are generated from it. `src/voice/layerManifest.test.mjs` fails when a catalog layer is neither listed nor named in `VOICE_OFF_LAYERS` (today only the two scene-driven Bhote Koshi layers). Global Context is listed with `toggle: false`; `set_context_mode` reaches it. `set_panel_open` also opens `weather-panel` and `recent-imagery-panel`.
 
@@ -3183,6 +3183,31 @@ once; a lookup or open Google never answers fails after 10 or 20 s. In CI
 (no Google key, no Google 3D) the gate checks that nothing of Street View
 shows off Google 3D, even switched on by a share link; the click and button
 step skips as `no Google key`.
+
+**"Show me X on Street View."** The `show_street_level` assistant action
+(voice and typed; `src/voice/gevActions.js`) is one call: it checks the
+source has its key (a keyless source explains itself and changes nothing, as
+a chip does), flies to the place at street framing and waits for arrival (a
+name, coordinates, a pointed spot, a numbered item, or nothing for the view
+centre), switches to the map the source needs (Google Street View: Google 3D),
+lights that source through `setLayerParams` with origin `voice` (one source at
+a time, kept in the share link like a chip click), turns the layer on and
+calls `openNearest`. `provider` is `google` for "Street View", `mapillary` for
+"Mapillary", else the lit source. Stages fail separately (`location`, `map`,
+`provider`, `layer`, `key`, `imagery`) and a newer turn retires the lookup
+(`openNearest`'s `signal` option), so nothing opens after the user moved on.
+For a source without a coverage layer the lookup widens to 250 m
+(`NEAREST_RADIUS_MAX_M`; Google honours it, Mapillary's API caps at 50 m);
+clicks keep 50 m. The layer exposes `requiredMapStack(id)` and
+`providerStatus(id)` for callers that must decide before the panel lists a
+source. Views carry the same request as `street_level` (`src/view/index.js`:
+source and point, defaulting to where the camera looks; a `google` source
+brings `map: photoreal` and refuses another map; not with `follow`), links as
+`sl=<source>,<lat>,<lon>`; `show_in_gods_eye_view` accepts it, the globe panel
+applies it through the action, and a plain link runs the action once restored
+(one shot: the rewritten hash drops `sl`). In embed mode the photo opens as
+the lifted viewer, since the rail holding the panel is hidden there. A link
+with `sl=google` loads one billed panorama without a click.
 
 Street Level has two browser gates. `npm run qa:street-level -- --url <server>`
 runs against real Mapillary and needs `MAPILLARY_CLIENT_TOKEN`. `npm run

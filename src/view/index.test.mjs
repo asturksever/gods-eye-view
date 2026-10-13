@@ -191,3 +191,67 @@ test('street-level photos travel in the link, light their source and bring their
   assert.equal(streetLevelFromParams(new URLSearchParams('lat=1')), null);
   assert.equal(createView({ camera: { lat: 1, lon: 2 } }).street_level, null);
 });
+
+test('street-level photos: a tilted camera opens them where it looks, a link cannot pair them with the wrong map, and follow is refused', async () => {
+  const { streetLevelFromParams } = await import('./index.js');
+  // Looking north from 1,000 m at 45°: the ground point is ~1 km north.
+  const tilted = createView({
+    camera: {
+      lat: 48.8494,
+      lon: 2.2945,
+      altitude_m: 1000,
+      heading_deg: 0,
+      pitch_deg: -45,
+    },
+    street_level: { provider: 'google' },
+  });
+  assert.ok(
+    tilted.street_level.lat > 48.858 && tilted.street_level.lat < 48.859,
+    String(tilted.street_level.lat),
+  );
+  assert.equal(tilted.street_level.lon, 2.2945);
+  const down = createView({
+    camera: { lat: 1, lon: 2, altitude_m: 1000 },
+    street_level: {},
+  });
+  assert.deepEqual(down.street_level, { lat: 1, lon: 2 });
+  // A hand-edited link: the photos win over the map.
+  const link = viewFromParams(
+    new URLSearchParams('v=2&lat=1&lon=2&map=osm&sl=google,1,2'),
+  );
+  assert.equal(link.map, 'photoreal');
+  assert.deepEqual(link.street_level, { provider: 'google', lat: 1, lon: 2 });
+  assert.throws(
+    () =>
+      createView({
+        camera: { lat: 1, lon: 2 },
+        follow: { kind: 'aircraft', id: 'a1' },
+        street_level: {},
+      }),
+    /cannot both follow/,
+  );
+  // A followed link drops its photos rather than fight over the camera.
+  const followed = viewFromParams(
+    viewToParams(
+      createView({
+        camera: { lat: 1, lon: 2 },
+        follow: { kind: 'satellite', id: '25544' },
+      }),
+    ),
+  );
+  assert.equal(followed.street_level, null);
+  // Strict parsing: three fields, real numbers, in range, bounded length.
+  for (const bad of [
+    'google,1',
+    'google,1,2,3',
+    'google,1abc,2',
+    'google,91,0',
+    'google,,2',
+    'google,1,2'.padEnd(65, '0'),
+  ])
+    assert.equal(
+      streetLevelFromParams(new URLSearchParams({ sl: bad })),
+      null,
+      bad,
+    );
+});

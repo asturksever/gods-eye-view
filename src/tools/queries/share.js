@@ -47,12 +47,15 @@ export async function resolveViewArguments(args, { services, signal, tools }) {
     ? { ...args.camera }
     : { ...base.camera, ...args.camera };
   let label = null;
-  // Street-level photos open at the area's centre unless a point is given.
+  // Street-level photos open at the area's centre unless a point is given;
+  // a new area moves a passed-through view's photos with it.
   let streetLevel =
     args.street_level && typeof args.street_level === 'object'
       ? { ...args.street_level }
       : base.street_level && typeof base.street_level === 'object'
-        ? { ...base.street_level }
+        ? args.area
+          ? { provider: base.street_level.provider }
+          : { ...base.street_level }
         : null;
   if (args.area) {
     const area = await resolveArea(args.area, { services, signal });

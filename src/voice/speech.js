@@ -256,9 +256,11 @@ function capturedMonth(capturedAt) {
   const ms = Number(capturedAt);
   if (!Number.isFinite(ms) || ms <= 0) return '';
   try {
+    // Dates are UTC months (Google: the first of the month).
     return new Date(ms).toLocaleDateString('en-US', {
       month: 'short',
       year: 'numeric',
+      timeZone: 'UTC',
     });
   } catch {
     return '';
@@ -281,7 +283,7 @@ function showStreetLevel(result) {
     let say;
     if (result?.stage === 'location') say = `Couldn't find ${place}.`;
     else if (result?.stage === 'map')
-      say = `Couldn't switch the map for ${source}.`;
+      say = `${source} needs the Google 3D map, which isn't available.`;
     else if (result?.stage === 'key')
       say = result?.keyRejected
         ? `${source} refused its key.`
@@ -564,7 +566,7 @@ export function planStepLabel(name, args = {}) {
     case 'select_nearest_aircraft':
       return `Nearest aircraft to ${displayName(args.locationQuery || args.locationId || 'here', 32)}`;
     case 'show_street_level':
-      return `${args.provider === 'google' ? 'Street View' : args.provider === 'mapillary' ? 'Mapillary' : 'Street level'} at ${displayName(args.query || 'here', 32)}`;
+      return `${args.provider === 'google' ? 'Street View' : args.provider === 'mapillary' ? 'Mapillary' : 'Street level'} at ${displayName(args.query || (args.latitude != null ? 'this spot' : 'the view centre'), 32)}`;
     case 'set_layer_visibility':
       return `${displayName(args.layerId || 'Layer', 32)} ${args.enabled === false ? 'off' : 'on'}`;
     case 'get_entity_context':

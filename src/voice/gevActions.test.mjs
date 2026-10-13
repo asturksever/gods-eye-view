@@ -3893,6 +3893,7 @@ function createStreetLevelHarness({
   enabled = false,
   keyRequired = false,
   nearest = 'pano-a',
+  paramsAccepted = true,
 } = {}) {
   const order = [];
   const { viewer, styleManager } = createVoiceNavigationHarness();
@@ -3913,9 +3914,24 @@ function createStreetLevelHarness({
   };
   let params = { ...lit };
   const street = { imageId: null, error: null };
+  const names = { google: 'Google Street View', mapillary: 'Mapillary' };
   const layer = {
     providerIds: ['mapillary', 'google'],
     requiredMapStack: (id) => (id === 'google' ? 'photoreal' : null),
+    providerStatus: (id) =>
+      names[id]
+        ? {
+            id,
+            name: names[id],
+            on: params[id] === true,
+            configured: !keyRequired,
+            keyRequired,
+            keyRejected: false,
+            groundClick: id === 'google',
+            available: id !== 'google' || stack === 'photoreal',
+            error: keyRequired ? `${names[id]} needs its key` : null,
+          }
+        : null,
     getUIState: () => ({
       providers: ['mapillary', 'google']
         .filter((id) => id !== 'google' || stack === 'photoreal')
@@ -3934,9 +3950,10 @@ function createStreetLevelHarness({
       street: { ...street },
     }),
     async openNearest(point, options) {
-      order.push(`open:${options.providerIds.join('+')}:${options.radiusM ?? 'default'}:${options.frame}`);
+      order.push(`open:${options.providerIds.join('+')}:${options.radiusM ?? 'default'}:${options.frame}${point ? '' : ':view-centre'}`);
+      if (options.signal?.aborted) return false;
       if (!nearest) {
-        street.error = 'No street-level imagery within 250 m of that point';
+        street.error = `No street-level imagery within ${options.radiusM ?? 50} m of ${point ? 'that point' : 'the view centre'}`;
         return false;
       }
       street.imageId = nearest;
@@ -3951,7 +3968,9 @@ function createStreetLevelHarness({
     getLayerParams: () => ({ ...params }),
     setLayerParams(id, next, { origin }) {
       order.push(`params:${Object.entries(next).filter(([, on]) => on).map(([k]) => k).join('+')}:${origin}`);
+      if (paramsAccepted === false) return false;
       params = { ...params, ...next };
+      return true;
     },
     async setEnabled(id) {
       order.push(`enable:${id}`);
@@ -3961,7 +3980,19 @@ function createStreetLevelHarness({
     getAll: () => [{ id: 'street-level', name: 'Street Level', enabled }],
   };
   const runner = createGevActionRunner({ viewer, styleManager, dataManager });
-  return { runner, order, finishFlight: () => completeFlight?.(), layer };
+  return { runner, order, finishFlight: () => completeFlight?.(), layer, dataManager };
+}
+
+/** A loaded CCTV camera the entity branch can locate. */
+function withCamera(harness) {
+  harness.dataManager.layers.set('cctv', {
+    module: {
+      findByQuery: (id) => (id === 'cam-9' ? { latitude: 38.58, longitude: -121.5 } : null),
+    },
+  });
+  const wasEnabled = harness.dataManager.isEnabled;
+  harness.dataManager.isEnabled = (id) => id === 'cctv' || wasEnabled(id);
+  return harness;
 }
 
 test('show_street_level flies first, then switches the map, lights the source, turns the layer on and opens the nearest photo', async () => {
@@ -4016,8 +4047,11 @@ test('show_street_level without a source uses the one lit in the panel', async (
 
 test('show_street_level reports each stage it could not pass', async () => {
   globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
-  const none = await createStreetLevelHarness().runner('show_street_level', {});
-  assert.deepEqual([none.ok, none.stage], [false, 'location']);
+  const centre = createStreetLevelHarness({ enabled: true, activeStack: 'photoreal' });
+  const none = await centre.runner('show_street_level', { provider: 'google' });
+  assert.equal(none.ok, true, 'no place at all means the view centre');
+  assert.equal(none.label, 'the view centre');
+  assert.deepEqual(centre.order, ['params:google:voice', 'open:google:250:false:view-centre']);
 
   const unknown = await createStreetLevelHarness().runner('show_street_level', {
     latitude: 1, longitude: 2, provider: 'kartaview', fly: false,
@@ -4025,12 +4059,21 @@ test('show_street_level reports each stage it could not pass', async () => {
   assert.deepEqual([unknown.ok, unknown.stage], [false, 'provider']);
   assert.match(unknown.error, /kartaview/);
 
-  const keyless = await createStreetLevelHarness({ enabled: true, keyRequired: true }).runner(
+  const keylessHarness = createStreetLevelHarness({ enabled: true, keyRequired: true });
+  const keyless = await keylessHarness.runner('show_street_level', {
+    latitude: 1, longitude: 2, provider: 'google',
+  });
+  assert.deepEqual([keyless.ok, keyless.stage], [false, 'key']);
+  assert.match(keyless.error, /needs its key/);
+  assert.equal(keyless.providerName, 'Google Street View');
+  assert.deepEqual(keylessHarness.order, [], 'a keyless source changes nothing: no flight, no map, no switch');
+
+  const refusedSwitch = await createStreetLevelHarness({ enabled: true, paramsAccepted: false }).runner(
     'show_street_level',
     { latitude: 1, longitude: 2, provider: 'google', fly: false },
   );
-  assert.deepEqual([keyless.ok, keyless.stage], [false, 'key']);
-  assert.match(keyless.error, /needs its key/);
+  assert.deepEqual([refusedSwitch.ok, refusedSwitch.stage], [false, 'provider']);
+  assert.match(refusedSwitch.error, /could not be switched on/);
 
   const empty = await createStreetLevelHarness({ enabled: true, nearest: null }).runner(
     'show_street_level',
@@ -4058,4 +4101,103 @@ test('show_street_level stops at the map when the source’s map is refused, bef
   const result = await runner('show_street_level', { latitude: 1, longitude: 2, provider: 'google', fly: false });
   assert.deepEqual([result.ok, result.stage, result.error], [false, 'map', reason]);
   assert.deepEqual(order, [], 'the source is not switched when its map is refused');
+});
+
+test('show_street_level opens photos of a numbered item or a pointed spot through its entity', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const { runner, order, finishFlight } = withCamera(
+    createStreetLevelHarness({ enabled: true, activeStack: 'photoreal' }),
+  );
+  const pending = runner('show_street_level', {
+    provider: 'google',
+    entity: { layerId: 'cctv', id: 'cam-9', label: 'Camera 9', lat: 38.58, lon: -121.5 },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(order, ['fly'], 'the entity position is flown to');
+  finishFlight();
+  const result = await pending;
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.label, 'Camera 9');
+  assert.deepEqual(order, ['fly', 'params:google:voice', 'open:google:250:false']);
+  // Without a flight the entity's own position is used.
+  const still = withCamera(createStreetLevelHarness({ enabled: true, activeStack: 'photoreal' }));
+  const kept = await still.runner('show_street_level', {
+    provider: 'google',
+    fly: false,
+    entity: { layerId: 'cctv', id: 'cam-9', lat: 38.58, lon: -121.5 },
+  });
+  assert.equal(kept.ok, true, kept.error);
+  assert.deepEqual(still.order, ['params:google:voice', 'open:google:250:false']);
+});
+
+test('show_street_level hands the point from a named place, a preset and a curated POI to the lookup', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const points = [];
+  const make = () => {
+    const harness = createStreetLevelHarness({ enabled: true, activeStack: 'osm' });
+    const open = harness.layer.openNearest;
+    harness.layer.openNearest = async (point, options) => {
+      points.push(point);
+      return open(point, options);
+    };
+    return harness;
+  };
+  // A geocoded name: the flight reports where it landed.
+  const named = make();
+  const viewerFor = () => ({ ...createVoiceNavigationHarness().viewer });
+  const runnerWithSearch = createGevActionRunner({
+    viewer: viewerFor(),
+    styleManager: { mapStackController: { getActiveId: () => 'osm' }, setMapStack: async () => ({ ok: true }) },
+    dataManager: {
+      layers: new Map([['street-level', { module: named.layer }]]),
+      isEnabled: () => true,
+      getLayerParams: () => ({ mapillary: true, google: false }),
+      setLayerParams: () => true,
+      getAll: () => [],
+    },
+    searchNavigation: async (_viewer, query, options) => {
+      options.onComplete?.();
+      return { label: `${query}, CA`, latitude: 38.5799, longitude: -121.4937, navigationMode: 'precise-place', rangeM: 250 };
+    },
+  });
+  const geocoded = await runnerWithSearch('show_street_level', { query: '10th Street, Sacramento', provider: 'mapillary' });
+  assert.equal(geocoded.ok, true, geocoded.error);
+  assert.equal(geocoded.label, '10th Street, Sacramento, CA');
+  assert.deepEqual(points.at(-1), { lat: 38.5799, lon: -121.4937 });
+  // A curated POI and a city preset fly to their hand-tuned poses and report them.
+  for (const [args, expected] of [
+    [{ query: 'Golden Gate Bridge', provider: 'mapillary' }, { lat: 37.8199, lon: -122.4783 }],
+    [{ query: 'austin', provider: 'mapillary' }, null],
+  ]) {
+    const harness = make();
+    const pending = harness.runner('show_street_level', args);
+    await new Promise((resolve) => setImmediate(resolve));
+    harness.finishFlight();
+    const result = await pending;
+    assert.equal(result.ok, true, `${args.query}: ${result.error}`);
+    const point = points.at(-1);
+    if (expected) assert.deepEqual(point, expected);
+    else assert.ok(Number.isFinite(point.lat) && Number.isFinite(point.lon), 'a preset flight reports its point');
+  }
+});
+
+test('show_street_level retires its lookup when the turn is superseded, and says so', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const { runner, order, layer } = createStreetLevelHarness({ enabled: true, activeStack: 'photoreal' });
+  const controller = new AbortController();
+  let currentTurn = true;
+  layer.openNearest = async (_point, options) => {
+    order.push(`open:signal:${Boolean(options.signal)}`);
+    controller.abort();
+    currentTurn = false;
+    return false;
+  };
+  const result = await runner(
+    'show_street_level',
+    { latitude: 1, longitude: 2, provider: 'google', fly: false },
+    { signal: controller.signal, isCurrent: () => currentTurn },
+  );
+  assert.deepEqual([result.ok, result.cancelled, result.stage], [false, true, 'imagery']);
+  assert.doesNotMatch(result.error, /No .* imagery/);
+  assert.ok(order.includes('open:signal:true'), 'the lookup gets the turn signal');
 });

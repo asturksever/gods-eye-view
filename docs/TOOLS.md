@@ -103,12 +103,14 @@ draws them once the link has been restored.
 
 A view can open street-level photos too: `street_level` names a source
 (`google` for Street View, `mapillary`, or none for whichever the panel has
-lit) and a point, which defaults to the view's centre. Street View shows only
-on the Google 3D map, so a `google` source sets `map` to `photoreal` and any
-other map is refused. The `street-level` layer is turned on. Links carry it as
+lit) and a point, which defaults to the spot the camera looks at. Street View
+shows only on the Google 3D map, so a `google` source sets `map` to
+`photoreal` and any other map is refused; a view cannot both follow an entity
+and open photos. The `street-level` layer is turned on. Links carry it as
 `sl=<source>,<lat>,<lon>`; once the link has restored, the app runs its
 `show_street_level` action, which flies to the point at street framing and
-opens the nearest photo.
+opens the nearest photo. With `google` that is one billed panorama per visit,
+opened without a click.
 
 Tools take a view as `VIEW_ARGUMENTS`: an `area` to frame from above, or a
 `camera`, plus `layers`, `style`, `map`, `follow`, `annotations` and

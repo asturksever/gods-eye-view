@@ -2082,6 +2082,69 @@ async function main() {
           assert.ok(await shared(true), 'still shared as collapsed');
         },
       );
+      if (fixtures) {
+        const photo = fixture.images[0];
+        await step(
+          'a link to street-level photos (sl=) opens the nearest one after it restores',
+          async () => {
+            await page.goto(
+              `${url.split('#')[0]}#v=2&lat=${photo.lat}&lon=${photo.lon}&alt=600&heading=0&pitch=-60&roll=0&sl=mapillary,${photo.lat},${photo.lon}`,
+              { waitUntil: 'domcontentloaded' },
+            );
+            // A hash change alone keeps the document: the link is read on load.
+            await page.reload({ waitUntil: 'domcontentloaded' });
+            await clearFirstRun(page);
+            await waitForImage();
+            const street = (await ui()).street;
+            assert.equal(street.error, null, `viewer error: ${street.error}`);
+            assert.equal(street.providerId, 'mapillary');
+            assert.ok(
+              fixtureIds.has(street.imageId),
+              `a fixture photo opened: ${street.imageId}`,
+            );
+            assert.equal(
+              await page.evaluate(() => location.hash.includes('sl=')),
+              false,
+              'the rewritten link no longer carries the one-shot request',
+            );
+          },
+        );
+        await step(
+          'the show_street_level action opens the nearest photo at a point without a pointer',
+          async () => {
+            await page.evaluate(() =>
+              window.__godsEyeView.dataManager.layers
+                .get('street-level')
+                .module.closeViewer(),
+            );
+            const result = await page.evaluate(
+              (at) =>
+                window.__godsEyeView.voiceCommands.runner('show_street_level', {
+                  latitude: at.lat,
+                  longitude: at.lon,
+                  provider: 'mapillary',
+                  fly: false,
+                }),
+              { lat: photo.lat, lon: photo.lon },
+            );
+            assert.equal(
+              result.ok,
+              true,
+              `action failed: ${result.stage} ${result.error}`,
+            );
+            assert.equal(result.provider, 'mapillary');
+            assert.ok(
+              fixtureIds.has(result.imageId),
+              `a fixture photo opened: ${result.imageId}`,
+            );
+            assert.match(result.say || '', /^Mapillary at /);
+          },
+        );
+      } else
+        await skipStep(
+          'fixtures only',
+          'a link to street-level photos (sl=) and the show_street_level action open a fixture photo',
+        );
       if (fixtures)
         await step(
           'keyless install (a second page, no key on the server) gates the controls and reports KEY REQUIRED',

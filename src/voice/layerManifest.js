@@ -305,7 +305,6 @@ const layers = [
       'street-level imagery',
       'mapillary',
       'street view',
-      'google street view',
     ],
     context: false,
     noQuery: 'street-level imagery; no countable records',

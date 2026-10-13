@@ -1259,3 +1259,22 @@ test('Street View lit hides the imagery filters and the legend; Mapillary lit sh
       legend: true,
     });
   }));
+
+test('in embed mode a photo opens as the lifted viewer, since the rail holding the panel is hidden', () =>
+  withDom(async (dom) => {
+    dom.document.body.classList.add('ui-embed');
+    const { layer, controls } = stubPanel(dom, uiState({ open: false }));
+    layer.publish(uiState({ open: true }));
+    assert.equal(controls.isViewerExpanded(), true);
+    layer.publish(uiState({ open: false }));
+    assert.equal(controls.isViewerExpanded(), false);
+    controls.destroy();
+  }));
+
+test('outside embed mode a photo opens in the panel, not lifted', () =>
+  withDom(async (dom) => {
+    const { layer, controls } = stubPanel(dom, uiState({ open: false }));
+    layer.publish(uiState({ open: true }));
+    assert.equal(controls.isViewerExpanded(), false);
+    controls.destroy();
+  }));

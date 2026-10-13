@@ -264,3 +264,14 @@ test('OPEN STREET VIEW keeps its width beside a long coverage line', () => {
   );
   assert.match(panelCss, /\.sl-meta-row \.sl-meta \{[^}]*min-width: 0;/);
 });
+
+test('embed mode shows the lifted viewer that clean view hides, without its shrink button', () => {
+  assert.match(
+    css,
+    /body\.ui-embed \.sl-viewer-wrap-expanded \{[^}]*visibility: visible !important/,
+  );
+  assert.match(
+    css,
+    /body\.ui-embed \.sl-viewer-wrap-expanded #sl-viewer-expand \{[^}]*display: none !important/,
+  );
+});

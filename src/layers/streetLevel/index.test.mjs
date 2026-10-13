@@ -843,3 +843,37 @@ test('openNearest searches wider on request, never past the cap, and says how fa
   );
   assert.equal(fake.lookups.at(-1).radius, 50, 'a click keeps the default');
 });
+
+test('a caller’s signal retires a nearest lookup: nothing opens after it fires', async (t) => {
+  let answer = null;
+  const { layer, fake } = await withStreetView(t, {
+    nearest: () => 'pano-a',
+  });
+  const lib = fake.library;
+  const service = lib.StreetViewService.prototype.getPanorama;
+  lib.StreetViewService.prototype.getPanorama = function (request) {
+    return new Promise((resolve, reject) => {
+      answer = () => service.call(this, request).then(resolve, reject);
+    });
+  };
+  layer.setProviderEnabled('google', true);
+  await settle();
+  const controller = new AbortController();
+  const pending = layer.openNearest(
+    { lat: 38.58, lon: -121.49 },
+    { providerIds: ['google'], frame: false, signal: controller.signal },
+  );
+  await settle();
+  controller.abort();
+  answer?.();
+  assert.equal(await pending, false);
+  const street = layer.getUIState().street;
+  assert.equal(street.open, false, 'the retired lookup opened nothing');
+  assert.equal(street.loading, false, 'no stuck spinner');
+  assert.equal(street.error, null, 'and reports no missing imagery');
+  const refused = await layer.openNearest(
+    { lat: 38.58, lon: -121.49 },
+    { providerIds: ['google'], frame: false, signal: controller.signal },
+  );
+  assert.equal(refused, false, 'an already-aborted signal asks nothing');
+});

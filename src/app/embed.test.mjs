@@ -340,7 +340,6 @@ test('a view with street-level photos lets the action fly and open them', async 
     calls.map(([name]) => name),
     [
       'set_map_stack',
-      'set_layer_visibility',
       'stop_tracking',
       'clear_annotations',
       'show_street_level',
@@ -377,4 +376,145 @@ test('a link to street-level photos opens them after it restores', async () => {
       { latitude: 38.58, longitude: -121.49, provider: 'mapillary', fly: true },
     ],
   ]);
+});
+
+test('a view whose photos fail before any flight still gets its camera', async () => {
+  const viewer = fakeViewer();
+  const { calls, run } = recorder({
+    show_street_level: () => ({
+      ok: false,
+      stage: 'key',
+      error: 'needs its key',
+    }),
+  });
+  const view = createView({
+    camera: { lat: 1, lon: 2, altitude_m: 500 },
+    street_level: { provider: 'google' },
+  });
+  const steps = await applyView(view, {
+    viewer,
+    dataManager: fakeLayers(new Set()),
+    run,
+  });
+  assert.equal(viewer.flights.length, 1, 'the view flies itself');
+  assert.deepEqual(
+    steps.map((step) => [step.step, step.ok]),
+    [
+      ['set_map_stack', true],
+      ['stop_tracking', true],
+      ['clear_annotations', true],
+      ['show_street_level', false],
+      ['camera', true],
+    ],
+  );
+  assert.ok(calls.some(([name]) => name === 'show_street_level'));
+  // A flight that happened (the action reports where) is not repeated.
+  const flown = fakeViewer();
+  const { run: flownRun } = recorder({
+    show_street_level: () => ({
+      ok: false,
+      stage: 'imagery',
+      location: 'Somewhere',
+      error: 'no imagery',
+    }),
+  });
+  await applyView(view, {
+    viewer: flown,
+    dataManager: fakeLayers(new Set()),
+    run: flownRun,
+  });
+  assert.equal(flown.flights.length, 0);
+});
+
+test('a link runs its marks and photos in order, and posted views wait behind them', async () => {
+  const log = [];
+  let releaseStreetLevel = null;
+  const run = async (name, args) => {
+    log.push(`start:${name}`);
+    if (name === 'show_street_level')
+      await new Promise((resolve) => {
+        releaseStreetLevel = resolve;
+      });
+    log.push(`end:${name}`);
+    return {
+      ok: true,
+      ...(name === 'show_street_level' ? { location: 'x' } : {}),
+    };
+  };
+  const windowRef = new EventTarget();
+  windowRef.document = { body: { classList: { add() {} } } };
+  // A framing page: answers go to it, not to the app's own window.
+  windowRef.parent = {
+    postMessage: (message) => log.push(`post:${message.type}`),
+  };
+  const an = encodeURIComponent(
+    JSON.stringify([{ type: 'pin', target: 'Austin' }]),
+  );
+  installViews({
+    shell: { initialRestorePromise: Promise.resolve(), setCleanView() {} },
+    viewer: fakeViewer(),
+    dataManager: fakeLayers(new Set()),
+    run,
+    location: {
+      search: '?embed=1',
+      hash: `#v=2&lat=1&lon=2&an=${an}&sl=mapillary,1.00000,2.00000`,
+    },
+    windowRef,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  // A view arrives while the link's photos are still opening.
+  windowRef.dispatchEvent(
+    Object.assign(new Event('message'), {
+      source: windowRef.parent,
+      origin: 'null',
+      data: {
+        type: 'gev:view',
+        id: 'v1',
+        view: { camera: { lat: 3, lon: 4 } },
+      },
+    }),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const actions = () => log.filter((entry) => !entry.startsWith('post:'));
+  assert.deepEqual(actions().slice(0, 3), [
+    'start:annotate_map',
+    'end:annotate_map',
+    'start:show_street_level',
+  ]);
+  assert.ok(
+    !log.includes('start:stop_tracking'),
+    'the posted view waits for the link',
+  );
+  releaseStreetLevel();
+  for (
+    let tick = 0;
+    tick < 20 && !log.includes('post:gev:view-applied');
+    tick++
+  )
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(
+    log.indexOf('end:show_street_level') < log.indexOf('start:stop_tracking'),
+    true,
+  );
+  assert.ok(log.includes('post:gev:view-applied'), log.join(' '));
+});
+
+test('an aborted install never runs the link photos', async () => {
+  const { calls, run } = recorder();
+  const controller = new AbortController();
+  controller.abort();
+  installViews({
+    shell: { initialRestorePromise: Promise.resolve() },
+    viewer: fakeViewer(),
+    dataManager: fakeLayers(new Set()),
+    run,
+    signal: controller.signal,
+    location: {
+      search: '',
+      hash: '#v=2&lat=1&lon=2&sl=google,1.00000,2.00000',
+    },
+    windowRef: new EventTarget(),
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(calls, []);
 });
