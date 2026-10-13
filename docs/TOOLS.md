@@ -109,8 +109,10 @@ shows only on the Google 3D map, so a `google` source sets `map` to
 and open photos. The `street-level` layer is turned on. Links carry it as
 `sl=<source>,<lat>,<lon>`; once the link has restored, the app runs its
 `show_street_level` action, which flies to the point at street framing and
-opens the nearest photo. With `google` that is one billed panorama per visit,
-opened without a click.
+opens the nearest photo. A plain link with a `google` source stops before the
+billed load: the panel is armed and OPEN GOOGLE STREET VIEW is one click away.
+A view posted into the embedded app opens the photo, since it is the client's
+own request.
 
 Tools take a view as `VIEW_ARGUMENTS`: an `area` to frame from above, or a
 `camera`, plus `layers`, `style`, `map`, `follow`, `annotations` and

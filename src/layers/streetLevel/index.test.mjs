@@ -877,3 +877,60 @@ test('a caller’s signal retires a nearest lookup: nothing opens after it fires
   );
   assert.equal(refused, false, 'an already-aborted signal asks nothing');
 });
+
+test('providerStatus reports name, key state and billing on any map', async (t) => {
+  const { layer } = await withStreetView(t, { mapStack: 'osm' });
+  const google = layer.providerStatus('google');
+  assert.equal(google.name, 'Google Street View');
+  assert.equal(google.billed, true, 'every Street View load is billed');
+  assert.equal(google.available, false, 'not on this map');
+  assert.equal(google.keyRequired, false);
+  assert.equal(layer.providerStatus('mapillary').billed, false);
+  assert.equal(layer.providerStatus('nope'), null);
+  assert.equal(layer.requiredMapStack('google'), 'photoreal');
+  assert.equal(layer.requiredMapStack('mapillary'), null);
+});
+
+test('an armed lookup opens at its point and radius on the next OPEN press, and clears on close', async (t) => {
+  const { layer, fake } = await withStreetView(t);
+  layer.setProviderEnabled('google', true);
+  await settle();
+  layer.armNearest(
+    { lat: 38.57986, lon: -121.49372 },
+    { providerIds: ['google'], radiusM: 250 },
+  );
+  assert.deepEqual(layer.getUIState().street.armed, {
+    point: { lat: 38.57986, lon: -121.49372 },
+    providerIds: ['google'],
+    radiusM: 250,
+  });
+  // The OPEN button: no point, aimed at the screen centre.
+  const opened = await layer.openNearest(undefined, {
+    providerIds: ['google'],
+    frame: false,
+    aim: 'screen-centre',
+  });
+  assert.equal(opened, true);
+  const request = fake.lookups.at(-1);
+  assert.deepEqual(
+    request.location,
+    { lat: 38.57986, lng: -121.49372 },
+    'the armed point, not the screen centre',
+  );
+  assert.equal(request.radius, 250);
+  assert.equal(layer.getUIState().street.armed, null, 'used once');
+  layer.armNearest({ lat: 1, lon: 2 }, { providerIds: ['google'] });
+  layer.closeViewer();
+  assert.equal(layer.getUIState().street.armed, null, 'closing clears it');
+  layer.armNearest({ lat: 1, lon: 2 }, { providerIds: ['google'] });
+  await layer.openNearest(
+    { lat: 38.58, lon: -121.49 },
+    { providerIds: ['google'], frame: false },
+  );
+  assert.deepEqual(
+    fake.lookups.at(-1).location,
+    { lat: 38.58, lng: -121.49 },
+    'an explicit point wins',
+  );
+  assert.equal(layer.getUIState().street.armed, null);
+});

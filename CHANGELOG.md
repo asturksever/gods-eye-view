@@ -6,9 +6,10 @@
   nearest photo, reporting which step failed. Views and share links carry the
   same request (`street_level`, `sl=`), so `show_in_gods_eye_view` and a link
   can open a panorama at a place. Street View lookups from a geocoded place
-  search up to 250 m; clicks keep 50 m. A link with `sl=google` loads one
-  billed panorama without a click, and the source the action lights stays lit
-  like a chip click. An unavailable map stack now reports the controller's
+  search up to 250 m; clicks keep 50 m. A plain link with `sl=google` arms
+  Street View and leaves the billed load to a press of OPEN GOOGLE STREET
+  VIEW; embedded views open it. The source the action lights stays lit like a
+  chip click. An unavailable map stack now reports the controller's
   own reason instead of always asking for a Cesium ion token.
 
 - Treat explicitly current, complete empty vessel coverage as a successful update,

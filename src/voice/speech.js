@@ -301,6 +301,15 @@ function showStreetLevel(result) {
       },
     };
   }
+  if (result.armed === true)
+    return {
+      say: sentence(`${source} is ready at ${place}: press OPEN to load it`),
+      display: {
+        title: source,
+        lines: [place, 'Press OPEN to load the photo'],
+        sources: [{ label: source }],
+      },
+    };
   const title = spokenLabel(result.title || '', 60);
   const month = capturedMonth(result.capturedAt);
   return {

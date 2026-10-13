@@ -3928,6 +3928,7 @@ function createStreetLevelHarness({
             keyRequired,
             keyRejected: false,
             groundClick: id === 'google',
+            billed: id === 'google',
             available: id !== 'google' || stack === 'photoreal',
             error: keyRequired ? `${names[id]} needs its key` : null,
           }
@@ -3949,6 +3950,9 @@ function createStreetLevelHarness({
       coverage: { hint: 'not on this map' },
       street: { ...street },
     }),
+    armNearest(point, options) {
+      order.push(`arm:${options.providerIds.join('+')}:${options.radiusM ?? 'default'}:${point ? `${point.lat},${point.lon}` : 'view-centre'}`);
+    },
     async openNearest(point, options) {
       order.push(`open:${options.providerIds.join('+')}:${options.radiusM ?? 'default'}:${options.frame}${point ? '' : ':view-centre'}`);
       if (options.signal?.aborted) return false;
@@ -4200,4 +4204,28 @@ test('show_street_level retires its lookup when the turn is superseded, and says
   assert.deepEqual([result.ok, result.cancelled, result.stage], [false, true, 'imagery']);
   assert.doesNotMatch(result.error, /No .* imagery/);
   assert.ok(order.includes('open:signal:true'), 'the lookup gets the turn signal');
+});
+
+test('show_street_level with autoOpen:false arms a billed source and leaves the load to a click; a free source still opens', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const armedHarness = createStreetLevelHarness({ enabled: true, activeStack: 'osm' });
+  const armed = await armedHarness.runner('show_street_level', {
+    latitude: 38.5799, longitude: -121.4937, provider: 'google', fly: false, autoOpen: false,
+  });
+  assert.equal(armed.ok, true, armed.error);
+  assert.equal(armed.armed, true);
+  assert.equal(armed.imageId, undefined);
+  assert.deepEqual(
+    armedHarness.order,
+    ['map:photoreal', 'params:google:voice', 'arm:google:250:38.5799,-121.4937'],
+    'map and source are ready, the lookup is armed at the point, nothing is loaded',
+  );
+  assert.match(armed.say, /^Google Street View is ready at .*press OPEN/);
+  const free = createStreetLevelHarness({ enabled: true, activeStack: 'osm' });
+  const opened = await free.runner('show_street_level', {
+    latitude: 38.5799, longitude: -121.4937, provider: 'mapillary', fly: false, autoOpen: false,
+  });
+  assert.equal(opened.ok, true, opened.error);
+  assert.equal(opened.armed, undefined);
+  assert.equal(opened.imageId, 'pano-a');
 });

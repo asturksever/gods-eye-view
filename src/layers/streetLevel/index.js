@@ -317,6 +317,7 @@ export function createStreetLevelLayer({
   /** `frame: false` keeps the camera where it is (the user picked the spot). */
   function openImage(providerId, imageId, { frame = true } = {}) {
     abortNearest();
+    state.street.armed = null;
     const entry = state.providers.get(providerId);
     if (entry && !providerAvailable(entry)) {
       state.street.loading = false;
@@ -496,6 +497,7 @@ export function createStreetLevelLayer({
         keyRequired: stats.keyRequired === true || stats.keyRejected === true,
         keyRejected: stats.keyRejected === true,
         groundClick: entry.def.groundClick === true,
+        billed: entry.def.billedPerImage === true,
         available: providerAvailable(entry),
         error: stats.error || null,
       };
@@ -539,6 +541,7 @@ export function createStreetLevelLayer({
     disable() {
       state.enabled = false;
       abortNearest();
+      state.street.armed = null;
       unwatchSurface();
       parts.viewerHost.unmount();
       for (const entry of state.providers.values()) entry.instance.deactivate();
@@ -683,6 +686,14 @@ export function createStreetLevelLayer({
       } = {},
     ) {
       if (callerSignal?.aborted) return false;
+      // An OPEN press after a link armed a lookup opens what the link asked.
+      const armed = state.street.armed;
+      state.street.armed = null;
+      if (!point && armed) {
+        point = armed.point;
+        providerIds ??= armed.providerIds;
+        radiusM ??= armed.radiusM;
+      }
       const radius = Number.isFinite(radiusM)
         ? Math.min(NEAREST_RADIUS_MAX_M, Math.max(1, radiusM))
         : NEAREST_RADIUS_M;
@@ -767,8 +778,26 @@ export function createStreetLevelLayer({
     /** Close the image and deselect it everywhere on the map. */
     closeViewer() {
       abortNearest();
+      state.street.armed = null;
       parts.viewerHost.close();
       parts.clearSequences();
+      notify();
+    },
+    /**
+     * Prepare a nearest lookup for the next OPEN press without running it: a
+     * link to a source that bills every load stops here. The press opens at
+     * this point with these options; opening or closing anything clears it.
+     */
+    armNearest(point, { providerIds = null, radiusM = null } = {}) {
+      state.street.armed = {
+        point:
+          Number.isFinite(point?.lat) && Number.isFinite(point?.lon)
+            ? { lat: point.lat, lon: point.lon }
+            : null,
+        providerIds: Array.isArray(providerIds) ? [...providerIds] : null,
+        radiusM: Number.isFinite(radiusM) ? radiusM : null,
+      };
+      notify();
     },
     setViewerRenderMode: (mode) => parts.viewerHost.setRenderMode(mode),
     setFollow: (enabled) => parts.follow.setFollow(enabled),

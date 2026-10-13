@@ -373,9 +373,81 @@ test('a link to street-level photos opens them after it restores', async () => {
   assert.deepEqual(calls, [
     [
       'show_street_level',
-      { latitude: 38.58, longitude: -121.49, provider: 'mapillary', fly: true },
+      {
+        latitude: 38.58,
+        longitude: -121.49,
+        provider: 'mapillary',
+        fly: true,
+        autoOpen: false,
+      },
     ],
   ]);
+});
+
+test('a plain link never auto-loads a billed photo: it arms the panel and says so; an embedded view opens', async () => {
+  const toasts = [];
+  const panels = [];
+  const { calls, run } = recorder({
+    show_street_level: () => ({ ok: true, armed: true }),
+  });
+  installViews({
+    shell: {
+      initialRestorePromise: Promise.resolve(),
+      _showToast: (text) => toasts.push(text),
+      setPanelCollapsed: (id, collapsed, options) =>
+        panels.push([id, collapsed, options]),
+    },
+    viewer: fakeViewer(),
+    dataManager: fakeLayers(new Set()),
+    run,
+    location: {
+      search: '',
+      hash: '#v=2&lat=1&lon=2&map=photoreal&sl=google,38.57986,-121.49372',
+    },
+    windowRef: new EventTarget(),
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls[0][1].autoOpen, false);
+  assert.deepEqual(toasts, [
+    'Street View is ready: press OPEN GOOGLE STREET VIEW to load it',
+  ]);
+  assert.deepEqual(
+    panels,
+    [['street-level-panel', false, { explicit: true }]],
+    'the panel opens so OPEN is in view',
+  );
+  // The same link loaded into the embedded app is the client's request.
+  const embedded = recorder({ show_street_level: () => ({ ok: true }) });
+  const windowRef = new EventTarget();
+  windowRef.document = { body: { classList: { add() {} } } };
+  windowRef.parent = { postMessage() {} };
+  installViews({
+    shell: { initialRestorePromise: Promise.resolve(), setCleanView() {} },
+    viewer: fakeViewer(),
+    dataManager: fakeLayers(new Set()),
+    run: embedded.run,
+    location: {
+      search: '?embed=1',
+      hash: '#v=2&lat=1&lon=2&map=photoreal&sl=google,38.57986,-121.49372',
+    },
+    windowRef,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal('autoOpen' in embedded.calls[0][1], false);
+  // applyView (a posted view) opens too.
+  const posted = recorder();
+  await applyView(
+    createView({
+      camera: { lat: 1, lon: 2 },
+      street_level: { provider: 'google' },
+    }),
+    {
+      viewer: fakeViewer(),
+      dataManager: fakeLayers(new Set()),
+      run: posted.run,
+    },
+  );
+  assert.equal('autoOpen' in posted.calls.at(-1)[1], false);
 });
 
 test('a view whose photos fail before any flight still gets its camera', async () => {

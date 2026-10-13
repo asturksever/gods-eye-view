@@ -3036,6 +3036,9 @@ function normalizeStyle(value) {
  * does; the choice persists like a chip click. The key is checked before
  * anything changes, and each stage reports its own failure so speech can say
  * which part did not happen. With no place at all, the view centre is used.
+ * `autoOpen: false` (links, not the model) stops short of loading a photo
+ * from a source that bills every load: the panel is armed and the OPEN
+ * button is one click away.
  */
 export async function showStreetLevel(
   args,
@@ -3244,6 +3247,31 @@ export async function showStreetLevel(
     return fail('provider', `${providerName} could not be switched on`, {
       location,
     });
+
+  // A billed source never loads from a link without a click: everything is
+  // ready and OPEN is one press away at the view centre.
+  if (
+    args.autoOpen === false &&
+    (status?.billed === true || snapshot.billed === true)
+  ) {
+    // The next OPEN press loads exactly what the link asked for.
+    layerModule.armNearest?.(point, {
+      providerIds: [provider],
+      ...(snapshot.groundClick === true
+        ? { radiusM: STREET_LEVEL_WIDE_RADIUS_M }
+        : {}),
+    });
+    return {
+      ok: true,
+      action,
+      provider,
+      providerName,
+      label,
+      armed: true,
+      flew: location !== null,
+      ...(location ? { location: location.label } : {}),
+    };
+  }
 
   // A source with no coverage to click (Street View) is searched wider: a
   // geocoded landmark is rarely within 50 m of a street. A newer turn

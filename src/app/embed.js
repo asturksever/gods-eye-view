@@ -148,15 +148,25 @@ function flyTo(viewer, camera) {
   });
 }
 
-/** The `show_street_level` arguments for a view's street-level photos. */
-function streetLevelArgs(streetLevel) {
+/**
+ * The `show_street_level` arguments for a view's street-level photos. A plain
+ * link (`autoOpen: false`) never loads a photo from a source that bills every
+ * load: the app arms the panel and the OPEN button is one click away. A view
+ * posted into the embedded app is the client's own request and opens.
+ */
+function streetLevelArgs(streetLevel, { autoOpen = true } = {}) {
   return {
     latitude: streetLevel.lat,
     longitude: streetLevel.lon,
     ...(streetLevel.provider ? { provider: streetLevel.provider } : {}),
     fly: true,
+    ...(autoOpen ? {} : { autoOpen: false }),
   };
 }
+
+const STREET_LEVEL_PANEL_ID = 'street-level-panel';
+const ARMED_TOAST =
+  'Street View is ready: press OPEN GOOGLE STREET VIEW to load it';
 
 /**
  * Make the app show a view: style and map, exactly the view's layers,
@@ -272,15 +282,28 @@ export function installViews({
     queue = queue.then(async () => {
       if (!signal?.aborted) await run('annotate_map', { annotations: linked });
     });
-  // A link to street-level photos opens them once the link has restored.
+  // A link to street-level photos opens them once the link has restored. A
+  // plain link stops short of a billed load and leaves it to a click; an
+  // embedded view is the client's own request.
   const streetLevel = streetLevelFromParams(hashParams);
+  const embedded = isEmbedded(location);
   if (streetLevel)
     queue = queue.then(async () => {
-      if (!signal?.aborted)
-        await run('show_street_level', streetLevelArgs(streetLevel));
+      if (signal?.aborted) return;
+      const result = await run(
+        'show_street_level',
+        streetLevelArgs(streetLevel, { autoOpen: embedded }),
+      );
+      if (result?.armed === true) {
+        // The restore window keeps the panel collapsed; OPEN must be in view.
+        shell.setPanelCollapsed?.(STREET_LEVEL_PANEL_ID, false, {
+          explicit: true,
+        });
+        shell._showToast?.(ARMED_TOAST);
+      }
     });
   queue = queue.catch(() => {});
-  if (!isEmbedded(location)) return () => {};
+  if (!embedded) return () => {};
 
   windowRef.document.body.classList.add('ui-embed');
   shell.setCleanView?.(true);

@@ -20,6 +20,7 @@ export function filtersOf(provider) {
  * @property {boolean} [groundClick]   No coverage: a ground click at street zoom opens its nearest image.
  * @property {string} [requiresMapStack]   Usable only on this map stack.
  * @property {boolean} [defaultOn]     Default true.
+ * @property {boolean} [billedPerImage]   Every image load costs the key's owner: a link never opens one without a click.
  * @property {{kind: 'view-cone', color: string}} [marker]   Default: GEV's pin.
  * @property {Array<'pano'|'since'>} [filters]   Filters it honours (default both).
  * @property {(context: ProviderContext) => ProviderInstance} create

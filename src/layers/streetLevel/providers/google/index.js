@@ -67,6 +67,7 @@ export function createGoogleProvider({
     requiresMapStack: FOLLOW_MAP_STACK_ID,
     // Every panorama is billed to the Maps key.
     defaultOn: false,
+    billedPerImage: true,
     // All 360°, and no coverage for a date filter to thin.
     filters: [],
     marker: Object.freeze({ kind: 'view-cone', color: COLORS.coverage }),

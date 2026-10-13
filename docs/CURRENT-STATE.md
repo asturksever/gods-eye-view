@@ -3206,8 +3206,11 @@ brings `map: photoreal` and refuses another map; not with `follow`), links as
 `sl=<source>,<lat>,<lon>`; `show_in_gods_eye_view` accepts it, the globe panel
 applies it through the action, and a plain link runs the action once restored
 (one shot: the rewritten hash drops `sl`). In embed mode the photo opens as
-the lifted viewer, since the rail holding the panel is hidden there. A link
-with `sl=google` loads one billed panorama without a click.
+the lifted viewer, since the rail holding the panel is hidden there. A plain
+link never loads a photo from a source that bills every load
+(`billedPerImage` on the provider; Google): the action runs with
+`autoOpen: false`, arms the panel and a toast points at OPEN GOOGLE STREET
+VIEW. Embedded views open the photo.
 
 Street Level has two browser gates. `npm run qa:street-level -- --url <server>`
 runs against real Mapillary and needs `MAPILLARY_CLIENT_TOKEN`. `npm run

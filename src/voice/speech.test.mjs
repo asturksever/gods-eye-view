@@ -494,6 +494,15 @@ test('street-level speech names the source and the place, and says which step fa
     assertSpeakable(out.say);
     assert.deepEqual(out.display.lines, ['detail']);
   }
+  const armed = envelope('show_street_level', {
+    ok: true,
+    armed: true,
+    providerName: 'Google Street View',
+    label: '10th St, Sacramento',
+  });
+  assert.equal(armed.say, 'Google Street View is ready at 10th St, Sacramento: press OPEN to load it.');
+  assertSpeakable(armed.say);
+  assert.deepEqual(armed.display.lines, ['10th St, Sacramento', 'Press OPEN to load the photo']);
   const unfound = envelope('show_street_level', {
     ok: false,
     stage: 'location',
