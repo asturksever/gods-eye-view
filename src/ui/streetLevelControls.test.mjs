@@ -351,7 +351,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function standInProvider() {
   const def = fakeStreetLevelProvider({ html: 'Mapillary' });
-  return { filters: def.filters, def };
+  return { filterCalls: def.filterCalls, def };
 }
 
 /** Every other registered layer, as a module with no options. */
@@ -434,7 +434,11 @@ test('a 360° click reaches the share link through the data manager', () =>
       await productionPanel(dom);
     dom.root.querySelectorAll('[data-sl-pano]')[1].click(); // 360°
     await settle();
-    assert.equal(provider.filters.at(-1).pano, 'pano', 'the layer applied it');
+    assert.equal(
+      provider.filterCalls.at(-1).pano,
+      'pano',
+      'the layer applied it',
+    );
     assert.equal(
       coordinator.getDurableState().options['street-level'].pano,
       'pano',

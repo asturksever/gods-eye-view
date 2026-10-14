@@ -3926,6 +3926,11 @@ function createStreetLevelHarness({
   const layer = {
     providerIds: ['mapillary', 'google'],
     requiredMapStack: (id) => (id === 'google' ? 'photoreal' : null),
+    setParams: (next) => {
+      params = { ...params, ...next };
+      return true;
+    },
+    getParams: () => ({ ...params }),
     providerStatus: (id) =>
       names[id]
         ? {
@@ -4382,4 +4387,67 @@ test('show_street_level says "refused its key" when Google already refused it, a
   );
   assert.deepEqual([dark.ok, dark.stage], [false, 'provider']);
   assert.match(dark.error, /could not be switched on/);
+});
+
+test('set_street_level turns the layer on after the change, switches the map for Google first, and changes nothing without a key', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const off = createStreetLevelHarness({ enabled: false, activeStack: 'osm' });
+  const lit = await off.runner('set_street_level', { provider: 'mapillary', imagery: 'pano' });
+  assert.equal(lit.ok, true, lit.error);
+  // The harness logs every truthy param: the source switch and the 360° filter.
+  assert.deepEqual(off.order, ['params:mapillary+pano:voice', 'enable:street-level'], 'the change, then the layer on');
+  assert.deepEqual(lit.changed, ['provider', 'imagery', 'on']);
+
+  const google = createStreetLevelHarness({ enabled: true, activeStack: 'osm' });
+  const g = await google.runner('set_street_level', { provider: 'google' });
+  assert.equal(g.ok, true, g.error);
+  assert.deepEqual(google.order, ['map:photoreal', 'params:google:voice'], 'Google 3D before the source');
+  assert.ok(!google.order.some((entry) => entry.startsWith('open:') || entry.startsWith('arm:')), 'no photo, nothing billed');
+
+  const keyless = createStreetLevelHarness({ enabled: true, activeStack: 'osm', keyRequired: true });
+  const k = await keyless.runner('set_street_level', { provider: 'google', imagery: 'pano' });
+  assert.deepEqual([k.ok, k.stage], [false, 'key']);
+  assert.deepEqual(keyless.order, [], 'no map switch, no filter, no source change');
+  assert.equal(k.say, 'Google Street View needs its key.');
+
+  const refusedMap = createStreetLevelHarness({ enabled: true, activeStack: 'osm' });
+  const { viewer, styleManager } = createVoiceNavigationHarness();
+  styleManager.mapStackController = { getActiveId: () => 'osm' };
+  styleManager.setMapStack = async () => ({ ok: false, activeStack: 'osm', error: 'Google 3D needs GOOGLE_MAPS_API_KEY' });
+  const mapRunner = createGevActionRunner({ viewer, styleManager, dataManager: refusedMap.dataManager });
+  const m = await mapRunner('set_street_level', { provider: 'google' });
+  assert.deepEqual([m.ok, m.stage], [false, 'map']);
+  assert.deepEqual(refusedMap.order, [], 'the source is not switched when its map is refused');
+
+  const stays = createStreetLevelHarness({ enabled: true });
+  const read = await stays.runner('set_street_level', {});
+  assert.equal(read.ok, true);
+  assert.deepEqual([read.changed, stays.order], [[], []], 'a read writes nothing and toggles nothing');
+
+  const failedOn = createStreetLevelHarness({ enabled: false, enableResult: false });
+  const f = await failedOn.runner('set_street_level', { imagery: 'flat' });
+  assert.deepEqual([f.ok, f.stage], [false, 'layer']);
+  assert.equal(f.say, "Couldn't turn Street Level on or off.");
+});
+
+test('get_current_view_state carries the Street Level source and filters while the layer is on', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const on = createStreetLevelHarness({ enabled: true, lit: { mapillary: true, google: false } });
+  await on.runner('set_street_level', { imagery: 'pano', sinceYear: 2023 });
+  const { viewer } = createVoiceNavigationHarness();
+  const styleManager = {
+    activeStyle: 'normal',
+    getContextModeState: () => ({ mode: null, active: false }),
+    getCockpitState: () => ({ active: false }),
+    getControlState: () => null,
+  };
+  const dataManager = { ...on.dataManager, getAll: () => [{ id: 'street-level', name: 'Street Level', enabled: true, stats: {} }] };
+  const runner = createGevActionRunner({ viewer, styleManager, dataManager });
+  const view = await runner('get_current_view_state');
+  assert.equal(view.streetLevel.provider, 'mapillary');
+  assert.equal(view.streetLevel.imagery, 'pano');
+  assert.equal(view.streetLevel.sinceDate, '2023-01-01');
+  const offManager = { ...dataManager, isEnabled: () => false };
+  const offView = await createGevActionRunner({ viewer, styleManager, dataManager: offManager })('get_current_view_state');
+  assert.equal('streetLevel' in offView, false, 'not carried while the layer is off');
 });

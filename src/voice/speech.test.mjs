@@ -572,3 +572,26 @@ test('the capture month is a UTC month whatever the timezone, and labels name th
   );
   assert.equal(planStepLabel('show_street_level', {}), 'Street level at the view centre');
 });
+
+test('street-level settings speech echoes the resulting source and filters, and says why a change failed', () => {
+  const base = { ok: true, action: 'set_street_level', enabled: true, provider: 'mapillary', providerName: 'Mapillary', filtersApply: { imagery: true, since: true } };
+  const pano = envelope('set_street_level', { ...base, imagery: 'pano', sinceDays: 0, sinceDate: null });
+  assert.equal(pano.say, 'Mapillary, 360° only, any date.');
+  assertSpeakable(pano.say);
+  assert.deepEqual(pano.display.lines, ['Mapillary', '360° only, any date']);
+  const since = envelope('set_street_level', { ...base, imagery: 'flat', sinceDays: 400, sinceDate: '2023-06-01' });
+  assert.equal(since.say, 'Mapillary, flat photos only, since Jun 2023.');
+  const google = envelope('set_street_level', { ...base, provider: 'google', providerName: 'Google Street View', imagery: 'pano', sinceDays: 30, sinceDate: '2026-09-14', filtersApply: { imagery: false, since: false } });
+  assert.equal(google.say, "Google Street View on. Its panoramas aren't filtered by type or date.");
+  assert.deepEqual(google.display.lines, ['Google Street View', 'Filters apply to Mapillary']);
+  const unfilteredGoogle = envelope('set_street_level', { ...base, provider: 'google', providerName: 'Google Street View', imagery: 'all', sinceDays: 0, sinceDate: null, filtersApply: { imagery: false, since: false } });
+  assert.equal(unfilteredGoogle.say, 'Google Street View, all imagery, any date.', 'nothing to explain without filters');
+  assert.equal(envelope('set_street_level', { ...base, enabled: false }).say, 'Street Level off.');
+  assert.equal(envelope('set_street_level', { ok: false, stage: 'key', providerName: 'Google Street View' }).say, 'Google Street View needs its key.');
+  assert.equal(envelope('set_street_level', { ok: false, stage: 'key', keyRejected: true, providerName: 'Google Street View' }).say, 'Google Street View refused its key.');
+  assert.equal(envelope('set_street_level', { ok: false, stage: 'map', providerName: 'Google Street View' }).say, "Google Street View needs the Google 3D map, which isn't available.");
+  assert.equal(envelope('set_street_level', { ok: false, stage: 'filter', error: '1990 is not a past year' }).say, "Couldn't change Street Level.");
+  assert.equal(envelope('set_street_level', { ok: false, cancelled: true }).say, undefined);
+  assert.equal(planStepLabel('set_street_level', { provider: 'mapillary', imagery: 'pano', sinceYear: 2023 }), 'Street level: Mapillary, 360°, since 2023');
+  assert.equal(planStepLabel('set_street_level', {}), 'Street level settings');
+});

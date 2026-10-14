@@ -37,7 +37,8 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // omit top-level anyOf (OpenAI rejects it). Contacts list routing preserves
     // requested radius and center authority in descriptions only.
     // Street Level adds its toggle enum values and generated alias hint;
-    // show_street_level (fly, map, source, photo) is the only later change.
+    // show_street_level (fly, map, source, photo) and set_street_level
+    // (source and filters) are the only later changes.
     SHOW_STREET_LEVEL_PAYLOAD_DIGEST,
   );
   // Every shipped tool is byte-identical to the previous release: the new
@@ -48,7 +49,11 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
         stable(
           GEV_REALTIME_TOOLS.filter(
             (tool) =>
-              !['set_cyber_sonar', 'show_street_level'].includes(tool.name),
+              ![
+                'set_cyber_sonar',
+                'show_street_level',
+                'set_street_level',
+              ].includes(tool.name),
           ),
         ),
       ),
@@ -61,7 +66,7 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
 });
 
 const SHOW_STREET_LEVEL_PAYLOAD_DIGEST =
-  '465f6fcd68a1c58cc8279d0390becfd3edcd3e3db4d1a8a2a88ef92781eb3f48';
+  'bb13b95a63125804704376b5a4bedc91e58d3024a483e0e8034c6dd1135c4974';
 
 test('descriptions customize wording without changing immutable shared arguments', () => {
   const descriptions = {
@@ -118,9 +123,12 @@ test('metadata cannot add tools, fields, types or enum values', () => {
 test('all legacy action arguments are byte-identical after removing the deliberate additions', () => {
   const legacy = structuredClone(GEV_ACTION_SCHEMAS).filter(
     (tool) =>
-      !['next_satellite_pass', 'set_cyber_sonar', 'show_street_level'].includes(
-        tool.name,
-      ),
+      ![
+        'next_satellite_pass',
+        'set_cyber_sonar',
+        'show_street_level',
+        'set_street_level',
+      ].includes(tool.name),
   );
   // Layer enums are generated from the voice layer manifest and pinned by
   // layerManifest.test.mjs; the two shipped right-rail panels are additive.

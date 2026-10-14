@@ -1,5 +1,11 @@
 # Changelog
 
+- Street Level filters by voice and typed commands: `set_street_level` sets
+  the imagery source, 360°/flat and a captured-since window ("only 360
+  Mapillary coverage", "photos since 2023", "switch to Google Street View")
+  through the same persisted path as the panel, without opening a photo. The
+  view-state readout carries the settings while the layer is on.
+
 - "Show me X on Street View" (or on Mapillary): a `show_street_level` voice and
   typed action flies to the place, switches to Google 3D when the source needs
   it, lights that source in Street Level, turns the layer on and opens the

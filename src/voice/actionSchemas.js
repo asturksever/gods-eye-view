@@ -127,10 +127,32 @@ const schemas = [
           type: 'string',
           enum: ['google', 'mapillary'],
         },
-        fly: {
-          type: 'boolean',
-        },
         referent: {
+          type: 'integer',
+        },
+      },
+    },
+  },
+  {
+    name: 'set_street_level',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        provider: {
+          type: 'string',
+          enum: ['google', 'mapillary'],
+        },
+        imagery: {
+          type: 'string',
+          enum: ['all', 'pano', 'flat'],
+        },
+        sinceDays: {
+          type: 'integer',
+          minimum: 0,
+          maximum: 36500,
+        },
+        sinceYear: {
           type: 'integer',
         },
       },

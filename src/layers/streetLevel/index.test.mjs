@@ -432,7 +432,7 @@ test('setParams takes "any date" (0 days) and a provider switch over the current
     sinceDays: 0,
   });
   assert.equal(
-    provider.filters.at(-1).sinceMs,
+    provider.filterCalls.at(-1).sinceMs,
     null,
     'providers drop the cut-off',
   );
@@ -1265,4 +1265,143 @@ test('coverageLines hands back what a provider draws, and nothing for providers 
 test('coverageLines is empty for a provider that draws no coverage', async (t) => {
   const { layer } = await enabledLayer(t, [fakeProvider()]);
   assert.deepEqual(layer.coverageLines(fakeProvider().id), []);
+});
+
+/** The action runner over this real layer, with a data manager that routes
+ * params and visibility to it as the app's does. */
+async function runnerOverLayer(t, options = {}) {
+  const { createGevActionRunner } = await import('../../voice/gevActions.js');
+  const setup = await withStreetView(t, options);
+  const { layer, viewer } = setup;
+  viewer.clock ??= { onTick: { addEventListener: () => () => {} } };
+  viewer.camera.moveEnd ??= { addEventListener() {} };
+  let stack = options.mapStack ?? 'photoreal';
+  const writes = [];
+  const dataManager = {
+    layers: new Map([['street-level', { module: layer }]]),
+    isEnabled: () => true,
+    getLayerParams: () => layer.getParams(),
+    setLayerParams: (_id, params, { origin }) => {
+      writes.push({ params, origin });
+      layer.setParams(params);
+      return true;
+    },
+    getAll: () => [{ id: 'street-level', name: 'Street Level', enabled: true }],
+  };
+  const styleManager = {
+    mapStackController: { getActiveId: () => stack },
+    setMapStack: async (id) => {
+      stack = id;
+      setup.stack.switchTo(id);
+      return { ok: true, activeStack: id };
+    },
+  };
+  const runner = createGevActionRunner({ viewer, styleManager, dataManager });
+  return { ...setup, runner, writes, dataManager };
+}
+
+test('set_street_level: "only 360 Mapillary coverage" lights Mapillary and filters it, through the persisted path', async (t) => {
+  const { runner, layer, writes, fake } = await runnerOverLayer(t);
+  layer.setProviderEnabled('google', true);
+  await settle();
+  const lookups = fake.lookups.length;
+  const result = await runner('set_street_level', {
+    provider: 'mapillary',
+    imagery: 'pano',
+  });
+  assert.equal(result.ok, true, result.error);
+  assert.deepEqual(result.changed, ['provider', 'imagery']);
+  // The panel's own state: one source, the 360° filter.
+  const ui = layer.getUIState();
+  assert.deepEqual(
+    ui.providers.filter((p) => p.on).map((p) => p.id),
+    ['mapillary'],
+  );
+  assert.equal(ui.filter.pano, 'pano');
+  // The share link and saved state record it, as a chip and the filter would.
+  assert.equal(layer.getParams().pano, 'pano');
+  assert.equal(layer.getParams().mapillary, true);
+  assert.equal(writes.at(-1).origin, 'voice');
+  assert.equal(result.say, 'Mapillary, 360° only, any date.');
+  assert.equal(result.filtersApply.imagery, true);
+  assert.equal(fake.lookups.length, lookups, 'no Street View request');
+});
+
+test('set_street_level: a capture window by year or days, and back to any date', async (t) => {
+  const { runner, layer } = await runnerOverLayer(t);
+  const year = await runner('set_street_level', { sinceYear: 2023 });
+  assert.equal(year.ok, true, year.error);
+  assert.equal(year.sinceDate, '2023-01-01');
+  assert.equal(layer.getUIState().filter.sinceDays, year.sinceDays);
+  assert.equal(
+    year.sinceDays,
+    Math.floor((Date.now() - Date.UTC(2023, 0, 1)) / 86_400_000),
+  );
+  assert.equal(year.say, 'Mapillary, all imagery, since Jan 2023.');
+  const days = await runner('set_street_level', {
+    sinceDays: 182,
+    imagery: 'flat',
+  });
+  assert.equal(layer.getUIState().filter.sinceDays, 182);
+  assert.equal(layer.getUIState().filter.pano, 'flat');
+  assert.match(days.say, /^Mapillary, flat photos only, since /);
+  const any = await runner('set_street_level', {
+    sinceDays: 0,
+    imagery: 'all',
+  });
+  assert.equal(any.say, 'Mapillary, all imagery, any date.');
+  assert.equal(any.sinceDate, null);
+  for (const bad of [
+    { sinceYear: 1990 },
+    { sinceYear: 2999 },
+    { imagery: 'aerial' },
+    { provider: 'kartaview' },
+  ]) {
+    const before = JSON.stringify(layer.getParams());
+    const refused = await runner('set_street_level', bad);
+    assert.equal(refused.ok, false, JSON.stringify(bad));
+    assert.equal(JSON.stringify(layer.getParams()), before, 'nothing changed');
+  }
+});
+
+test('set_street_level: Google Street View lights on Google 3D without a request, and says its panoramas are not filtered', async (t) => {
+  const { runner, layer, fake } = await runnerOverLayer(t, { mapStack: 'osm' });
+  await runner('set_street_level', { imagery: 'pano', sinceYear: 2023 });
+  const lookups = fake.lookups.length;
+  const result = await runner('set_street_level', { provider: 'google' });
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.provider, 'google');
+  assert.equal(result.providerName, 'Google Street View');
+  assert.deepEqual(
+    layer
+      .getUIState()
+      .providers.filter((p) => p.on)
+      .map((p) => p.id),
+    ['google'],
+  );
+  assert.equal(
+    fake.lookups.length,
+    lookups,
+    'lighting a source loads no panorama',
+  );
+  assert.deepEqual(result.filtersApply, { imagery: false, since: false });
+  assert.equal(
+    result.say,
+    "Google Street View on. Its panoramas aren't filtered by type or date.",
+  );
+  // The filters are kept for Mapillary.
+  assert.equal(layer.getUIState().filter.pano, 'pano');
+});
+
+test('set_street_level with no arguments reads the settings and changes nothing', async (t) => {
+  const { runner, writes, layer } = await runnerOverLayer(t);
+  await runner('set_street_level', { imagery: 'flat' });
+  const before = writes.length;
+  const status = await runner('set_street_level', {});
+  assert.equal(status.ok, true);
+  assert.deepEqual(status.changed, []);
+  assert.equal(writes.length, before, 'no write');
+  assert.equal(status.imagery, 'flat');
+  assert.equal(status.provider, 'mapillary');
+  assert.equal(layer.getUIState().filter.pano, 'flat');
 });

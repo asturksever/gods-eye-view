@@ -39,7 +39,10 @@ export const CORE_PHRASES = Object.freeze([
   { phrase: 'Show me the Eiffel Tower on Street View', expect: 'show_street_level', typedArgs: [where('show_street_level', (a) => a.provider === 'google' && /eiffel/i.test(a.query || ''))] },
   { phrase: 'Street view of 10th Street in Sacramento', expect: 'show_street_level', typedArgs: [where('show_street_level', (a) => a.provider === 'google')] },
   { phrase: 'Show me Times Square on Mapillary', expect: 'show_street_level', typedArgs: [where('show_street_level', (a) => a.provider === 'mapillary')] },
-  { phrase: 'Switch to Google Street View', expect: 'show_street_level', typedArgs: [where('show_street_level', (a) => a.provider === 'google' && !a.query)] },
+  { phrase: 'Switch to Google Street View', expect: 'set_street_level', typedArgs: [where('set_street_level', (a) => a.provider === 'google')] },
+  { phrase: 'Only show 360 Mapillary coverage', expect: 'set_street_level', typedArgs: [where('set_street_level', (a) => a.provider === 'mapillary' && a.imagery === 'pano')] },
+  { phrase: 'Filter street level to photos since 2023', expect: 'set_street_level', typedArgs: [where('set_street_level', (a) => a.sinceYear === 2023 || (a.sinceDays > 900 && a.sinceDays < 1400))] },
+  { phrase: 'Show flat street photos only', expect: 'set_street_level', typedArgs: [where('set_street_level', (a) => a.imagery === 'flat')] },
   { phrase: 'Show me the Eiffel Tower', expect: 'fly_to_location' },
   { phrase: 'Turn on street level', expect: 'set_layer_visibility', typedArgs: [where('set_layer_visibility', (a) => a.layerId === 'street-level' && a.enabled === true)] },
 

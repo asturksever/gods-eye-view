@@ -661,8 +661,8 @@ test('the voice TOOL SCHEMA matches the pinned contract — the mission mapping 
   // Canonical serialization pins every tool name, description, property and
   // ordering while allowing source formatting. Derived from the unchanged
   // release schema before formatting (the previous source-byte pin passed).
-  // show_street_level (Street View / Mapillary photos) is a later, separate tool.
-  const legacyTools = structuredClone(GEV_REALTIME_TOOLS).filter((tool) => !['set_cyber_sonar', 'show_street_level'].includes(tool.name));
+  // show_street_level and set_street_level are later, separate tools.
+  const legacyTools = structuredClone(GEV_REALTIME_TOOLS).filter((tool) => !['set_cyber_sonar', 'show_street_level', 'set_street_level'].includes(tool.name));
   const hudLayout = legacyTools.find((tool) => tool.name === 'set_hud').parameters.properties.layout;
   assert.deepEqual(hudLayout.enum, ['tactical', 'operator', 'minimal', 'cyber']);
   // Cyber deliberately adds one layout; first-run missions still change no tools.

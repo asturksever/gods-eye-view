@@ -324,6 +324,69 @@ function showStreetLevel(result) {
   };
 }
 
+/** The panel's imagery and date filters as a short phrase each. */
+const IMAGERY_PHRASES = Object.freeze({
+  all: 'all imagery',
+  pano: '360° only',
+  flat: 'flat photos only',
+});
+
+function streetLevelSince(result) {
+  if (!(Number(result?.sinceDays) > 0) || !result?.sinceDate) return 'any date';
+  return `since ${capturedMonth(Date.parse(`${result.sinceDate}T00:00:00Z`))}`;
+}
+
+function setStreetLevel(result) {
+  const source = spokenLabel(result?.providerName || 'Street Level');
+  if (result?.cancelled) return null;
+  if (!result?.ok) {
+    let say;
+    if (result?.stage === 'key')
+      say = result?.keyRejected
+        ? `${source} refused its key.`
+        : `${source} needs its key.`;
+    else if (result?.stage === 'map')
+      say = `${source} needs the Google 3D map, which isn't available.`;
+    else if (result?.stage === 'layer')
+      say = "Couldn't turn Street Level on or off.";
+    else say = "Couldn't change Street Level.";
+    return {
+      say,
+      display: {
+        title: 'Street Level',
+        lines: [result?.error].filter(Boolean),
+        sources: [],
+      },
+    };
+  }
+  if (!result.enabled)
+    return {
+      say: 'Street Level off.',
+      display: { title: 'Street Level', lines: ['Off'], sources: [] },
+    };
+  const imagery = IMAGERY_PHRASES[result.imagery] || IMAGERY_PHRASES.all;
+  const since = streetLevelSince(result);
+  const filtered = result.imagery !== 'all' || Number(result.sinceDays) > 0;
+  const ignored =
+    filtered &&
+    result.filtersApply?.imagery === false &&
+    result.filtersApply?.since === false;
+  const say = ignored
+    ? `${source} on. Its panoramas aren't filtered by type or date.`
+    : sentence(`${source}, ${imagery}, ${since}`);
+  return {
+    say,
+    display: {
+      title: 'Street Level',
+      lines: [
+        source,
+        ignored ? 'Filters apply to Mapillary' : `${imagery}, ${since}`,
+      ],
+      sources: [{ label: source }],
+    },
+  };
+}
+
 function routeText(properties) {
   const route = spokenLabel(properties.route || '', 40);
   if (route) return route.replace(/\s*(?:-|→|>)\s*/g, ' to ');
@@ -506,6 +569,7 @@ export const SPEECH_BUILDERS = Object.freeze({
   frame_overhead: frameOverhead,
   select_nearest_aircraft: selectNearestAircraft,
   show_street_level: showStreetLevel,
+  set_street_level: setStreetLevel,
   get_entity_context: getEntityContext,
   get_current_view_state: getCurrentViewState,
   annotate_map: annotateMap,
@@ -576,6 +640,24 @@ export function planStepLabel(name, args = {}) {
       return `Nearest aircraft to ${displayName(args.locationQuery || args.locationId || 'here', 32)}`;
     case 'show_street_level':
       return `${args.provider === 'google' ? 'Street View' : args.provider === 'mapillary' ? 'Mapillary' : 'Street level'} at ${displayName(args.query || (args.latitude != null ? 'this spot' : 'the view centre'), 32)}`;
+    case 'set_street_level': {
+      const parts = [
+        args.provider === 'google'
+          ? 'Street View'
+          : args.provider === 'mapillary'
+            ? 'Mapillary'
+            : null,
+        args.imagery === 'pano'
+          ? '360°'
+          : args.imagery === 'flat'
+            ? 'flat'
+            : null,
+        args.sinceYear ? `since ${args.sinceYear}` : null,
+      ].filter(Boolean);
+      return parts.length
+        ? `Street level: ${parts.join(', ')}`
+        : 'Street level settings';
+    }
     case 'set_layer_visibility':
       return `${displayName(args.layerId || 'Layer', 32)} ${args.enabled === false ? 'off' : 'on'}`;
     case 'get_entity_context':

@@ -25,7 +25,9 @@ export function providerSnapshot(overrides = {}) {
 
 /**
  * The smallest provider the core accepts. Mutate `stats` to change what
- * coverageStats() answers; `calls`, `filters` and `context()` record use.
+ * coverageStats() answers; `calls`, `filterCalls` and `context()` record use.
+ * (Not `filters`: that is the contract's list of filters a source honours,
+ * and an empty one would declare that it honours none.)
  */
 export function fakeStreetLevelProvider({
   id = 'mapillary',
@@ -34,7 +36,7 @@ export function fakeStreetLevelProvider({
   nearestImage = async () => null,
 } = {}) {
   const calls = { activate: 0, deactivate: 0, mount: 0, open: [], unmount: 0 };
-  const filters = [];
+  const filterCalls = [];
   const stats = {
     count: 0,
     zoom: null,
@@ -47,7 +49,7 @@ export function fakeStreetLevelProvider({
   let context = null;
   return {
     calls,
-    filters,
+    filterCalls,
     stats,
     context: () => context,
     id,
@@ -66,7 +68,7 @@ export function fakeStreetLevelProvider({
         deactivate: () => calls.deactivate++,
         destroy() {},
         refreshCoverage() {},
-        setFilter: (filter) => filters.push(filter),
+        setFilter: (filter) => filterCalls.push(filter),
         coverageStats: () => ({ ...stats }),
         handlePick: () => false,
         nearestImage,

@@ -26,7 +26,9 @@ import {
 } from '../data/contextStore.js';
 import { CCTV_FOCUS_RESULT } from '../layers/cctv/index.js';
 import {
+  MAX_SINCE_DAYS,
   NEAREST_RADIUS_MAX_M as STREET_LEVEL_WIDE_RADIUS_M,
+  PANO_MODES,
   STREET_LEVEL_LAYER_ID,
 } from '../layers/streetLevel/policy.js';
 import { contextModeWord } from '../contextModePolicy.js';
@@ -689,6 +691,16 @@ export function createGevActionRunner({
           onGround: false,
         },
       };
+    }
+
+    if (name === 'set_street_level') {
+      return setStreetLevel(args, {
+        dataManager,
+        styleManager,
+        runGevAction,
+        runOptions,
+        current,
+      });
     }
 
     if (name === 'show_street_level') {
@@ -3029,6 +3041,204 @@ function normalizeStyle(value) {
   return null;
 }
 
+const DAY_MS = 86_400_000;
+
+/** The Street Level settings a person can see in the panel, for speech. */
+function readStreetLevelState(dataManager, layerModule) {
+  const ui = layerModule.getUIState?.() || {};
+  const params =
+    dataManager.getLayerParams?.(STREET_LEVEL_LAYER_ID) ||
+    layerModule.getParams?.() ||
+    {};
+  const ids = Array.isArray(layerModule.providerIds)
+    ? layerModule.providerIds
+    : [];
+  // The panel lists a source only on the map it needs: fall back to params.
+  const litId =
+    (ui.providers || []).find((entry) => entry.on)?.id ||
+    ids.find((id) => params[id] === true) ||
+    null;
+  const status = litId ? layerModule.providerStatus?.(litId) || null : null;
+  const filter = ui.filter || {
+    pano: params.pano ?? 'all',
+    sinceDays: params.sinceDays ?? 0,
+  };
+  const sinceDays = Number(filter.sinceDays) || 0;
+  return {
+    enabled: Boolean(dataManager.isEnabled?.(STREET_LEVEL_LAYER_ID)),
+    provider: litId,
+    providerName: status?.name || litId,
+    imagery: PANO_MODES.includes(filter.pano) ? filter.pano : 'all',
+    sinceDays,
+    sinceDate:
+      sinceDays > 0
+        ? new Date(Date.now() - sinceDays * DAY_MS).toISOString().slice(0, 10)
+        : null,
+    // Google's panoramas are all 360° and undated by this filter.
+    filtersApply: {
+      imagery: ui.filterControls?.pano !== false,
+      since: ui.filterControls?.since !== false,
+    },
+    coverageCount: Number.isFinite(ui.coverage?.count)
+      ? ui.coverage.count
+      : null,
+  };
+}
+
+/**
+ * Street Level settings without opening a photo: the imagery source (one at
+ * a time), 360°/flat, captured-since and on/off, through the same persisted
+ * path as the panel (`setLayerParams`), so the panel, saved state and share
+ * link follow. A source with a key it lacks changes nothing; a source that
+ * needs a map gets it first. A change turns the layer on unless `enabled` is
+ * false. No arguments reads the current settings.
+ */
+export async function setStreetLevel(
+  args,
+  {
+    dataManager,
+    styleManager,
+    runGevAction,
+    runOptions = {},
+    current = () => true,
+  },
+) {
+  const action = 'set_street_level';
+  let provider = null;
+  let providerName = null;
+  const fail = (stage, error, extra = {}) => ({
+    ok: false,
+    action,
+    stage,
+    cancelled: !current(),
+    error,
+    ...(provider ? { provider } : {}),
+    ...(providerName ? { providerName } : {}),
+    ...extra,
+  });
+  const layerModule =
+    dataManager?.layers?.get?.(STREET_LEVEL_LAYER_ID)?.module || null;
+  if (!layerModule || typeof layerModule.setParams !== 'function')
+    return fail('provider', 'Street Level is unavailable');
+  const providerIds = Array.isArray(layerModule.providerIds)
+    ? layerModule.providerIds
+    : [];
+  const params = {};
+  const changed = [];
+
+  const requested = String(args.provider || '')
+    .trim()
+    .toLowerCase();
+  if (requested) {
+    if (!providerIds.includes(requested))
+      return fail(
+        'provider',
+        `${requested} is not a street-level imagery source here`,
+      );
+    provider = requested;
+    const status = layerModule.providerStatus?.(provider) || null;
+    providerName = status?.name || provider;
+    // A chip without a key explains it and switches nothing; so does this.
+    if (status && (status.keyRequired === true || status.configured === false))
+      return fail('key', status.error || `${providerName} needs its key`, {
+        keyRejected: status.keyRejected === true,
+      });
+    for (const id of providerIds) params[id] = id === provider;
+    changed.push('provider');
+  }
+
+  if (args.imagery != null) {
+    if (!PANO_MODES.includes(args.imagery))
+      return fail('filter', `Unknown imagery type: ${args.imagery}`);
+    params.pano = args.imagery;
+    changed.push('imagery');
+  }
+
+  let sinceDays = null;
+  if (args.sinceYear != null) {
+    const year = Number(args.sinceYear);
+    const start = Date.UTC(year, 0, 1);
+    // Mapillary began in 2013; anything before is "any date" in practice.
+    if (!Number.isInteger(year) || year < 2000 || !(start < Date.now()))
+      return fail('filter', `${args.sinceYear} is not a past year`);
+    // Rounded down, so the cut-off (and the panel's SINCE label) is on
+    // 1 January, not the day before.
+    sinceDays = Math.min(
+      Math.floor((Date.now() - start) / DAY_MS),
+      MAX_SINCE_DAYS,
+    );
+  } else if (args.sinceDays != null) {
+    const days = Number(args.sinceDays);
+    if (!Number.isInteger(days) || days < 0)
+      return fail('filter', `${args.sinceDays} is not a number of days`);
+    sinceDays = Math.min(days, MAX_SINCE_DAYS);
+  }
+  if (sinceDays !== null) {
+    params.sinceDays = sinceDays;
+    changed.push('since');
+  }
+
+  // The source's map first (Street View: Google 3D only).
+  if (provider) {
+    const requiredStack = layerModule.requiredMapStack?.(provider) || null;
+    const activeStack =
+      styleManager?.mapStackController?.getActiveId?.() ?? null;
+    if (requiredStack && activeStack !== requiredStack) {
+      const map = await runGevAction(
+        'set_map_stack',
+        { stack: requiredStack },
+        runOptions,
+      );
+      if (map?.ok !== true || !current())
+        return fail(
+          'map',
+          map?.error ||
+            `${providerName} needs the ${requiredStack} map, which is not available`,
+          { map },
+        );
+    }
+  }
+
+  if (changed.length) {
+    const accepted =
+      typeof dataManager.setLayerParams === 'function'
+        ? dataManager.setLayerParams(STREET_LEVEL_LAYER_ID, params, {
+            origin: 'voice',
+          }) !== false
+        : layerModule.setParams(params) !== false;
+    if (!accepted)
+      return fail('filter', 'Street Level did not take the change');
+  }
+
+  // A change is meant to be seen: it turns the layer on unless told off.
+  const wantOn =
+    args.enabled === true || (args.enabled == null && changed.length > 0);
+  const wantOff = args.enabled === false;
+  const isOn = Boolean(dataManager.isEnabled?.(STREET_LEVEL_LAYER_ID));
+  if ((wantOn && !isOn) || (wantOff && isOn)) {
+    const layer = await runGevAction(
+      'set_layer_visibility',
+      { layerId: STREET_LEVEL_LAYER_ID, enabled: wantOn },
+      runOptions,
+    );
+    if (layer?.ok !== true || !current())
+      return fail(
+        'layer',
+        layer?.error ||
+          `Street Level could not be turned ${wantOn ? 'on' : 'off'}`,
+        { cancelled: !current() || Boolean(layer?.cancelled) },
+      );
+    changed.push(wantOn ? 'on' : 'off');
+  }
+
+  return {
+    ok: true,
+    action,
+    changed,
+    ...readStreetLevelState(dataManager, layerModule),
+  };
+}
+
 /**
  * "Show me <place> on Street View / on Mapillary": fly to the place, make sure
  * the imagery source's map is up, light that source in Street Level, turn the
@@ -3588,6 +3798,17 @@ function getCurrentViewState(
     feedProvenance: feedProvenanceEnvelope(
       layerSnapshots(dataManager.getAll()).filter((layer) => layer.enabled),
     ),
+    // Source and filters, only while the layer is on (set_street_level with
+    // no arguments reads them otherwise).
+    ...(dataManager.isEnabled?.(STREET_LEVEL_LAYER_ID) &&
+    dataManager.layers?.get?.(STREET_LEVEL_LAYER_ID)?.module
+      ? {
+          streetLevel: readStreetLevelState(
+            dataManager,
+            dataManager.layers.get(STREET_LEVEL_LAYER_ID).module,
+          ),
+        }
+      : {}),
   };
 }
 
