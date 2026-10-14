@@ -12,6 +12,17 @@
   chip click. An unavailable map stack now reports the controller's
   own reason instead of always asking for a Cesium ion token.
 
+- Add New York City traffic cameras from the NYC DOT Traffic Management Center
+  as an opt-in CCTV pack. NYC DOT requires a data-sharing agreement for the
+  camera feed, so the pack is off unless `CCTV_NYC_ENABLED=1` is set by an
+  operator who holds one; otherwise no request reaches NYC DOT. NYC DOT's
+  requested disclaimer is in the Data attribution popover. The camera list is one keyless JSON request to
+  `webcams.nyctmc.org/api/cameras`; frames are stills synthesized from each
+  camera UUID on that same host, so a catalog field cannot steer the proxy
+  off-host. Offline cameras are dropped. Once enabled, the 250 cameras nearest
+  the five borough cores load and `CCTV_NYC_MAX_SOURCES` changes the cap. The catalog-wide ceiling is
+  unchanged; extra cameras share it round-robin with the other packs.
+
 - Treat explicitly current, complete empty vessel coverage as a successful update,
   clearing obsolete contacts while retaining stale or incomplete snapshots.
 
