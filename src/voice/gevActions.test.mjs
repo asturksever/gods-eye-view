@@ -4383,3 +4383,17 @@ test('show_street_level says "refused its key" when Google already refused it, a
   assert.deepEqual([dark.ok, dark.stage], [false, 'provider']);
   assert.match(dark.error, /could not be switched on/);
 });
+
+test('show_street_level without a flight needs the item where it is now, not where a list saw it', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const harness = createStreetLevelHarness({ enabled: true, activeStack: 'photoreal' });
+  // The referent carries the coordinates the list saved, but it is no longer loaded.
+  const stale = await harness.runner('show_street_level', {
+    provider: 'google',
+    fly: false,
+    entity: { layerId: 'cctv', id: 'cam-gone', label: 'Camera 7', lat: 38.58, lon: -121.5 },
+  });
+  assert.deepEqual([stale.ok, stale.stage], [false, 'location']);
+  assert.match(stale.error, /no longer loaded/);
+  assert.ok(!harness.order.some((entry) => entry.startsWith('open:')), 'nothing looked up at the stale point');
+});

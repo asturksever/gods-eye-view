@@ -1278,3 +1278,46 @@ test('outside embed mode a photo opens in the panel, not lifted', () =>
     assert.equal(controls.isViewerExpanded(), false);
     controls.destroy();
   }));
+
+test('in embed mode Esc closes the photo (the rail it would shrink into is hidden), and the next photo is lifted again', () =>
+  withDom(async (dom) => {
+    dom.document.body.classList.add('ui-embed');
+    const { layer, controls } = stubPanel(dom, uiState({ open: false }));
+    let closed = 0;
+    layer.closeViewer = () => {
+      closed++;
+      layer.publish(uiState({ open: false }));
+    };
+    layer.publish(uiState({ open: true }));
+    assert.equal(controls.isViewerExpanded(), true, 'lifted');
+    keydown(dom.globe, 'Escape');
+    assert.equal(closed, 1, 'Esc closed the photo');
+    assert.equal(controls.isViewerExpanded(), false);
+    // Reopen: visible again, lifted over the globe.
+    layer.publish(uiState({ open: true }));
+    assert.equal(controls.isViewerExpanded(), true, 'the next photo is lifted');
+    controls.destroy();
+  }));
+
+test('in embed mode an open photo that was shrunk any other way is lifted again on the next update', () =>
+  withDom(async (dom) => {
+    dom.document.body.classList.add('ui-embed');
+    const { layer, controls } = stubPanel(dom, uiState({ open: false }));
+    layer.publish(uiState({ open: true }));
+    controls.setViewerExpanded(false);
+    layer.publish(uiState({ open: true }));
+    assert.equal(controls.isViewerExpanded(), true);
+    controls.destroy();
+  }));
+
+test('outside embed mode Esc still shrinks the expanded viewer and keeps the photo', () =>
+  withDom(async (dom) => {
+    const { layer, controls } = stubPanel(dom, uiState({ open: true }));
+    let closed = 0;
+    layer.closeViewer = () => closed++;
+    controls.setViewerExpanded(true);
+    keydown(dom.globe, 'Escape');
+    assert.equal(controls.isViewerExpanded(), false);
+    assert.equal(closed, 0, 'the photo stays open in the panel');
+    controls.destroy();
+  }));

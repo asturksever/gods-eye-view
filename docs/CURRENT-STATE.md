@@ -3241,7 +3241,12 @@ brings `map: photoreal` and refuses another map; not with `follow`), links as
 `sl=<source>,<lat>,<lon>`; `show_in_gods_eye_view` accepts it, the globe panel
 applies it through the action, and a plain link runs the action once restored
 (one shot: the rewritten hash drops `sl`). In embed mode the photo opens as
-the lifted viewer, since the rail holding the panel is hidden there. A plain
+the lifted viewer, since the rail holding the panel is hidden there, and Esc
+closes it rather than shrinking it into that rail. A caller's abort is
+honoured through the viewer's mount and load, not just the lookup, and only
+the lookup that still owns the panel may change its spinner or error. A
+passive link's photos stand down if anyone navigated (a gesture, a search,
+the assistant) while the link waited behind its own marks. A plain
 link never loads a photo from a source that bills every load
 (`billedPerImage` on the provider; Google): the action runs with
 `autoOpen: false`, arms the lookup on the layer (`armNearest`: the link's

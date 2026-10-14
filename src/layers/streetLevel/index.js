@@ -321,7 +321,12 @@ export function createStreetLevelLayer({
   }
 
   /** `frame: false` keeps the camera where it is (the user picked the spot). */
-  function openImage(providerId, imageId, { frame = true } = {}) {
+  function openImage(
+    providerId,
+    imageId,
+    { frame = true, signal = null } = {},
+  ) {
+    if (signal?.aborted) return Promise.resolve(false);
     abortNearest();
     state.street.armed = null;
     const entry = state.providers.get(providerId);
@@ -331,7 +336,7 @@ export function createStreetLevelLayer({
       notify();
       return Promise.resolve(false);
     }
-    return parts.viewerHost.open(providerId, imageId, { frame });
+    return parts.viewerHost.open(providerId, imageId, { frame, signal });
   }
 
   function unavailableReason(entry) {
@@ -731,8 +736,11 @@ export function createStreetLevelLayer({
       callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
       const retired = () => {
         callerSignal?.removeEventListener('abort', onCallerAbort);
+        // Only the lookup that still owns the panel may touch it: a newer one
+        // has its own spinner and error.
+        if (nearestLookup !== lookup) return false;
+        nearestLookup = null;
         // The caller moved on: the panel shows nothing of this lookup.
-        if (nearestLookup === lookup) nearestLookup = null;
         if (state.street.loading && !state.street.open) {
           state.street.loading = false;
           notify();
@@ -771,10 +779,16 @@ export function createStreetLevelLayer({
         if (!imageId || !entry.on || !providerAvailable(entry)) continue;
         nearestLookup = null;
         callerSignal?.removeEventListener('abort', onCallerAbort);
-        return openImage(entry.def.id, imageId, { frame });
+        // The caller's signal still counts while the viewer mounts and loads.
+        return openImage(entry.def.id, imageId, {
+          frame,
+          signal: callerSignal,
+        });
       }
       callerSignal?.removeEventListener('abort', onCallerAbort);
-      if (nearestLookup === lookup) nearestLookup = null;
+      // Replaced while it looked: the panel is the newer lookup's.
+      if (nearestLookup !== lookup) return false;
+      nearestLookup = null;
       // Switched off while it looked: nothing to open, nothing to report.
       const stillOn = entries.some(
         (entry) => entry.on && providerAvailable(entry),
