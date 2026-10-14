@@ -15,6 +15,10 @@
   is found and a 360°, flat or SINCE filter the source honours is on, the
   answer names the filter.
 
+- The right rail ignores panels that other CSS hides, such as during an event
+  view, so they no longer force one-panel-at-a-time layout or collapse visible
+  panels. Panels the rail collapses itself are still restored.
+
 - Coordinate searches refuse empty latitude or longitude components instead of navigating to an unintended location.
 
 - Bing Aerial and Bing Labels request HTTPS tiles on HTTP localhost through
