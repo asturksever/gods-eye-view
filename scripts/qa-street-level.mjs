@@ -525,11 +525,27 @@ async function selectSequenceByClick(
 ) {
   const tried = [];
   for (let attempt = 1; attempt <= attempts; attempt++) {
-    const handle = await page.waitForFunction(
-      findAndClickPickPoint,
-      { timeout: findTimeout, polling: 300 },
-      spec,
-    );
+    let handle;
+    try {
+      handle = await page.waitForFunction(
+        findAndClickPickPoint,
+        { timeout: findTimeout, polling: 300 },
+        spec,
+      );
+    } catch (error) {
+      if (error?.name !== 'TimeoutError') throw error;
+      const seen = await page.evaluate(() => ({
+        picks: window.__qaPickStats || null,
+        primitives: window.__qaLinesReady || null,
+        coverage: window.__godsEyeView.dataManager.layers
+          .get('street-level')
+          .module.getUIState().coverage,
+      }));
+      throw new Error(
+        `no pickable coverage line within ${findTimeout / 1000} s: ${JSON.stringify(seen)}`,
+        { cause: error },
+      );
+    }
     const at = await handle.jsonValue();
     const selected = await settle(
       page,
@@ -627,10 +643,16 @@ export function findPickPoint({
       onScreen.push([lon, lat, Math.hypot(at.x - centreX, at.y - centreY)]);
     }
     onScreen.sort((a, b) => a[2] - b[2]);
-    // The nearest sixty; the blind scan below remains the fallback.
-    points = onScreen.length
-      ? onScreen.slice(0, 60).map(([lon, lat]) => [lon, lat])
-      : null;
+    // A few points near the middle per attempt: every pick is a render, and
+    // short attempts repeat often while the scene settles.
+    points = onScreen.slice(0, 16).map(([lon, lat]) => [lon, lat]);
+    window.__qaPickStats = {
+      lines: lines.length,
+      onScreen: onScreen.length,
+      tried: points.length,
+      at: Date.now(),
+    };
+    if (!points.length) return null;
   }
   const windowPoint = (x, y) => (Cartesian2 ? new Cartesian2(x, y) : { x, y });
   const wanted = (picked) => {
@@ -679,8 +701,9 @@ export function findPickPoint({
       centres.push([at.x, at.y]);
     }
   }
+  const maxRadius = linesFrom ? 8 : 16;
   for (const [cx, cy] of centres)
-    for (let r = 0; r <= 16; r += 2)
+    for (let r = 0; r <= maxRadius; r += 2)
       for (const [dx, dy] of [
         [0, 0],
         [r, 0],
@@ -691,9 +714,9 @@ export function findPickPoint({
         const hit = tryAt(cx + dx, cy + dy);
         if (hit) return hit;
       }
-  // Known points (fixtures, billboards) are exact: no scan for them. Lines
-  // aimed from geometry fall through to the scan, as before.
-  if ((points && !linesFrom) || billboardIds) return null;
+  // Known points (fixtures, billboards, drawn geometry) are exact: no scan,
+  // whose thousands of picks would outlast the wait on a loaded machine.
+  if (points || billboardIds) return null;
   for (let y = rect.height * 0.25; y < rect.height * 0.8; y += 18)
     for (let x = rect.width * 0.25; x < rect.width * 0.7; x += 6) {
       const hit = tryAt(x, y);
