@@ -379,6 +379,16 @@ async function clickPanelControl(page, selector, { timeout = 5_000 } = {}) {
   }
 }
 
+/**
+ * Open a share link as a fresh document. Changing only the hash of a live
+ * page and reloading races the app's share-link writer, which can put its
+ * own state back in the hash before the reload reads it.
+ */
+async function openLinkFresh(page, link) {
+  await page.goto('about:blank');
+  await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+}
+
 /** Load the app and clear the first-run dialog. */
 export async function boot(page, url) {
   // A cold dev server compiles the app on first load; under load that can
@@ -2266,12 +2276,10 @@ async function main() {
         await step(
           'a link to street-level photos (sl=) opens the one at its point after it restores',
           async () => {
-            await page.goto(
+            await openLinkFresh(
+              page,
               `${url.split('#')[0]}#v=2&lat=${cameraLat}&lon=${photo.lon}&alt=600&heading=0&pitch=-60&roll=0&sl=mapillary,${photo.lat},${photo.lon}`,
-              { waitUntil: 'domcontentloaded' },
             );
-            // A hash change alone keeps the document: the link is read on load.
-            await page.reload({ waitUntil: 'domcontentloaded' });
             await clearFirstRun(page);
             await waitForImage();
             const street = (await ui()).street;
@@ -2348,11 +2356,10 @@ async function main() {
           };
           page.on('request', onRequest);
           try {
-            await page.goto(
+            await openLinkFresh(
+              page,
               `${url.split('#')[0]}#v=2&lat=${cameraLat}&lon=${point.lon}&alt=${cameraHeight}&heading=0&pitch=-60&roll=0&map=osm&sl=google,${point.lat},${point.lon}`,
-              { waitUntil: 'domcontentloaded' },
             );
-            await page.reload({ waitUntil: 'domcontentloaded' });
             await clearFirstRun(page);
             await page.waitForFunction(
               () => Boolean(window.__godsEyeView?.voiceCommands?.runner),
