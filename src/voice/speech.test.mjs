@@ -572,3 +572,28 @@ test('the capture month is a UTC month whatever the timezone, and labels name th
   );
   assert.equal(planStepLabel('show_street_level', {}), 'Street level at the view centre');
 });
+
+test('the plan step names KartaView as a source', () => {
+  assert.equal(
+    planStepLabel('show_street_level', {
+      query: 'Alexanderplatz',
+      provider: 'kartaview',
+    }),
+    'KartaView at Alexanderplatz',
+  );
+});
+
+test('an empty street-level search names the imagery filter that hid the photos', () => {
+  const out = envelope('show_street_level', {
+    ok: false,
+    stage: 'imagery',
+    label: 'Alexanderplatz',
+    providerName: 'KartaView',
+    filter: { pano: 'pano', label: '360° filter' },
+  });
+  assert.equal(
+    out.say,
+    'No KartaView imagery near Alexanderplatz with the 360° filter on.',
+  );
+  assertSpeakable(out.say);
+});

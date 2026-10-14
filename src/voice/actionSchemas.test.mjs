@@ -61,7 +61,7 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
 });
 
 const SHOW_STREET_LEVEL_PAYLOAD_DIGEST =
-  '465f6fcd68a1c58cc8279d0390becfd3edcd3e3db4d1a8a2a88ef92781eb3f48';
+  'a1d8f6d6fa3fda47931b1f656d5459d47974da1778ff42c3bac0e6cc227e54b1';
 
 test('descriptions customize wording without changing immutable shared arguments', () => {
   const descriptions = {

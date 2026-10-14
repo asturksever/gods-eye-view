@@ -102,8 +102,8 @@ name or coordinates). Links carry them in the `an` parameter, and the app
 draws them once the link has been restored.
 
 A view can open street-level photos too: `street_level` names a source
-(`google` for Street View, `mapillary`, or none for whichever the panel has
-lit) and a point, which defaults to the spot the camera looks at. Street View
+(`google` for Street View, `mapillary`, `kartaview`, or none for whichever
+the panel has lit) and a point, which defaults to the spot the camera looks at. Street View
 shows only on the Google 3D map, so a `google` source sets `map` to
 `photoreal` and any other map is refused; a view cannot both follow an entity
 and open photos. The `street-level` layer is turned on. Links carry it as
@@ -113,7 +113,8 @@ opens the nearest photo. A plain link with a `google` source stops before the
 billed load: the panel is armed and OPEN GOOGLE STREET VIEW is one click away.
 A view posted into the embedded app, or the panel page's own opening link,
 opens the photo, since it is the client's own request; `?embed=1` on a
-published link does not. A link that follows an entity ignores `sl`.
+published link does not. Mapillary and KartaView links open the photo at
+once; neither bills per image. A link that follows an entity ignores `sl`.
 
 Tools take a view as `VIEW_ARGUMENTS`: an `area` to frame from above, or a
 `camera`, plus `layers`, `style`, `map`, `follow`, `annotations` and

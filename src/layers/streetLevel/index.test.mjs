@@ -1465,3 +1465,87 @@ test('an aborted older lookup leaves its replacement’s spinner alone', async (
     'the newer lookup reports its own result',
   );
 });
+
+test('show_street_level opens a KartaView photo, and a plain link opens it at once since it is not billed', async (t) => {
+  const { createGevActionRunner } = await import('../../voice/gevActions.js');
+  const mapillary = fakeProvider();
+  let nearest = 'kv-1';
+  const kartaview = fakeProvider({
+    id: 'kartaview',
+    pickPrefix: 'kv:',
+    nearestImage: async () => nearest,
+  });
+  kartaview.name = 'KartaView';
+  kartaview.label = 'KARTAVIEW';
+  kartaview.defaultOn = false;
+  // As the real provider: 360° / flat and SINCE (the setFilter log stays in
+  // the fake's closure).
+  kartaview.filters = Object.freeze(['pano', 'since']);
+  const { layer, viewer } = await enabledLayer(t, [mapillary, kartaview]);
+  const { fakeHost } =
+    await import('../../testSupport/googleStreetViewFakes.mjs');
+  layer.attachViewerHost(fakeHost());
+  viewer.clock ??= { onTick: { addEventListener: () => () => {} } };
+  viewer.camera.moveEnd ??= { addEventListener() {} };
+  const dataManager = {
+    layers: new Map([['street-level', { module: layer }]]),
+    isEnabled: () => true,
+    getLayerParams: () => layer.getParams(),
+    setLayerParams: (_id, params) => {
+      layer.setParams(params);
+      return true;
+    },
+    getAll: () => [{ id: 'street-level', name: 'Street Level', enabled: true }],
+  };
+  const styleManager = {
+    mapStackController: { getActiveId: () => 'osm' },
+    setMapStack: async () => ({ ok: false, error: 'no map switch expected' }),
+  };
+  const runner = createGevActionRunner({ viewer, styleManager, dataManager });
+  // The way a plain sl=kartaview link calls it: autoOpen false.
+  const result = await runner('show_street_level', {
+    latitude: 52.52,
+    longitude: 13.405,
+    provider: 'kartaview',
+    fly: false,
+    autoOpen: false,
+  });
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.armed, undefined, 'not armed: KartaView bills nothing');
+  assert.equal(result.provider, 'kartaview');
+  assert.equal(result.providerName, 'KartaView');
+  assert.deepEqual(
+    layer
+      .getUIState()
+      .providers.filter((p) => p.on)
+      .map((p) => p.id),
+    ['kartaview'],
+  );
+  assert.deepEqual(kartaview.calls.open, ['kv-1']);
+  assert.equal(layer.providerStatus('kartaview').billed, false);
+  assert.equal(layer.requiredMapStack('kartaview'), null);
+
+  // With 360° only on, an empty search names the filter, not just "no imagery".
+  layer.closeViewer?.();
+  layer.setParams({ pano: 'pano' });
+  nearest = null;
+  const empty = await runner('show_street_level', {
+    latitude: 52.52,
+    longitude: 13.405,
+    provider: 'kartaview',
+    fly: false,
+  });
+  assert.deepEqual([empty.ok, empty.stage], [false, 'imagery']);
+  assert.equal(empty.filter?.pano, 'pano');
+  assert.match(empty.error, /with the 360° filter on$/);
+  layer.setParams({ pano: 'all' });
+  const plain = await runner('show_street_level', {
+    latitude: 52.52,
+    longitude: 13.405,
+    provider: 'kartaview',
+    fly: false,
+  });
+  assert.equal(plain.ok, false);
+  assert.equal(plain.filter, undefined, 'no filter, no hint');
+  assert.doesNotMatch(plain.error, /filter/);
+});

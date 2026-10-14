@@ -131,7 +131,11 @@ test('street-level photos travel in the link, light their source and bring their
   const { streetLevelFromParams, VIEW_STREET_LEVEL_PROVIDERS } =
     await import('./index.js');
   const { decodeLayerStateParams } = await import('../data/layerState.js');
-  assert.deepEqual(VIEW_STREET_LEVEL_PROVIDERS, ['google', 'mapillary']);
+  assert.deepEqual(VIEW_STREET_LEVEL_PROVIDERS, [
+    'google',
+    'mapillary',
+    'kartaview',
+  ]);
   const view = createView({
     camera: { lat: 38.5799, lon: -121.4937, altitude_m: 400 },
     street_level: { provider: 'google' },
@@ -149,7 +153,11 @@ test('street-level photos travel in the link, light their source and bring their
   const state = decodeLayerStateParams(params);
   assert.deepEqual(state.enabledLayerIds, ['street-level']);
   assert.equal(state.options['street-level'].mapillary, false);
-  assert.equal(state.options['street-level'].providerSwitches, 'google-1');
+  assert.equal(
+    state.options['street-level'].providerSwitches,
+    'google-1*kartaview-0',
+    'Street View on, KartaView off',
+  );
 
   const mapillary = createView({
     camera: { lat: 1, lon: 2 },
@@ -164,7 +172,7 @@ test('street-level photos travel in the link, light their source and bring their
   assert.equal(lit.mapillary, true);
   assert.equal(
     lit.providerSwitches,
-    'google-0',
+    'google-0*kartaview-0',
     'a Mapillary link lights Mapillary only',
   );
   const anySource = createView({
@@ -188,7 +196,7 @@ test('street-level photos travel in the link, light their source and bring their
     () =>
       createView({
         camera: { lat: 1, lon: 2 },
-        street_level: { provider: 'kartaview' },
+        street_level: { provider: 'openstreetcam' },
       }),
     /Unknown street-level source/,
   );
@@ -432,5 +440,35 @@ test('sl rejects a bad longitude slot and over-precise values, and no length bou
       new URLSearchParams({ sl: 'google,-89.12345678,179.12345678' }),
     ),
     { provider: 'google', lat: -89.12345678, lon: 179.12345678 },
+  );
+});
+
+test('KartaView photos travel in a link and light KartaView alone, on any map', async () => {
+  const { streetLevelFromParams } = await import('./index.js');
+  const { decodeLayerStateParams } = await import('../data/layerState.js');
+  const view = createView({
+    camera: { lat: 52.52, lon: 13.405, altitude_m: 400 },
+    map: 'osm',
+    street_level: { provider: 'kartaview' },
+  });
+  assert.equal(view.map, 'osm', 'KartaView needs no particular map');
+  assert.deepEqual(view.layers, ['street-level']);
+  const params = viewToParams(view);
+  assert.equal(params.get('sl'), 'kartaview,52.52000,13.40500');
+  assert.deepEqual(viewFromParams(params), view);
+  const lit = decodeLayerStateParams(params).options['street-level'];
+  assert.equal(lit.mapillary, false);
+  assert.equal(
+    lit.providerSwitches,
+    'google-0*kartaview-1',
+    'KartaView on, the others off',
+  );
+  assert.deepEqual(
+    streetLevelFromParams(new URLSearchParams({ sl: 'kartaview,1,2' })),
+    {
+      provider: 'kartaview',
+      lat: 1,
+      lon: 2,
+    },
   );
 });

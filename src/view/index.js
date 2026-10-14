@@ -75,6 +75,7 @@ const STREET_LEVEL_LAYER = 'street-level';
 export const VIEW_STREET_LEVEL_PROVIDERS = Object.freeze([
   'google',
   'mapillary',
+  'kartaview',
 ]);
 const STREET_LEVEL_MAP = Object.freeze({ google: 'photoreal' });
 const STREET_LEVEL_PARAM = 'sl';

@@ -78,7 +78,7 @@ export const ACTION_DESCRIPTIONS = {
         },
         provider: {
           description:
-            'google for "Street View"; mapillary for "Mapillary"; omit otherwise (the source lit in the panel).',
+            'google for "Street View"; mapillary, kartaview by name; omit otherwise (the lit source).',
           $position: 1,
         },
         fly: {

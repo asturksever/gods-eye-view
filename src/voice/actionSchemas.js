@@ -125,7 +125,7 @@ const schemas = [
         },
         provider: {
           type: 'string',
-          enum: ['google', 'mapillary'],
+          enum: ['google', 'mapillary', 'kartaview'],
         },
         fly: {
           type: 'boolean',
