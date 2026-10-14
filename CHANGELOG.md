@@ -1,9 +1,10 @@
 # Changelog
 
 - "Show me X on Street View" (or on Mapillary or KartaView): a
-  `show_street_level` voice and typed action flies to the place, switches to Google 3D when the source needs
-  it, lights that source in Street Level, turns the layer on and opens the
-  nearest photo, reporting which step failed. Views and share links carry the
+  `show_street_level` voice and typed action flies to the place, switches to
+  Google 3D when the source needs it, lights that source in Street Level,
+  turns the layer on and opens the nearest photo, reporting which step
+  failed. Views and share links carry the
   same request (`street_level`, `sl=`), so `show_in_gods_eye_view` and a link
   can open a panorama at a place. Street View lookups from a geocoded place
   search up to 250 m; clicks keep 50 m. A plain link with `sl=google` arms
@@ -13,6 +14,10 @@
   own reason instead of always asking for a Cesium ion token. When nothing
   is found and a 360°, flat or SINCE filter the source honours is on, the
   answer names the filter.
+
+- Bing Aerial and Bing Labels request HTTPS tiles on HTTP localhost through
+  their ion-backed providers, retaining ion and per-tile attribution without
+  widening the Content Security Policy.
 
 - Add New York City traffic cameras from the NYC DOT Traffic Management Center
   as an opt-in CCTV pack. NYC DOT requires a data-sharing agreement for the
