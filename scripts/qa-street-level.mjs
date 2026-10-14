@@ -480,6 +480,31 @@ function waitForLinesReady(page, { timeout = 120_000 } = {}) {
 }
 
 /**
+ * Cesium compiles the pick pass for new primitives on their first pick; on a
+ * software renderer that one pick can take 20 s, while the next take
+ * milliseconds. Pay it once, outside any timed wait.
+ */
+async function warmPickPass(page) {
+  await page.evaluate(() => {
+    const viewer = window.__godsEyeView.viewer;
+    const scene = viewer.scene;
+    const rect = scene.canvas.getBoundingClientRect();
+    const Cartographic = viewer.camera.positionCartographic.constructor;
+    const probe = scene.cartesianToCanvasCoordinates(
+      scene.globe.ellipsoid.cartographicToCartesian(
+        Cartographic.fromDegrees(0, 0, 0),
+      ),
+    );
+    const Cartesian2 = probe?.constructor;
+    const at = Cartesian2
+      ? new Cartesian2(rect.width / 2, rect.height / 2)
+      : { x: rect.width / 2, y: rect.height / 2 };
+    scene.pick(at);
+    scene.pick(at, 15, 15);
+  });
+}
+
+/**
  * Install `findPickPoint` in the page, so a pick and the click on it can
  * happen in one JavaScript turn: no frame can rebuild the primitive between
  * finding the pixel and clicking it. The click is the pointer pair Cesium's
@@ -521,7 +546,7 @@ function findAndClickPickPoint(spec) {
 async function selectSequenceByClick(
   page,
   spec,
-  { attempts = 3, findTimeout = 60_000, selectTimeout = 12_000 } = {},
+  { attempts = 3, findTimeout = 90_000, selectTimeout = 12_000 } = {},
 ) {
   const tried = [];
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -608,6 +633,18 @@ export function findPickPoint({
   const rect = canvas.getBoundingClientRect();
   const Cartographic = viewer.camera.positionCartographic.constructor;
   let Cartesian2 = null;
+  // Draped lines lie on the drawn surface, not the ellipsoid: in Sacramento
+  // the ground is ~30 m below it, enough to miss a line by 10+ px. Aim at
+  // the height the globe reports where it has it.
+  const surfacePoint = (lon, lat) => {
+    const at = Cartographic.fromDegrees(lon, lat, 0);
+    const height =
+      scene.globe && scene.globe.show !== false
+        ? scene.globe.getHeight(at)
+        : undefined;
+    at.height = Number.isFinite(height) ? height : 0;
+    return scene.globe.ellipsoid.cartographicToCartesian(at);
+  };
   // Live coverage: aim at the lines the provider drew, nearest the middle of
   // the screen first. A blind pixel scan needs thousands of picks, each a
   // render, which a loaded machine cannot finish in time.
@@ -627,6 +664,8 @@ export function findPickPoint({
     const centreY = rect.height / 2;
     const onScreen = [];
     for (const [lon, lat] of samples) {
+      // Ranking only: the ellipsoid is close enough, and the surface height
+      // of thousands of vertices is not cheap. The aimed few use it below.
       const at = scene.cartesianToCanvasCoordinates(
         scene.globe.ellipsoid.cartographicToCartesian(
           Cartographic.fromDegrees(lon, lat, 0),
@@ -691,19 +730,42 @@ export function findPickPoint({
     }
   }
   for (const [lon, lat] of points || []) {
-    const at = scene.cartesianToCanvasCoordinates(
-      scene.globe.ellipsoid.cartographicToCartesian(
-        Cartographic.fromDegrees(lon, lat, 0),
-      ),
-    );
+    const at = scene.cartesianToCanvasCoordinates(surfacePoint(lon, lat));
     if (at) {
       Cartesian2 ??= at.constructor;
       centres.push([at.x, at.y]);
     }
   }
-  const maxRadius = linesFrom ? 8 : 16;
+  if (linesFrom) {
+    // One 15 px pick per aimed point says whether a line is near it; only a
+    // window that answers is searched pixel by pixel. Each pick is a render.
+    const around = [];
+    for (let r = 0; r <= 7; r++)
+      for (const offset of [
+        [0, 0],
+        [r, 0],
+        [-r, 0],
+        [0, r],
+        [0, -r],
+        [r, r],
+        [-r, -r],
+        [r, -r],
+        [-r, r],
+      ])
+        around.push(offset);
+    for (const [cx, cy] of centres) {
+      if (cx < 10 || cy < 10 || cx > rect.width - 10 || cy > rect.height - 10)
+        continue;
+      if (!wanted(scene.pick(windowPoint(cx, cy), 15, 15))) continue;
+      for (const [dx, dy] of around) {
+        const hit = tryAt(cx + dx, cy + dy);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  }
   for (const [cx, cy] of centres)
-    for (let r = 0; r <= maxRadius; r += 2)
+    for (let r = 0; r <= 16; r += 2)
       for (const [dx, dy] of [
         [0, 0],
         [r, 0],
@@ -1322,6 +1384,7 @@ async function main() {
           await waitForCoverageSettled(page);
           await waitForLinesReady(page);
           await waitForStill(page, PANEL_ID);
+          await warmPickPass(page);
           await installPicker(page);
           const { at, attempt, tried } = await selectSequenceByClick(page, {
             prefix: 'mly:seq:',
