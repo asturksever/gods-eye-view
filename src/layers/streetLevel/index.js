@@ -167,6 +167,12 @@ export function createStreetLevelLayer({
     const owner = state.providers.get(state.street.providerId);
     if (state.street.open && owner && !providerAvailable(owner))
       layer.closeViewer();
+    // An armed lookup for a source whose map left dies too.
+    const armedFor = state.street.armed?.providerIds?.map((id) =>
+      state.providers.get(id),
+    );
+    if (armedFor?.some((entry) => entry && !providerAvailable(entry)))
+      state.street.armed = null;
     for (const entry of state.providers.values()) {
       if (!entry.def.requiresMapStack) continue;
       if (state.enabled && entry.on && providerAvailable(entry))
@@ -348,6 +354,9 @@ export function createStreetLevelLayer({
   function switchProvider(entry, on) {
     if (entry.on === on) return;
     entry.on = on;
+    // A lookup armed for this source dies with it.
+    if (!on && state.street.armed?.providerIds?.includes(entry.def.id))
+      state.street.armed = null;
     if (!state.enabled) return;
     if (on) activate(entry);
     else deactivate(entry);
@@ -541,7 +550,6 @@ export function createStreetLevelLayer({
     disable() {
       state.enabled = false;
       abortNearest();
-      state.street.armed = null;
       unwatchSurface();
       parts.viewerHost.unmount();
       for (const entry of state.providers.values()) entry.instance.deactivate();
@@ -692,7 +700,6 @@ export function createStreetLevelLayer({
       state.street.armed = null;
       if (!point && aim === 'screen-centre' && armed) {
         point = armed.point;
-        providerIds ??= armed.providerIds;
         radiusM ??= armed.radiusM;
       }
       const radius = Number.isFinite(radiusM)
@@ -779,15 +786,14 @@ export function createStreetLevelLayer({
     /** Close the image and deselect it everywhere on the map. */
     closeViewer() {
       abortNearest();
-      state.street.armed = null;
       parts.viewerHost.close();
       parts.clearSequences();
-      notify();
     },
     /**
      * Prepare a nearest lookup for the next OPEN press without running it: a
      * link to a source that bills every load stops here. The press opens at
-     * this point with these options; opening or closing anything clears it.
+     * this point with this radius; any other lookup, open or close, the
+     * source switched off, or its map leaving clears it.
      */
     armNearest(point, { providerIds = null, radiusM = null } = {}) {
       state.street.armed = {

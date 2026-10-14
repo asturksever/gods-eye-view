@@ -501,6 +501,8 @@ test('a plain link never auto-loads a billed photo: it arms the panel and says s
   );
   // Adding ?embed=1 to a published link does not lift the gate: the page is
   // still a plain top-level load.
+  const framedToasts = [];
+  const framedPanels = [];
   const framed = recorder({
     show_street_level: () => ({ ok: true, armed: true }),
   });
@@ -508,7 +510,12 @@ test('a plain link never auto-loads a billed photo: it arms the panel and says s
   windowRef.document = { body: { classList: { add() {} } } };
   windowRef.parent = { postMessage() {} };
   installViews({
-    shell: { initialRestorePromise: Promise.resolve(), setCleanView() {} },
+    shell: {
+      initialRestorePromise: Promise.resolve(),
+      setCleanView() {},
+      _showToast: (text) => framedToasts.push(text),
+      setPanelCollapsed: (...args) => framedPanels.push(args),
+    },
     viewer: fakeViewer(),
     dataManager: fakeLayers(new Set()),
     run: framed.run,
@@ -520,6 +527,8 @@ test('a plain link never auto-loads a billed photo: it arms the panel and says s
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(framed.calls[0][1].autoOpen, false);
+  // In a frame the rail that holds OPEN is hidden: no nudge, no toast.
+  assert.deepEqual([framedToasts, framedPanels], [[], []]);
   // Only the panel page's own link (inline embed) is the client's request.
   globalThis.GEV_EMBED_INLINE = true;
   try {

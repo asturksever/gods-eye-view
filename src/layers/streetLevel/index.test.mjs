@@ -1053,3 +1053,179 @@ test('providerStatus reports a refused key on any map', async (t) => {
   assert.equal(google.keyRejected, true);
   assert.equal(google.available, false, 'still not on this map');
 });
+
+test('an armed lookup dies with its source: switched off, or its map gone', async (t) => {
+  const { layer, stack } = await withStreetView(t);
+  layer.setProviderEnabled('google', true);
+  await settle();
+  layer.armNearest(
+    { lat: 1, lon: 2 },
+    { providerIds: ['google'], radiusM: 250 },
+  );
+  layer.setProviderEnabled('google', false);
+  assert.equal(
+    layer.getUIState().street.armed,
+    null,
+    'switching the source off clears it',
+  );
+  layer.setProviderEnabled('google', true);
+  layer.armNearest(
+    { lat: 1, lon: 2 },
+    { providerIds: ['google'], radiusM: 250 },
+  );
+  // Lighting Mapillary instead (one source at a time) turns Google off too.
+  layer.setProviderEnabled('mapillary', true);
+  assert.equal(
+    layer.getUIState().street.armed,
+    null,
+    'another source lit clears it',
+  );
+  layer.setProviderEnabled('google', true);
+  layer.armNearest(
+    { lat: 1, lon: 2 },
+    { providerIds: ['google'], radiusM: 250 },
+  );
+  // A map-stack notify that keeps Google 3D (a silent re-settle) keeps it.
+  stack.switchTo('photoreal');
+  assert.notEqual(
+    layer.getUIState().street.armed,
+    null,
+    'a notify on the same map keeps it',
+  );
+  stack.switchTo('osm');
+  assert.equal(
+    layer.getUIState().street.armed,
+    null,
+    'leaving Google 3D clears it',
+  );
+  // Arming notifies, so a panel can show the state.
+  let notified = 0;
+  const unsubscribe = layer.subscribe(() => notified++);
+  stack.switchTo('photoreal');
+  await settle();
+  const before = notified;
+  layer.armNearest({ lat: 1, lon: 2 }, { providerIds: ['google'] });
+  await settle();
+  assert.ok(notified > before, 'subscribers hear about the armed lookup');
+  unsubscribe();
+});
+
+test('a lookup armed with no point opens under the middle of the screen on the press', async (t) => {
+  const { createStreetLevelLayer: create } = await import('./index.js');
+  const scenePick = await import('../../data/scenePick.js');
+  const lookups = [];
+  const provider = fakeProvider({
+    nearestImage: async (point, options) => {
+      lookups.push({ ...point, radiusM: options?.radiusM ?? null });
+      return null;
+    },
+  });
+  const saved = globalThis.document;
+  const drawing = new Proxy({}, { get: () => () => ({ addColorStop() {} }) });
+  globalThis.document = Object.assign(new EventTarget(), {
+    createElement: () => ({ getContext: () => drawing }),
+  });
+  const viewer = fakeViewer();
+  const centre = Cesium.Cartesian3.fromDegrees(-121.4937, 38.5799, 0);
+  Object.assign(viewer.scene, {
+    pickPositionSupported: true,
+    pickPosition: (at) => (at.x === 500 && at.y === 300 ? centre : undefined),
+  });
+  viewer.scene.canvas.clientWidth = 1000;
+  viewer.scene.canvas.clientHeight = 600;
+  // Registered before the layer exists, so a throwing create() still
+  // restores the document; destroy() runs first, while the stub is in place.
+  let layer = null;
+  t.after(() => {
+    layer?.destroy();
+    globalThis.document = saved;
+  });
+  layer = create({ providers: [provider], services: { scenePick } });
+  layer.init(viewer);
+  layer.enable(viewer);
+  layer.armNearest(null, { providerIds: [provider.id], radiusM: 250 });
+  assert.equal(
+    layer.getUIState().street.armed.point,
+    null,
+    'no point stored, not 0,0',
+  );
+  await layer.openNearest(undefined, { aim: 'screen-centre' });
+  assert.equal(lookups.length, 1);
+  assert.ok(
+    Math.abs(lookups[0].lat - 38.5799) < 1e-9,
+    'the screen centre, not Null Island',
+  );
+  assert.ok(Math.abs(lookups[0].lon - -121.4937) < 1e-9);
+  assert.equal(lookups[0].radiusM, 250, 'with the armed radius');
+});
+
+test('the action over the real layer: a billed link arms without a lookup, and one press makes exactly one at the point', async (t) => {
+  const { createGevActionRunner } = await import('../../voice/gevActions.js');
+  const { layer, fake, viewer } = await withStreetView(t);
+  // The runner wires pointer tracking to the clock and camera.
+  viewer.clock ??= { onTick: { addEventListener: () => () => {} } };
+  viewer.camera.moveEnd ??= { addEventListener() {} };
+  const dataManager = {
+    layers: new Map([['street-level', { module: layer }]]),
+    isEnabled: () => true,
+    getLayerParams: () => layer.getParams(),
+    setLayerParams: (_id, params) => {
+      layer.setParams(params);
+      return true;
+    },
+    getAll: () => [{ id: 'street-level', name: 'Street Level', enabled: true }],
+  };
+  const styleManager = {
+    mapStackController: { getActiveId: () => 'photoreal' },
+    setMapStack: async () => ({ ok: true, activeStack: 'photoreal' }),
+  };
+  const runner = createGevActionRunner({ viewer, styleManager, dataManager });
+  const before = fake.lookups.length;
+  const armed = await runner('show_street_level', {
+    latitude: 38.57986,
+    longitude: -121.49372,
+    provider: 'google',
+    fly: false,
+    autoOpen: false,
+  });
+  assert.equal(armed.ok, true, armed.error);
+  assert.equal(armed.armed, true);
+  assert.equal(armed.providerName, 'Google Street View');
+  await settle();
+  assert.equal(fake.lookups.length, before, 'arming made no Google request');
+  assert.deepEqual(
+    layer
+      .getUIState()
+      .providers.filter((p) => p.on)
+      .map((p) => p.id),
+    ['google'],
+  );
+  assert.equal(layer.getUIState().street.open, false);
+  // The OPEN button.
+  assert.equal(
+    await layer.openNearest(undefined, {
+      providerIds: ['google'],
+      frame: false,
+      aim: 'screen-centre',
+    }),
+    true,
+  );
+  assert.equal(fake.lookups.length, before + 1, 'one request for the press');
+  assert.deepEqual(fake.lookups.at(-1).location, {
+    lat: 38.57986,
+    lng: -121.49372,
+  });
+  assert.equal(fake.lookups.at(-1).radius, 250);
+  assert.equal(layer.getUIState().street.imageId, 'pano-a');
+  // The same call without the gate opens at once, with one request.
+  layer.closeViewer();
+  const opened = await runner('show_street_level', {
+    latitude: 38.57986,
+    longitude: -121.49372,
+    provider: 'google',
+    fly: false,
+  });
+  assert.equal(opened.ok, true, opened.error);
+  assert.equal(opened.imageId, 'pano-a');
+  assert.equal(fake.lookups.length, before + 2);
+});

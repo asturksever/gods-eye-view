@@ -3250,10 +3250,7 @@ export async function showStreetLevel(
 
   // A billed source never loads from a link without a click: everything is
   // ready and OPEN is one press away at the view centre.
-  if (
-    args.autoOpen === false &&
-    (status?.billed === true || snapshot.billed === true)
-  ) {
+  if (args.autoOpen === false && status?.billed === true) {
     // The next OPEN press loads exactly what the link asked for.
     layerModule.armNearest?.(point, {
       providerIds: [provider],

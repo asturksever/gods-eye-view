@@ -303,8 +303,10 @@ export function installViews({
         'show_street_level',
         streetLevelArgs(streetLevel, { autoOpen: isEmbeddedInline() }),
       );
-      if (result?.armed === true) {
-        // The restore window keeps the panel collapsed; OPEN must be in view.
+      // The restore window keeps the panel collapsed; OPEN must be in view.
+      // Embed mode hides the rail that holds it, so there the link only arms
+      // (a posted view is the way to open a photo in a frame).
+      if (result?.armed === true && !isEmbedded(location)) {
         shell.setPanelCollapsed?.(STREET_LEVEL_PANEL_ID, false, {
           explicit: true,
         });

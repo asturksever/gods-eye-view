@@ -2155,58 +2155,163 @@ async function main() {
           const streetLevel = () =>
             window.__godsEyeView.dataManager.layers.get('street-level').module;
           const point = STREET_VIEW_STREET;
-          await page.goto(
-            `${url.split('#')[0]}#v=2&lat=${point.lat}&lon=${point.lon}&alt=600&heading=0&pitch=-60&roll=0&map=osm&sl=google,${point.lat},${point.lon}`,
-            { waitUntil: 'domcontentloaded' },
-          );
-          await page.reload({ waitUntil: 'domcontentloaded' });
-          await clearFirstRun(page);
-          await page.waitForFunction(
-            () => Boolean(window.__godsEyeView?.voiceCommands?.runner),
-            { timeout: 60_000 },
-          );
-          if (!googleKey) {
-            // Without a key the action fails before it changes anything.
-            await new Promise((resolve) => setTimeout(resolve, 3_000));
-            const after = await page.evaluate(
-              `(() => { const m = (${streetLevel})(); const u = m.getUIState(); return { stack: window.__godsEyeView.mapStackController.getActiveId(), google: m.getParams().google === true, armed: u.street.armed, open: u.street.open }; })()`,
+          // The link's camera sits ~330 m north of the photo: a flight would
+          // move it, and a press that ignored the armed point would open
+          // something else.
+          const cameraLat = Number((point.lat + 0.003).toFixed(6));
+          const cameraHeight = 600;
+          // What a Street View lookup and load cost: the Maps JS API's
+          // SingleImageSearch (the nearest lookup), GetMetadata and the
+          // panorama tiles. Script loads are not counted.
+          const STREET_VIEW_REQUEST =
+            /MapsJsInternalService\/(SingleImageSearch|GetMetadata)|GeoPhotoService|streetviewpixels-pa\.googleapis\.com/;
+          const googleRequests = [];
+          const onRequest = (request) => {
+            if (STREET_VIEW_REQUEST.test(request.url()))
+              googleRequests.push(request.url());
+          };
+          page.on('request', onRequest);
+          try {
+            await page.goto(
+              `${url.split('#')[0]}#v=2&lat=${cameraLat}&lon=${point.lon}&alt=${cameraHeight}&heading=0&pitch=-60&roll=0&map=osm&sl=google,${point.lat},${point.lon}`,
+              { waitUntil: 'domcontentloaded' },
+            );
+            await page.reload({ waitUntil: 'domcontentloaded' });
+            await clearFirstRun(page);
+            await page.waitForFunction(
+              () => Boolean(window.__godsEyeView?.voiceCommands?.runner),
+              { timeout: 60_000 },
+            );
+            // The restored camera: the link's pose, before any action moved it.
+            const camera = () =>
+              page.evaluate(() => {
+                const c =
+                  window.__godsEyeView.viewer.camera.positionCartographic;
+                return {
+                  lat: (c.latitude * 180) / Math.PI,
+                  lon: (c.longitude * 180) / Math.PI,
+                  height: c.height,
+                };
+              });
+            assert.ok(
+              await settle(
+                page,
+                (want) => {
+                  const c =
+                    window.__godsEyeView.viewer.camera.positionCartographic;
+                  return (
+                    Math.abs((c.latitude * 180) / Math.PI - want.lat) < 0.0005
+                  );
+                },
+                { lat: cameraLat },
+                { timeout: 60_000 },
+              ),
+              'the link camera restored',
+            );
+            if (!googleKey) {
+              // Without a key the action stops at the key, before any flight,
+              // map switch or source change: the camera stays where the link
+              // put it, and the direct call says why.
+              const direct = await page.evaluate(
+                (at) =>
+                  window.__godsEyeView.voiceCommands.runner(
+                    'show_street_level',
+                    {
+                      latitude: at.lat,
+                      longitude: at.lon,
+                      provider: 'google',
+                      fly: false,
+                      autoOpen: false,
+                    },
+                  ),
+                point,
+              );
+              assert.equal(direct.ok, false);
+              assert.equal(
+                direct.stage,
+                'key',
+                `stage: ${direct.stage} ${direct.error}`,
+              );
+              const after = await page.evaluate(
+                `(() => { const m = (${streetLevel})(); const u = m.getUIState(); return { stack: window.__godsEyeView.mapStackController.getActiveId(), google: m.getParams().google === true, armed: u.street.armed, open: u.street.open }; })()`,
+              );
+              assert.deepEqual(
+                after,
+                { stack: 'osm', google: false, armed: null, open: false },
+                'a keyless Street View link changes nothing',
+              );
+              const still = await camera();
+              assert.ok(
+                Math.abs(still.lat - cameraLat) < 0.0005,
+                `the camera did not fly: ${still.lat}`,
+              );
+              assert.deepEqual(googleRequests, [], 'no Street View request');
+              return skip('no Google key');
+            }
+            if (!(await stacks.photoreal())) return skip('no Google 3D');
+            const armed = await settle(
+              page,
+              `(() => { const u = (${streetLevel})().getUIState(); return u.street.armed !== null && u.providers.some((p) => p.id === 'google' && p.on); })()`,
+              undefined,
+              { timeout: 90_000 },
+            );
+            assert.ok(armed, 'the link armed Street View');
+            await new Promise((resolve) => setTimeout(resolve, 5_000));
+            const waiting = await page.evaluate(
+              `(() => { const u = (${streetLevel})().getUIState(); return { open: u.street.open, loading: u.street.loading, imageId: u.street.imageId, stack: window.__godsEyeView.mapStackController.getActiveId(), armedAt: u.street.armed?.point }; })()`,
             );
             assert.deepEqual(
-              after,
-              { stack: 'osm', google: false, armed: null, open: false },
-              'a keyless Street View link changes nothing',
+              {
+                open: waiting.open,
+                loading: waiting.loading,
+                imageId: waiting.imageId,
+                stack: waiting.stack,
+              },
+              {
+                open: false,
+                loading: false,
+                imageId: null,
+                stack: 'photoreal',
+              },
+              'nothing loaded without a click',
             );
-            return skip('no Google key');
+            assert.deepEqual(
+              waiting.armedAt,
+              { lat: point.lat, lon: point.lon },
+              'armed at the link point',
+            );
+            assert.deepEqual(
+              googleRequests,
+              [],
+              'no Street View request before the press',
+            );
+            // The press, on a button that is really in view.
+            await clickPanelControl(page, '#sl-nearest-btn');
+            await page.waitForFunction(
+              `(() => { const s = (${streetLevel})().getUIState().street; return (s.imageId && !s.loading) || s.error; })()`,
+              { timeout: 90_000 },
+            );
+            const street = (await ui()).street;
+            assert.equal(street.error, null, `viewer error: ${street.error}`);
+            assert.equal(street.providerId, 'google');
+            assert.ok(street.imageId, 'the press opened the panorama');
+            assert.ok(
+              googleRequests.length >= 1,
+              'the press made the Street View request',
+            );
+            const metres = Math.hypot(
+              (street.position.lat - point.lat) * 111_320,
+              (street.position.lon - point.lon) *
+                111_320 *
+                Math.cos((point.lat * Math.PI) / 180),
+            );
+            assert.ok(
+              metres <= 250,
+              `the panorama is within 250 m of the link point: ${Math.round(metres)} m`,
+            );
+          } finally {
+            page.off('request', onRequest);
           }
-          if (!(await stacks.photoreal())) return skip('no Google 3D');
-          const armed = await settle(
-            page,
-            `(() => { const u = (${streetLevel})().getUIState(); return u.street.armed !== null && u.providers.some((p) => p.id === 'google' && p.on); })()`,
-            undefined,
-            { timeout: 90_000 },
-          );
-          assert.ok(armed, 'the link armed Street View');
-          await new Promise((resolve) => setTimeout(resolve, 5_000));
-          const waiting = await page.evaluate(
-            `(() => { const u = (${streetLevel})().getUIState(); return { open: u.street.open, loading: u.street.loading, imageId: u.street.imageId, stack: window.__godsEyeView.mapStackController.getActiveId() }; })()`,
-          );
-          assert.deepEqual(
-            waiting,
-            { open: false, loading: false, imageId: null, stack: 'photoreal' },
-            'nothing loaded without a click',
-          );
-          await page.$eval('#sl-nearest-btn', (button) => {
-            if (button.disabled) throw new Error('OPEN is disabled');
-            button.click();
-          });
-          await page.waitForFunction(
-            `(() => { const s = (${streetLevel})().getUIState().street; return (s.imageId && !s.loading) || s.error; })()`,
-            { timeout: 90_000 },
-          );
-          const street = (await ui()).street;
-          assert.equal(street.error, null, `viewer error: ${street.error}`);
-          assert.equal(street.providerId, 'google');
-          assert.ok(street.imageId, 'the press opened the panorama');
         },
       );
       if (fixtures)

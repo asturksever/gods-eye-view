@@ -84,12 +84,15 @@ const EARTH_RADIUS_M = 6_371_000;
 const LOOK_AT_MAX_ALTITUDE_M = 20_000;
 /** Flatter than this the look-at point is at the horizon: use the camera's. */
 const LOOK_AT_MIN_PITCH_DEG = -5;
+/** Further ahead than this the camera frames a region: use its own point. */
+const LOOK_AT_MAX_DISTANCE_M = 10_000;
 
 /**
  * The ground point a street-scale camera looks at: straight below it when it
  * looks down, else ahead along its heading by altitude / tan(pitch). A camera
- * with no altitude, above street scale, or aimed at the horizon gives its
- * own point. Longitude wraps at the antimeridian.
+ * with no altitude, above street scale, aimed at the horizon, or looking
+ * further than 10 km ahead gives its own point. Longitude wraps at the
+ * antimeridian.
  */
 function lookAtPoint(camera) {
   const pitch = Number(camera.pitch_deg ?? -90);
@@ -102,6 +105,8 @@ function lookAtPoint(camera) {
   )
     return { lat: camera.lat, lon: camera.lon };
   const ground = altitude / Math.tan((-pitch * Math.PI) / 180);
+  if (ground > LOOK_AT_MAX_DISTANCE_M)
+    return { lat: camera.lat, lon: camera.lon };
   const heading = ((Number(camera.heading_deg) || 0) * Math.PI) / 180;
   const dLat =
     ((ground * Math.cos(heading)) / EARTH_RADIUS_M) * (180 / Math.PI);
@@ -465,7 +470,8 @@ export function annotationsFromParams(params) {
  */
 export function streetLevelFromParams(params) {
   const raw = params.get(STREET_LEVEL_PARAM);
-  if (!raw || raw.length > 64) return null;
+  if (!raw) return null;
+  // Three fields, plain decimal degrees: that alone bounds the value.
   const parts = raw.split(',');
   if (parts.length !== 3) return null;
   const [provider, lat, lon] = parts;

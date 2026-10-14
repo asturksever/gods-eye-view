@@ -20,6 +20,7 @@ import {
   normalizeStackId,
 } from './gevActions.js';
 import { MAP_STACKS } from '../mapStackController.js';
+import { KEY_REJECTED_MESSAGE } from '../layers/streetLevel/providers/google/policy.js';
 import { GEV_REALTIME_TOOLS } from '../../server/providers/openai/tools.js';
 import { presentResult } from './resultDisplay.js';
 import { attachVoiceResult } from './speech.js';
@@ -3898,6 +3899,8 @@ function createStreetLevelHarness({
   enableResult = true,
   listGoogle = true,
   duringLookup = null,
+  keyRejectedAtStart = false,
+  lightFails = false,
 } = {}) {
   const order = [];
   const { viewer, styleManager } = createVoiceNavigationHarness();
@@ -3917,7 +3920,7 @@ function createStreetLevelHarness({
     return { ok: true, activeStack: id, error: null };
   };
   let params = { ...lit };
-  let keyRejected = false;
+  let keyRejected = keyRejectedAtStart;
   const street = { imageId: null, error: null };
   const names = { google: 'Google Street View', mapillary: 'Mapillary' };
   const layer = {
@@ -3932,10 +3935,10 @@ function createStreetLevelHarness({
             configured,
             keyRequired: keyRequired || keyRejected,
             keyRejected,
+            error: keyRejected ? KEY_REJECTED_MESSAGE : keyRequired ? `${names[id]} needs its key` : null,
             groundClick: id === 'google',
             billed: id === 'google',
             available: id !== 'google' || stack === 'photoreal',
-            error: keyRequired ? `${names[id]} needs its key` : null,
           }
         : null,
     getUIState: () => ({
@@ -3965,7 +3968,7 @@ function createStreetLevelHarness({
         const effect = duringLookup();
         if (effect === 'key-rejected') {
           keyRejected = true;
-          street.error = 'Google refused GOOGLE_MAPS_API_KEY for Street View';
+          street.error = KEY_REJECTED_MESSAGE;
           return false;
         }
         if (effect === 'layer-off') {
@@ -3990,7 +3993,7 @@ function createStreetLevelHarness({
     setLayerParams(id, next, { origin }) {
       order.push(`params:${Object.entries(next).filter(([, on]) => on).map(([k]) => k).join('+')}:${origin}`);
       if (paramsAccepted === false) return false;
-      params = { ...params, ...next };
+      if (!lightFails) params = { ...params, ...next };
       return true;
     },
     async setEnabled(id) {
@@ -4345,4 +4348,38 @@ test('fly_to_location reports the overview centre for a city framed as a whole, 
   assert.ok(Math.abs(overview.longitude - -97.75) < 0.001, String(overview.longitude));
   const close = await runner('fly_to_location', { locationId: 'austin', viewMode: 'close' });
   assert.deepEqual([close.latitude, close.longitude], [30.2747, -97.7403]);
+});
+
+test('show_street_level arms the view centre when a billed link names no place, and keeps the flight label when it flew', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const centre = createStreetLevelHarness({ enabled: true, activeStack: 'photoreal' });
+  const armed = await centre.runner('show_street_level', { provider: 'google', autoOpen: false });
+  assert.equal(armed.ok, true, armed.error);
+  assert.equal(armed.armed, true);
+  assert.deepEqual(centre.order, ['params:google:voice', 'arm:google:250:view-centre'], 'armed at the view centre, nothing opened');
+  const flown = createStreetLevelHarness({ enabled: true, activeStack: 'photoreal' });
+  const pending = flown.runner('show_street_level', { latitude: 38.5799, longitude: -121.4937, provider: 'google', autoOpen: false });
+  await new Promise((resolve) => setImmediate(resolve));
+  flown.finishFlight();
+  const result = await pending;
+  assert.equal(result.armed, true);
+  assert.equal(result.flew, true);
+  assert.equal(result.location, '38.5799, -121.4937');
+  assert.ok(!flown.order.some((entry) => entry.startsWith('open:')), 'no load after the flight');
+});
+
+test('show_street_level says "refused its key" when Google already refused it, and fails when the source will not light', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const refusedHarness = createStreetLevelHarness({ enabled: true, keyRejectedAtStart: true });
+  const refused = await refusedHarness.runner('show_street_level', { latitude: 1, longitude: 2, provider: 'google', fly: false });
+  assert.deepEqual([refused.ok, refused.stage, refused.keyRejected], [false, 'key', true]);
+  assert.equal(refused.error, KEY_REJECTED_MESSAGE);
+  assert.equal(refused.say, 'Google Street View refused its key.');
+  assert.deepEqual(refusedHarness.order, [], 'nothing changed');
+  const dark = await createStreetLevelHarness({ enabled: true, activeStack: 'photoreal', lightFails: true }).runner(
+    'show_street_level',
+    { latitude: 1, longitude: 2, provider: 'google', fly: false },
+  );
+  assert.deepEqual([dark.ok, dark.stage], [false, 'provider']);
+  assert.match(dark.error, /could not be switched on/);
 });

@@ -158,6 +158,15 @@ test('street-level photos travel in the link, light their source and bring their
   });
   assert.equal(mapillary.map, 'osm', 'Mapillary shows on any map');
   assert.deepEqual(viewFromParams(viewToParams(mapillary)), mapillary);
+  const lit = decodeLayerStateParams(viewToParams(mapillary)).options[
+    'street-level'
+  ];
+  assert.equal(lit.mapillary, true);
+  assert.equal(
+    lit.providerSwitches,
+    'google-0',
+    'a Mapillary link lights Mapillary only',
+  );
   const anySource = createView({
     camera: { lat: 1, lon: 2 },
     street_level: {},
@@ -339,5 +348,89 @@ test('the look-at default is street-scale only, follows the heading, and wraps a
   assert.deepEqual(
     streetLevelFromParams(new URLSearchParams({ sl: ',-1.5,2' })),
     { lat: -1.5, lon: 2 },
+  );
+});
+
+test('the look-at thresholds are pinned: 20 km up, -5° of pitch, 10 km ahead', () => {
+  const at = (camera) => createView({ camera, street_level: {} }).street_level;
+  const own = { lat: 1, lon: 2 };
+  const moved = (point) => point.lat !== own.lat || point.lon !== own.lon;
+  // Altitude ceiling, at a steep pitch that keeps the distance under 10 km.
+  assert.ok(
+    moved(at({ ...own, altitude_m: 19_999, pitch_deg: -70 })),
+    '19,999 m applies',
+  );
+  assert.ok(
+    !moved(at({ ...own, altitude_m: 20_001, pitch_deg: -70 })),
+    '20,001 m does not',
+  );
+  // Pitch cutoff, at 100 m so the distance cap cannot decide it (1.4 km ahead).
+  assert.ok(
+    moved(at({ ...own, altitude_m: 100, pitch_deg: -6 })),
+    '-6° applies',
+  );
+  assert.ok(
+    !moved(at({ ...own, altitude_m: 100, pitch_deg: -4 })),
+    '-4° does not',
+  );
+  // Distance cap, pinned either side of 10 km at 1,000 m: -5.8° looks 9.84 km
+  // ahead, -5.6° 10.2 km.
+  assert.ok(
+    moved(at({ ...own, altitude_m: 1000, pitch_deg: -5.8 })),
+    '9.84 km ahead applies',
+  );
+  assert.ok(
+    !moved(at({ ...own, altitude_m: 1000, pitch_deg: -5.6 })),
+    '10.2 km ahead does not',
+  );
+  assert.ok(
+    !moved(at({ ...own, altitude_m: 10_000, pitch_deg: -30 })),
+    '17 km ahead does not',
+  );
+  assert.ok(
+    moved(at({ ...own, altitude_m: 5_000, pitch_deg: -30 })),
+    '8.7 km ahead applies',
+  );
+  // Near-vertical stays put (no tan blow-up).
+  assert.ok(!moved(at({ ...own, altitude_m: 1000, pitch_deg: -89.5 })));
+  // Western wrap and the pole clamp.
+  const west = at({
+    lat: 0,
+    lon: -179.999,
+    altitude_m: 1000,
+    heading_deg: 270,
+    pitch_deg: -45,
+  });
+  assert.ok(west.lon > 179.9, String(west.lon));
+  const pole = at({
+    lat: 89.9995,
+    lon: 0,
+    altitude_m: 1000,
+    heading_deg: 0,
+    pitch_deg: -45,
+  });
+  assert.ok(pole.lat <= 90, String(pole.lat));
+});
+
+test('sl rejects a bad longitude slot and over-precise values, and no length bound hides the regex', async () => {
+  const { streetLevelFromParams } = await import('./index.js');
+  for (const bad of [
+    'google,1,1e1',
+    'google,1,0x10',
+    'google,1, 2',
+    'google,1,2.',
+    'google,1.123456789,2',
+    'google,1,2.123456789',
+  ])
+    assert.equal(
+      streetLevelFromParams(new URLSearchParams({ sl: bad })),
+      null,
+      bad,
+    );
+  assert.deepEqual(
+    streetLevelFromParams(
+      new URLSearchParams({ sl: 'google,-89.12345678,179.12345678' }),
+    ),
+    { provider: 'google', lat: -89.12345678, lon: 179.12345678 },
   );
 });

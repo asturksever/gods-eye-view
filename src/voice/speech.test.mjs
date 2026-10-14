@@ -548,8 +548,7 @@ test('street-level speech names the source and the place, and says which step fa
 
 test('the capture month is a UTC month whatever the timezone, and labels name the place', async () => {
   const { execFileSync } = await import('node:child_process');
-  const { fileURLToPath } = await import('node:url');
-  const speech = fileURLToPath(new URL('./speech.js', import.meta.url));
+  const speech = new URL('./speech.js', import.meta.url).href;
   // Google dates a panorama 2024-05 as the first of the month, UTC. West of
   // Greenwich that instant is still April; the card must still say May.
   const out = execFileSync(
