@@ -583,7 +583,7 @@ test('street-level settings speech echoes the resulting source and filters, and 
   assert.equal(since.say, 'Mapillary, flat photos only, since Jun 2023.');
   const google = envelope('set_street_level', { ...base, provider: 'google', providerName: 'Google Street View', imagery: 'pano', sinceDays: 30, sinceDate: '2026-09-14', filtersApply: { imagery: false, since: false } });
   assert.equal(google.say, "Google Street View on. Its panoramas aren't filtered by type or date.");
-  assert.deepEqual(google.display.lines, ['Google Street View', 'Filters apply to Mapillary']);
+  assert.deepEqual(google.display.lines, ['Google Street View', 'Filters apply to Mapillary and KartaView']);
   const unfilteredGoogle = envelope('set_street_level', { ...base, provider: 'google', providerName: 'Google Street View', imagery: 'all', sinceDays: 0, sinceDate: null, filtersApply: { imagery: false, since: false } });
   assert.equal(unfilteredGoogle.say, 'Google Street View, all imagery, any date.', 'nothing to explain without filters');
   assert.equal(envelope('set_street_level', { ...base, enabled: false }).say, 'Street Level off.');
@@ -594,4 +594,39 @@ test('street-level settings speech echoes the resulting source and filters, and 
   assert.equal(envelope('set_street_level', { ok: false, cancelled: true }).say, undefined);
   assert.equal(planStepLabel('set_street_level', { provider: 'mapillary', imagery: 'pano', sinceYear: 2023 }), 'Street level: Mapillary, 360°, since 2023');
   assert.equal(planStepLabel('set_street_level', {}), 'Street level settings');
+});
+
+test('the plan step names KartaView as a source', () => {
+  assert.equal(
+    planStepLabel('show_street_level', {
+      query: 'Alexanderplatz',
+      provider: 'kartaview',
+    }),
+    'KartaView at Alexanderplatz',
+  );
+});
+
+test('an empty street-level search names the imagery filter that hid the photos', () => {
+  const out = envelope('show_street_level', {
+    ok: false,
+    stage: 'imagery',
+    label: 'Alexanderplatz',
+    providerName: 'KartaView',
+    filter: { pano: 'pano', label: '360° filter' },
+  });
+  assert.equal(
+    out.say,
+    'No KartaView imagery near Alexanderplatz with the 360° filter on.',
+  );
+  assertSpeakable(out.say);
+});
+
+test('street-level settings show a source’s SINCE note only while a window is set', () => {
+  const base = { ok: true, action: 'set_street_level', enabled: true, provider: 'kartaview', providerName: 'KartaView', imagery: 'all', filtersApply: { imagery: true, since: true }, sinceNote: 'KartaView: by upload date' };
+  const dated = envelope('set_street_level', { ...base, sinceDays: 400, sinceDate: '2023-06-01' });
+  assert.equal(dated.say, 'KartaView, all imagery, since Jun 2023.');
+  assert.deepEqual(dated.display.lines, ['KartaView', 'all imagery, since Jun 2023', 'KartaView: by upload date']);
+  const any = envelope('set_street_level', { ...base, sinceDays: 0, sinceDate: null });
+  assert.deepEqual(any.display.lines, ['KartaView', 'all imagery, any date']);
+  assert.equal(planStepLabel('set_street_level', { provider: 'kartaview', imagery: 'pano' }), 'Street level: KartaView, 360°');
 });

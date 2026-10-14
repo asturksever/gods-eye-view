@@ -4,6 +4,7 @@ import * as Cesium from 'cesium';
 import { createStreetLevelLayer } from './index.js';
 import { MAPILLARY_CREDIT_HTML } from './providers/mapillary/policy.js';
 import { createMapillaryProvider } from './providers/mapillary/index.js';
+import { createKartaViewProvider } from './providers/kartaview/index.js';
 import { fakeStreetLevelProvider as fakeProvider } from '../../testSupport/streetLevelFakes.mjs';
 
 /**
@@ -92,8 +93,8 @@ function deferred() {
 }
 
 /** A provider whose viewer reports a pose for every image it opens. */
-function posingProvider() {
-  const provider = fakeProvider();
+function posingProvider(options) {
+  const provider = fakeProvider(options);
   const create = provider.create;
   provider.create = (context) => {
     const instance = create(context);
@@ -819,6 +820,130 @@ test('an empty provider composition enables and tears down without acquiring ima
   assert.deepEqual(layer.getUIState().providers, []);
 });
 
+test('a failed lookup’s error goes when another source is lit; a provider can open an image without framing', async (t) => {
+  const failing = fakeProvider({
+    nearestImage: async () => {
+      throw new Error('KartaView did not answer in time — try again');
+    },
+  });
+  const other = fakeProvider({ id: 'other', pickPrefix: 'oth:' });
+  const { layer, viewer } = await enabledLayer(t, [failing, other]);
+  layer.attachViewerHost({});
+  await layer.openNearest({ lat: 1, lon: 1 });
+  assert.match(layer.getUIState().street.error, /did not answer/);
+  layer.setProviderEnabled('other', true);
+  await settle();
+  assert.equal(layer.getUIState().street.error, null);
+  // A provider's own open (KartaView's ‹ ›) can leave the camera alone.
+  await other.context().actions.openImage('img-1', { frame: false });
+  assert.deepEqual(other.calls.open, ['img-1']);
+  assert.equal(viewer.flights.started, 0);
+});
+
+test('a provider’s own open can leave the camera where it is; a default open frames', async (t) => {
+  const provider = posingProvider();
+  const { layer, viewer } = await enabledLayer(t, [provider]);
+  layer.attachViewerHost({});
+  await provider.context().actions.openImage('img-1', { frame: false });
+  assert.deepEqual(provider.calls.open, ['img-1']);
+  assert.equal(viewer.flights.started, 0, 'frame: false keeps the camera');
+  await provider.context().actions.openImage('img-2');
+  assert.equal(viewer.flights.started, 1, 'a default open frames the image');
+});
+
+test('a provider’s openNearest (a line click) asks only that provider and leaves the camera', async (t) => {
+  const lit = posingProvider({ nearestImage: async () => 'lit-near' });
+  const other = fakeProvider({
+    id: 'other',
+    pickPrefix: 'oth:',
+    nearestImage: async () => 'other-near',
+  });
+  const { layer, viewer } = await enabledLayer(t, [lit, other]);
+  layer.attachViewerHost({});
+  const point = { lat: 38.58, lon: -121.49 };
+  // The other source is off: its click asks nobody else.
+  await other.context().actions.openNearest(point);
+  await settle();
+  assert.deepEqual(lit.calls.open, [], 'the lit source was not asked');
+  assert.deepEqual(other.calls.open, []);
+  await lit.context().actions.openNearest(point);
+  assert.deepEqual(lit.calls.open, ['lit-near']);
+  assert.equal(viewer.flights.started, 0, 'the user picked the spot');
+});
+
+test('KartaView through the core: its own swatch without Selected, its lines counted as streets', async (t) => {
+  const kartaView = createKartaViewProvider({
+    source: {
+      getTile: async () => ({ lines: [] }),
+      nearestPhotos: async () => [],
+      getPhoto: async () => {
+        throw new Error('KartaView has no such photo');
+      },
+      getSequencePhotos: async () => ({ photos: [], hasMore: false }),
+      probeImage: async () => true,
+    },
+  });
+  const { layer } = await enabledLayer(t, [kartaView]);
+  layer.setProviderEnabled('kartaview', true);
+  await settle();
+  const ui = layer.getUIState();
+  assert.deepEqual(
+    ui.legend.map((entry) => entry.key),
+    ['kartaview'],
+  );
+  assert.equal(ui.coverage.label?.noun, 'streets');
+  assert.equal(
+    ui.providers.find((p) => p.id === 'kartaview').highlightsSequence,
+    false,
+  );
+});
+
+test('switching source by params (the chip path) stops a running lookup and clears its spinner and error', async (t) => {
+  const slow = slowLookups();
+  const looking = fakeProvider({ nearestImage: slow.nearestImage });
+  const other = fakeProvider({ id: 'other', pickPrefix: 'oth:' });
+  const { layer } = await enabledLayer(t, [looking, other]);
+  layer.attachViewerHost({});
+  const opening = layer.openNearest({ lat: 1, lon: 1 });
+  await settle();
+  assert.equal(layer.getUIState().street.loading, true);
+  layer.setParams({ mapillary: false, other: true });
+  assert.equal(slow.lookups[0].signal.aborted, true, 'the lookup is stopped');
+  assert.equal(
+    layer.getUIState().street.loading,
+    false,
+    'no spinner left behind',
+  );
+  // The stopped lookup answers late: nothing opens, nothing is reported.
+  slow.lookups[0].answer.resolve('img1');
+  assert.equal(await opening, false);
+  assert.deepEqual(looking.calls.open, []);
+  assert.equal(layer.getUIState().street.error, null);
+});
+
+test('switching source by params clears a failed lookup’s error; reapplying the same switches does not', async (t) => {
+  const failing = fakeProvider({
+    nearestImage: async () => {
+      throw new Error('KartaView did not answer in time — try again');
+    },
+  });
+  const { layer: second } = await enabledLayer(t, [
+    failing,
+    fakeProvider({ id: 'other', pickPrefix: 'oth:' }),
+  ]);
+  second.attachViewerHost({});
+  await second.openNearest({ lat: 1, lon: 1 });
+  assert.match(second.getUIState().street.error, /did not answer/);
+  second.setParams({ mapillary: false, other: true });
+  assert.equal(second.getUIState().street.error, null);
+  // Reapplying the same switches (a restore) leaves state alone.
+  await second.openNearest({ lat: 1, lon: 1 });
+  const kept = second.getUIState().street.error;
+  assert.match(kept, /No street-level imagery/);
+  second.setParams({ mapillary: false, other: true });
+  assert.equal(second.getUIState().street.error, kept);
+});
+
 test('openNearest searches wider on request, never past the cap, and says how far it looked', async (t) => {
   const { layer, fake } = await withStreetView(t, { nearest: () => null });
   layer.setProviderEnabled('google', true);
@@ -1478,4 +1603,152 @@ test('an aborted older lookup leaves its replacement’s spinner alone', async (
     /No street-level imagery/,
     'the newer lookup reports its own result',
   );
+});
+
+test('show_street_level opens a KartaView photo, and a plain link opens it at once since it is not billed', async (t) => {
+  const { createGevActionRunner } = await import('../../voice/gevActions.js');
+  const mapillary = fakeProvider();
+  let nearest = 'kv-1';
+  const kartaview = fakeProvider({
+    id: 'kartaview',
+    pickPrefix: 'kv:',
+    nearestImage: async () => nearest,
+  });
+  kartaview.name = 'KartaView';
+  kartaview.label = 'KARTAVIEW';
+  kartaview.defaultOn = false;
+  // As the real provider: 360° / flat and SINCE (the setFilter log stays in
+  // the fake's closure).
+  kartaview.filters = Object.freeze(['pano', 'since']);
+  const { layer, viewer } = await enabledLayer(t, [mapillary, kartaview]);
+  const { fakeHost } =
+    await import('../../testSupport/googleStreetViewFakes.mjs');
+  layer.attachViewerHost(fakeHost());
+  viewer.clock ??= { onTick: { addEventListener: () => () => {} } };
+  viewer.camera.moveEnd ??= { addEventListener() {} };
+  const dataManager = {
+    layers: new Map([['street-level', { module: layer }]]),
+    isEnabled: () => true,
+    getLayerParams: () => layer.getParams(),
+    setLayerParams: (_id, params) => {
+      layer.setParams(params);
+      return true;
+    },
+    getAll: () => [{ id: 'street-level', name: 'Street Level', enabled: true }],
+  };
+  const styleManager = {
+    mapStackController: { getActiveId: () => 'osm' },
+    setMapStack: async () => ({ ok: false, error: 'no map switch expected' }),
+  };
+  const runner = createGevActionRunner({ viewer, styleManager, dataManager });
+  // The way a plain sl=kartaview link calls it: autoOpen false.
+  const result = await runner('show_street_level', {
+    latitude: 52.52,
+    longitude: 13.405,
+    provider: 'kartaview',
+    fly: false,
+    autoOpen: false,
+  });
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.armed, undefined, 'not armed: KartaView bills nothing');
+  assert.equal(result.provider, 'kartaview');
+  assert.equal(result.providerName, 'KartaView');
+  assert.deepEqual(
+    layer
+      .getUIState()
+      .providers.filter((p) => p.on)
+      .map((p) => p.id),
+    ['kartaview'],
+  );
+  assert.deepEqual(kartaview.calls.open, ['kv-1']);
+  assert.equal(layer.providerStatus('kartaview').billed, false);
+  assert.equal(layer.requiredMapStack('kartaview'), null);
+
+  // With 360° only on, an empty search names the filter, not just "no imagery".
+  layer.closeViewer?.();
+  layer.setParams({ pano: 'pano' });
+  nearest = null;
+  const empty = await runner('show_street_level', {
+    latitude: 52.52,
+    longitude: 13.405,
+    provider: 'kartaview',
+    fly: false,
+  });
+  assert.deepEqual([empty.ok, empty.stage], [false, 'imagery']);
+  assert.equal(empty.filter?.pano, 'pano');
+  assert.match(empty.error, /with the 360° filter on$/);
+  layer.setParams({ pano: 'all' });
+  const plain = await runner('show_street_level', {
+    latitude: 52.52,
+    longitude: 13.405,
+    provider: 'kartaview',
+    fly: false,
+  });
+  assert.equal(plain.ok, false);
+  assert.equal(plain.filter, undefined, 'no filter, no hint');
+  assert.doesNotMatch(plain.error, /filter/);
+});
+
+test('set_street_level: "switch to KartaView, 360° since 2023" lights KartaView alone, filters it and notes its upload dates', async (t) => {
+  const { createGevActionRunner } = await import('../../voice/gevActions.js');
+  const mapillary = fakeProvider();
+  const kartaview = fakeProvider({ id: 'kartaview', pickPrefix: 'kv:' });
+  kartaview.name = 'KartaView';
+  kartaview.label = 'KARTAVIEW';
+  kartaview.defaultOn = false;
+  // As the real provider: 360° / flat and SINCE, dated by upload.
+  kartaview.filters = Object.freeze(['pano', 'since']);
+  kartaview.sinceBasis = 'upload';
+  const { layer, viewer } = await enabledLayer(t, [mapillary, kartaview]);
+  viewer.clock ??= { onTick: { addEventListener: () => () => {} } };
+  viewer.camera.moveEnd ??= { addEventListener() {} };
+  const writes = [];
+  const dataManager = {
+    layers: new Map([['street-level', { module: layer }]]),
+    isEnabled: () => true,
+    getLayerParams: () => layer.getParams(),
+    setLayerParams: (_id, params, { origin }) => {
+      writes.push({ params, origin });
+      layer.setParams(params);
+      return true;
+    },
+    getAll: () => [{ id: 'street-level', name: 'Street Level', enabled: true }],
+  };
+  const styleManager = {
+    mapStackController: { getActiveId: () => 'osm' },
+    setMapStack: async () => ({ ok: false, error: 'no map switch expected' }),
+  };
+  const runner = createGevActionRunner({ viewer, styleManager, dataManager });
+  const result = await runner('set_street_level', {
+    provider: 'kartaview',
+    imagery: 'pano',
+    sinceYear: 2023,
+  });
+  assert.equal(result.ok, true, result.error);
+  assert.deepEqual(result.changed, ['provider', 'imagery', 'since']);
+  assert.equal(result.provider, 'kartaview');
+  assert.equal(result.providerName, 'KartaView');
+  assert.deepEqual(
+    layer
+      .getUIState()
+      .providers.filter((p) => p.on)
+      .map((p) => p.id),
+    ['kartaview'],
+  );
+  assert.equal(layer.getParams().mapillary, false, 'Mapillary switched off');
+  assert.equal(layer.getUIState().filter.pano, 'pano');
+  assert.equal(writes.at(-1).origin, 'voice');
+  assert.deepEqual(result.filtersApply, { imagery: true, since: true });
+  assert.equal(result.sinceNote, 'KartaView: by upload date');
+  assert.match(result.say, /^KartaView, 360° only, since Jan 2023\.$/);
+  assert.ok(
+    result.display.lines.includes('KartaView: by upload date'),
+    'the reply shows the panel’s note',
+  );
+  assert.equal(kartaview.calls.open.length, 0, 'no photo opened');
+
+  // Back to Mapillary: capture dates again, no note.
+  const back = await runner('set_street_level', { provider: 'mapillary' });
+  assert.equal(back.sinceNote, null);
+  assert.ok(!back.display.lines.some((line) => /upload/.test(line)));
 });

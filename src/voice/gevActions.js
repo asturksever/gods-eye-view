@@ -2439,12 +2439,36 @@ function stopAllTracking(viewer, dataManager) {
 }
 
 /**
+ * The imagery filter the lit source honours when it is narrower than the
+ * default (360° or flat only, or SINCE), or null.
+ * @returns {{ pano?: string, sinceDays?: number, label: string } | null}
+ */
+export function activeImageryFilter(ui) {
+  const filter = ui?.filter || {};
+  const controls = ui?.filterControls || {};
+  const out = {};
+  const names = [];
+  if (controls.pano && (filter.pano === 'pano' || filter.pano === 'flat')) {
+    out.pano = filter.pano;
+    names.push(filter.pano === 'pano' ? '360°' : 'flat-photo');
+  }
+  if (controls.since && Number(filter.sinceDays) > 0) {
+    out.sinceDays = Number(filter.sinceDays);
+    names.push('SINCE');
+  }
+  if (!names.length) return null;
+  out.label = `${names.join(' and ')} filter${names.length > 1 ? 's' : ''}`;
+  return out;
+}
+
+/**
  * Frames entities near the current view target with a cinematic pull-back:
  * oblique high pitch for aircraft/ships, shallow wide pitch for satellites.
  * When entries are found and detection is OFF, auto-enables panoptic
  * detection so the framed entities are labeled, and reports
  * detectionEnabled so the voice agent can mention labels are on.
  */
+
 async function frameOverhead(viewer, dataManager, styleManager, args = {}) {
   const targetRaw = String(args.target || 'flights').toLowerCase();
   const layerId =
@@ -3079,6 +3103,9 @@ function readStreetLevelState(dataManager, layerModule) {
       imagery: ui.filterControls?.pano !== false,
       since: ui.filterControls?.since !== false,
     },
+    // A source that dates SINCE by upload, not capture, says so
+    // ("KartaView: by upload date"), as the panel does under the slider.
+    sinceNote: typeof ui.sinceNote === 'string' ? ui.sinceNote : null,
     coverageCount: Number.isFinite(ui.coverage?.count)
       ? ui.coverage.count
       : null,
@@ -3517,10 +3544,14 @@ export async function showStreetLevel(
         street.error || 'Street Level changed while it looked for imagery',
         { cancelled: true, location },
       );
+    // An imagery filter the source honours can hide every photo here; say
+    // so, or the answer reads as "no coverage" when one switch would do.
+    const filter = activeImageryFilter(layerModule.getUIState?.());
+    const reason = street.error || `No ${providerName} imagery near ${label}`;
     return fail(
       'imagery',
-      street.error || `No ${providerName} imagery near ${label}`,
-      { location },
+      filter ? `${reason} with the ${filter.label} on` : reason,
+      { location, ...(filter ? { filter } : {}) },
     );
   }
   return {

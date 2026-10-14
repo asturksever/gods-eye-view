@@ -125,7 +125,7 @@ const schemas = [
         },
         provider: {
           type: 'string',
-          enum: ['google', 'mapillary'],
+          enum: ['google', 'mapillary', 'kartaview'],
         },
         referent: {
           type: 'integer',
@@ -141,7 +141,7 @@ const schemas = [
       properties: {
         provider: {
           type: 'string',
-          enum: ['google', 'mapillary'],
+          enum: ['google', 'mapillary', 'kartaview'],
         },
         imagery: {
           type: 'string',

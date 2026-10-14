@@ -77,7 +77,7 @@ export const ACTION_DESCRIPTIONS = {
         },
         provider: {
           description:
-            'google = Street View, mapillary = Mapillary; omit: the lit source.',
+            'google = Street View, mapillary, kartaview by name; omit: the lit source.',
           $position: 1,
         },
         referent: {
@@ -94,7 +94,7 @@ export const ACTION_DESCRIPTIONS = {
     parameters: {
       properties: {
         provider: {
-          description: 'google = Street View, mapillary = Mapillary.',
+          description: 'google = Street View, mapillary, kartaview by name.',
           $position: 1,
         },
         imagery: {

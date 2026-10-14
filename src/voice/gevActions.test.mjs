@@ -4084,10 +4084,10 @@ test('show_street_level reports each stage it could not pass', async () => {
   assert.deepEqual(centre.order, ['params:google:voice', 'open:google:250:false:view-centre']);
 
   const unknown = await createStreetLevelHarness().runner('show_street_level', {
-    latitude: 1, longitude: 2, provider: 'kartaview', fly: false,
+    latitude: 1, longitude: 2, provider: 'openstreetcam', fly: false,
   });
   assert.deepEqual([unknown.ok, unknown.stage], [false, 'provider']);
-  assert.match(unknown.error, /kartaview/);
+  assert.match(unknown.error, /openstreetcam/);
 
   const keylessHarness = createStreetLevelHarness({ enabled: true, keyRequired: true });
   const keyless = await keylessHarness.runner('show_street_level', {
@@ -4464,4 +4464,25 @@ test('show_street_level without a flight needs the item where it is now, not whe
   assert.deepEqual([stale.ok, stale.stage], [false, 'location']);
   assert.match(stale.error, /no longer loaded/);
   assert.ok(!harness.order.some((entry) => entry.startsWith('open:')), 'nothing looked up at the stale point');
+});
+
+test('activeImageryFilter reports only the narrowing filters the lit source honours', async () => {
+  const { activeImageryFilter } = await import('./gevActions.js');
+  const both = { pano: true, since: true };
+  assert.equal(activeImageryFilter({ filter: { pano: 'all', sinceDays: 0 }, filterControls: both }), null);
+  assert.deepEqual(activeImageryFilter({ filter: { pano: 'pano', sinceDays: 0 }, filterControls: both }), {
+    pano: 'pano',
+    label: '360° filter',
+  });
+  assert.deepEqual(activeImageryFilter({ filter: { pano: 'flat', sinceDays: 365 }, filterControls: both }), {
+    pano: 'flat',
+    sinceDays: 365,
+    label: 'flat-photo and SINCE filters',
+  });
+  assert.equal(
+    activeImageryFilter({ filter: { pano: 'pano', sinceDays: 365 }, filterControls: { pano: false, since: false } }),
+    null,
+    'Street View honours neither',
+  );
+  assert.equal(activeImageryFilter(undefined), null);
 });

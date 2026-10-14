@@ -1,22 +1,27 @@
 # Changelog
 
 - Street Level filters by voice and typed commands: `set_street_level` sets
-  the imagery source, 360°/flat and a captured-since window ("only 360
-  Mapillary coverage", "photos since 2023", "switch to Google Street View")
-  through the same persisted path as the panel, without opening a photo. The
-  view-state readout carries the settings while the layer is on.
+  the imagery source (Mapillary, KartaView or Google Street View), 360°/flat
+  and a captured-since window ("only 360 Mapillary coverage", "photos since
+  2023", "switch to KartaView") through the same persisted path as the panel,
+  without opening a photo. KartaView's window goes by upload date, and the
+  reply notes it as the panel does. The view-state readout carries the
+  settings while the layer is on.
 
-- "Show me X on Street View" (or on Mapillary): a `show_street_level` voice and
-  typed action flies to the place, switches to Google 3D when the source needs
-  it, lights that source in Street Level, turns the layer on and opens the
-  nearest photo, reporting which step failed. Views and share links carry the
+- "Show me X on Street View" (or on Mapillary or KartaView): a
+  `show_street_level` voice and typed action flies to the place, switches to
+  Google 3D when the source needs it, lights that source in Street Level,
+  turns the layer on and opens the nearest photo, reporting which step
+  failed. Views and share links carry the
   same request (`street_level`, `sl=`), so `show_in_gods_eye_view` and a link
   can open a panorama at a place. Street View lookups from a geocoded place
   search up to 250 m; clicks keep 50 m. A plain link with `sl=google` arms
   Street View and leaves the billed load to a press of OPEN GOOGLE STREET
   VIEW; embedded views open it. The source the action lights stays lit like a
   chip click. An unavailable map stack now reports the controller's
-  own reason instead of always asking for a Cesium ion token.
+  own reason instead of always asking for a Cesium ion token. When nothing
+  is found and a 360°, flat or SINCE filter the source honours is on, the
+  answer names the filter.
 
 - Add New York City traffic cameras from the NYC DOT Traffic Management Center
   as an opt-in CCTV pack. NYC DOT requires a data-sharing agreement for the
@@ -123,6 +128,29 @@
   stale, moved-camera, invalid and oversized captures still fail closed.
 
 ## [Unreleased]
+
+- Street Level: KartaView is the third provider, keyless. Light its chip
+  (purple; off by default, one provider at a time) and zoom in below about
+  6 km: the lines are the streets KartaView has photos of (z13–14 tiles from
+  `api.kartaview.org`). A click on a line opens the photo nearest the click
+  without moving the camera, flat or 360° (a small WebGL panorama: drag to
+  look, wheel to zoom), with cones along its drive and ‹ › / ← → to step
+  through it. The caption links to the full-size photo (KartaView's photo
+  pages fail for signed-out visitors), and the globe credits "© KartaView
+  contributors, CC BY-SA 4.0". Share links carry it in the provider
+  switches (`0.m.0_0.r.google-0*kartaview-1`). Archived photos (KartaView
+  answers 409) are skipped by the click and by ‹ ›. Shift+← →, ↑ ↓, + − and
+  pinch look around a 360° photo. The open photo's marker is a purple view
+  cone pointing along the drive (KartaView's own compass headings are often
+  0 or far off). The IMAGERY (ALL / 360° / FLAT) and SINCE filters apply to
+  KartaView as to Mapillary: its lines are filtered by KartaView's own
+  server (its filtered PNG tiles, as a mask over the JSON lines), and the
+  photo a click opens, and the cones, by each photo's projection and upload
+  date. KartaView's SINCE is the upload date (all its server can filter by);
+  a note under the slider says so while KartaView is lit (`sinceBasis:
+  'upload'` in the provider contract).
+  Mapillary's line coverage and sequence cones are now shared by both
+  (`lineCoverage.js`, `sequenceCones.js`).
 
 - Street Level: Google Street View is the second provider. On the Google 3D
   map (Google's terms keep it off other maps), light its chip (off by

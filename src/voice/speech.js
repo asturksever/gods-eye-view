@@ -290,7 +290,9 @@ function showStreetLevel(result) {
         : `${source} needs its key.`;
     else if (result?.stage === 'layer') say = "Couldn't turn on Street Level.";
     else if (result?.stage === 'imagery')
-      say = `No ${source} imagery near ${place}.`;
+      say = result?.filter?.label
+        ? `No ${source} imagery near ${place} with the ${result.filter.label} on.`
+        : `No ${source} imagery near ${place}.`;
     else say = `Couldn't open ${source}.`;
     return {
       say,
@@ -380,8 +382,12 @@ function setStreetLevel(result) {
       title: 'Street Level',
       lines: [
         source,
-        ignored ? 'Filters apply to Mapillary' : `${imagery}, ${since}`,
-      ],
+        ignored
+          ? 'Filters apply to Mapillary and KartaView'
+          : `${imagery}, ${since}`,
+        // SINCE by upload date, not capture (KartaView), as the panel notes.
+        !ignored && Number(result.sinceDays) > 0 ? result.sinceNote : null,
+      ].filter(Boolean),
       sources: [{ label: source }],
     },
   };
@@ -625,6 +631,13 @@ function annotationTargets(args) {
     .filter(Boolean);
 }
 
+/** Street-level sources as a plan step names them. */
+const STREET_LEVEL_SOURCE_NAMES = Object.freeze({
+  google: 'Street View',
+  mapillary: 'Mapillary',
+  kartaview: 'KartaView',
+});
+
 /** A short on-screen label for one tool call in the voice card's plan. */
 export function planStepLabel(name, args = {}) {
   switch (name) {
@@ -639,14 +652,10 @@ export function planStepLabel(name, args = {}) {
     case 'select_nearest_aircraft':
       return `Nearest aircraft to ${displayName(args.locationQuery || args.locationId || 'here', 32)}`;
     case 'show_street_level':
-      return `${args.provider === 'google' ? 'Street View' : args.provider === 'mapillary' ? 'Mapillary' : 'Street level'} at ${displayName(args.query || (args.latitude != null ? 'this spot' : 'the view centre'), 32)}`;
+      return `${STREET_LEVEL_SOURCE_NAMES[args.provider] || 'Street level'} at ${displayName(args.query || (args.latitude != null ? 'this spot' : 'the view centre'), 32)}`;
     case 'set_street_level': {
       const parts = [
-        args.provider === 'google'
-          ? 'Street View'
-          : args.provider === 'mapillary'
-            ? 'Mapillary'
-            : null,
+        STREET_LEVEL_SOURCE_NAMES[args.provider] || null,
         args.imagery === 'pano'
           ? '360°'
           : args.imagery === 'flat'

@@ -3114,8 +3114,8 @@ meaning), one viewer host and one on-globe credit per active provider. Each
 provider draws in one colour (`PROVIDER_COLORS` in
 `src/layers/streetLevel/policy.js`); 360° cones are rings and the selected
 sequence is GEV cyan. Share options: `m` (Mapillary), `r` (the other providers' switches by id,
-e.g. `google-1` for Street View), `p` (`a`/`p`/`f` panoramas), `s` (since, days). Mapillary and Google
-Street View are registered. Without
+e.g. `google-1` for Street View), `p` (`a`/`p`/`f` panoramas), `s` (since, days). Mapillary, Google
+Street View and KartaView are registered. Without
 `MAPILLARY_CLIENT_TOKEN` the panel reads KEY REQUIRED and the controls are
 disabled. With it, coverage draws as z0–5 overview points from orbit and z11–14
 sequence lines below 60 km; the proxy strips the unused `image` layer from z14
@@ -3166,9 +3166,12 @@ Providers implement the contract in `src/layers/streetLevel/registry.js`. The
 core routes clicks by pick prefix, swaps viewer adapters in the one host,
 manages each provider's credit and fans the filter out to every provider. To
 add a provider: implement the definition, register it in
-`src/app/layers/streetLevel.js`, add its boolean option to the `street-level`
-group in `src/data/layerState.js` and its modules to
-`scripts/package-boundaries.json`. With providers on different keys the
+`src/app/layers/streetLevel.js` and add its modules to
+`scripts/package-boundaries.json`; its share switch travels in `r` by id.
+A provider with line coverage builds it on `lineCoverage.js` (camera-driven
+XYZ tiles, draped or cast to bare earth, selection recolouring) and its cones
+on `sequenceCones.js`, passing its tile fetch, zoom ladder, colours and pick
+prefixes; Mapillary's `coverage.js` and `sequences.js` are such wrappers. With providers on different keys the
 layer's `requiresKeyId` is null and each chip reports its own key.
 
 Google Street View (`providers/google/`) runs on the Maps JavaScript API with
@@ -3224,7 +3227,100 @@ writes through `setLayerParams` with origin `voice`, so the panel, saved state
 and share link follow, and a change turns the layer on. With no arguments it
 reads the settings; `get_current_view_state` carries them as `streetLevel`
 while the layer is on. Google's panoramas ignore the type and date filters,
-which stay set for Mapillary, and the reply says so.
+which stay set for Mapillary and KartaView, and the reply says so. KartaView
+dates SINCE by upload, so the result carries the panel's note (`sinceNote`,
+"KartaView: by upload date") and the reply shows it.
+
+KartaView (`providers/kartaview/`) is keyless and browser-side: CORS is open
+on `api.kartaview.org` (the documented `api.openstreetcam.org` answers but
+serves empty tiles), `cdn.kartaview.org` and `storage*.openstreetcam.org`.
+Its chip starts off. Coverage comes from z14 JSON tiles below 2.5 km above
+ground and z13 up to 6 km (lower zooms take seconds per tile; z10 does not
+answer), so higher up the hint says to zoom in, and an empty view says there
+are no KartaView photos in it. A tile's lines are OSM way segments with
+photos and carry no sequence, date or projection, so `decode.js` chains
+segments that meet end to start (about four times fewer lines; linear time,
+at most 20,000 segments a tile and 5,000 points a line), they are
+drawn as `kv:line:<z/x/y/n>`, up to 1,600 per tile, and never highlighted
+(`highlightsSequence: false`, so the legend has no "Selected"), and the
+provider declares `filters: ['pano', 'since']` and `coverageLabel` ("N
+streets in view · click a line for its nearest photo"). KartaView filters
+coverage only in its PNG tiles (`/sequence/tiles/{x}/{y}/{z}.png?fieldOfView=360|plane&startDate=YYYY-MM-DD`;
+its JSON, GeoJSON and jsoncanvas tiles come back empty once a filter is
+asked for), so a filtered tile is drawn from the cached JSON segments that
+lie on the filtered PNG's drawn pixels (`maskedSegments`: at least half the
+points sampled every 2 px have a drawn pixel within one; on Jakarta's 360°
+filter, 332 of 1,041 segments lie on it, 676 miss it, 33 fall between).
+A filter change reloads the lines (`lineCoverage.reload`: the drawn ones show
+until the new ones are in), keeps the JSON segments, and caches masks per
+filter and tile. A dense filtered PNG can take KartaView over a minute the
+first time (it answers 504 at 60 s and keeps drawing), so a timeout or 5xx is
+asked again 4 s later, four tries in all; then the panel says it did not
+filter the area in time. KartaView's `startDate` is the upload date (its
+server filters by nothing else), so SINCE goes by upload date throughout,
+the cut-off taken as its UTC day (`passesKartaViewFilter`): the nearest
+lookup asks the photo API for the projection (`SPHERE`/`PLANE`; it ignores
+`fieldOfView`) and upload date and checks each answer the same way (when
+photos are near but none passes, the panel says so), and the cones pass on
+each photo's projection and upload date. The provider declares
+`sinceBasis: 'upload'`, so while it is lit the panel shows "KartaView: by
+upload date" under the SINCE slider (`sinceNote` in the UI state). Tiles come uncompressed and
+uncacheable, so the last 24 decoded tiles are kept for 10 minutes while
+KartaView is lit (`createTileCache`, dropped when it is switched off); one
+that does not answer in 20 s is asked once more, and one that is not a line
+list is not cached. A click on a line reaches
+`handlePick(id, {groundPoint})`, and the provider asks the core
+(`actions.openNearest`) for its nearest showable photo within 50 m, without
+framing: many photos are archived (their file answers 409, while a HEAD says
+200) or have no file, so the six nearest are probed at once with a GET cut
+off at the headers, and where all are gone the panel says KartaView's photos
+there are archived. Only a definite answer (403/404/409/410, or 200) is
+remembered; a storage timeout or 5xx is asked again. The open photo's
+sequence draws as cones from the 250-photo page holding it
+(`/2.0/sequence/{id}/photos`); the panel counts the drive's own photos
+(`countActivePhotos`, asked once per sequence). The camera direction (the
+marker, cones, FOLLOW, and a panorama's centre) is the direction of travel
+to the next photo a few metres on (`assignCourses`): KartaView is dashcam
+imagery, while its `heading` is the device compass, which reads 0 for whole
+drives without one and can sit a steady 110° off inside a car. Until the
+drive's page arrives the compass stands in (0 counts as unknown), and the
+pose is sent again once the course is known. The open photo's marker is a
+purple view cone (`marker: {kind: 'view-cone'}`), as Street View's is blue. Pages follow photo ids, which only roughly
+follow the index, so the page is found by search (both ways, halving past the
+end when many photos were deleted), a neighbour page joins within 12 photos
+of an edge, and the cones re-centre whenever a photo of the selected sequence
+opens on another page. ‹ › (and ← →) open through the core without framing,
+step on from the photo already on its way, skip archived photos, and disable
+up front at the ends. `api.kartaview.org` speaks HTTP/1.1, so of the
+browser's six connections to it tiles take three, lookups two and pages one
+(newest first), and a lookup never waits behind tiles; the photo API answers
+429 to more than about three requests at once, so a 429 is retried with
+backoff (at most 10 s), and a lookup gets 8 s, then 15 s once more (KartaView
+sometimes sits on a lookup for 11 s and answers the same one in 3 s); a
+request that could not be made at all (no network, CORS) says so and is not
+repeated. Answers
+are read with a running byte count and cut off past 16 MB (KartaView sends
+them chunked, without a length). Photo URLs are built from
+`storage` and `filepath*`: the API's `fileurl*` always name storage1, where
+photos stored elsewhere 404, and a `fileurl*` fallback must itself be an
+https storage host. The viewer (`viewer.js`) shows a flat photo at 1,280 px,
+then 2,560 px, from the image proxy (`pr:sharp/rs:fit:W:H/<base64url>`),
+with KartaView's own 1,280 px file as the fallback, and a 360° photo's
+equirectangular `wrapped_proc` image (13,000 px wide upstream) resized to
+1,024 px, then 2,048 (docked) or 4,096 px (expanded, or once the viewer
+grows), decoded off the main thread into an ImageBitmap and uploaded as RGBA
+(about 90 ms → 15 ms for 4,096 px on a phone-class CPU), on `panorama.js`, a
+single-triangle WebGL renderer (image centre = the camera heading; drag,
+pinch, wheel, Shift+← →, ↑ ↓, + −; the canvas re-measures every frame; a
+closed viewer keeps a 1×1 texture). Without WebGL, or if the proxy fails
+within 15 s, a 360° photo shows its front view. A lost context draws the
+photo again on a new canvas (a lost canvas only gives back its lost
+context), through the core and facing where the user was looking; a newer
+photo that was opening is drawn on the new canvas instead. FIT / FILL hide
+for panoramas (`supportsRenderModes`). The
+caption has no place name (KartaView's is where the drive began) and links to
+the full-size photo through the image proxy, since kartaview.org's photo
+pages fail for signed-out visitors.
 
 **"Show me X on Street View."** The `show_street_level` assistant action
 (voice and typed; `src/voice/gevActions.js`) is one call: it checks the
@@ -3234,9 +3330,11 @@ name, coordinates, a pointed spot, a numbered item, or nothing for the view
 centre), switches to the map the source needs (Google Street View: Google 3D),
 lights that source through `setLayerParams` with origin `voice` (one source at
 a time, kept in the share link like a chip click), turns the layer on and
-calls `openNearest`. `provider` is `google` for "Street View", `mapillary` for
-"Mapillary", else the lit source. Stages fail separately (`location`, `map`,
-`provider`, `layer`, `key`, `imagery`) and a newer turn retires the lookup
+calls `openNearest`. `provider` is `google` for "Street View", `mapillary` or
+`kartaview` by name, else the lit source. Stages fail separately (`location`, `map`,
+`provider`, `layer`, `key`, `imagery`; an empty `imagery` result names a
+narrowing 360°/flat or SINCE filter the source honours, as `filter`) and a
+newer turn retires the lookup
 (`openNearest`'s `signal` option), so nothing opens after the user moved on.
 For a source without a coverage layer the lookup widens to 250 m
 (`NEAREST_RADIUS_MAX_M`; Google honours it, Mapillary's API caps at 50 m);
