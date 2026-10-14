@@ -4451,3 +4451,17 @@ test('get_current_view_state carries the Street Level source and filters while t
   const offView = await createGevActionRunner({ viewer, styleManager, dataManager: offManager })('get_current_view_state');
   assert.equal('streetLevel' in offView, false, 'not carried while the layer is off');
 });
+
+test('show_street_level without a flight needs the item where it is now, not where a list saw it', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const harness = createStreetLevelHarness({ enabled: true, activeStack: 'photoreal' });
+  // The referent carries the coordinates the list saved, but it is no longer loaded.
+  const stale = await harness.runner('show_street_level', {
+    provider: 'google',
+    fly: false,
+    entity: { layerId: 'cctv', id: 'cam-gone', label: 'Camera 7', lat: 38.58, lon: -121.5 },
+  });
+  assert.deepEqual([stale.ok, stale.stage], [false, 'location']);
+  assert.match(stale.error, /no longer loaded/);
+  assert.ok(!harness.order.some((entry) => entry.startsWith('open:')), 'nothing looked up at the stale point');
+});

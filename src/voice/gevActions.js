@@ -3339,11 +3339,9 @@ export async function showStreetLevel(
   if (args.fly === false || atViewCentre) {
     if (hasCoordinates) point = { lat: latitude, lon: longitude };
     else if (entity) {
-      const located =
-        locateLayerEntity(dataManager, entity) ||
-        (Number.isFinite(entity.lat) && Number.isFinite(entity.lon)
-          ? { lat: entity.lat, lon: entity.lon }
-          : null);
+      // Where it is now, as the flying path does: the coordinates a list
+      // saved go stale as soon as the item moves or unloads.
+      const located = locateLayerEntity(dataManager, entity);
       if (!located) return fail('location', `${label} is no longer loaded`);
       point = { lat: located.lat, lon: located.lon };
     } else if (query) {
@@ -3493,7 +3491,9 @@ export async function showStreetLevel(
       : {}),
   });
   const street = layerModule.getUIState?.()?.street || {};
-  if (!current())
+  // A cancelled request opens nothing (the lookup and the viewer both honour
+  // the turn's signal); a photo that did open is reported as open.
+  if (opened !== true && !current())
     return fail('imagery', 'Street-level request was cancelled', {
       cancelled: true,
       location,

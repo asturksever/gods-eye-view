@@ -914,6 +914,24 @@ owners. Tuner calculations have a pure entry, with existing layer exports
 preserved. Destruction removes listeners and state subscriptions before ending
 tuning; a delayed Enable result cannot reveal or refocus removed controls.
 
+## NYC DOT TMC CCTV source pack
+
+The CCTV catalog can add New York City traffic cameras from the NYC DOT
+Traffic Management Center. NYC DOT requires developers to sign a data-sharing
+agreement for the camera feed, so this is the one opt-in pack: it loads only
+when `CCTV_NYC_ENABLED=1`, and with the flag unset the server makes no NYC
+request. NYC DOT's requested disclaimer is in the Data attribution popover.
+When enabled, the server reads the keyless
+camera list at `https://webcams.nyctmc.org/api/cameras` and keeps cameras the
+feed marks online. Frame URLs are built from each camera UUID under
+`https://webcams.nyctmc.org/api/cameras/<uuid>/image`; they are never taken
+from the payload. There is no heading in the feed, so gizmos use the shared
+id-hash fallback at low confidence.
+
+Once enabled, the 250 cameras nearest the five borough cores load.
+`CCTV_NYC_MAX_SOURCES` sets the pack cap (8–400). The catalog-wide ceiling stays at 4,000 and is shared
+round-robin, so adding this pack does not silently drop another region.
+
 ## DriveBC CCTV source pack
 
 The CCTV catalog adds DriveBC highway cameras for British Columbia alongside the
@@ -1091,6 +1109,19 @@ as a stalled upstream. Error responses are cancelled. Buffered snapshots have a
 normal fallback chain. The existing declared media size ceiling remains 64 MiB.
 
 ## GBFS upstream bounds
+
+Station information is normalized in `src/sources/gbfsStations.js` for both the
+globe layer and `get_bike_share`. Names accept legacy strings or GBFS v3 Localized
+String arrays regardless of the reported feed version. Nonempty English text
+(including regional `en-*` tags, case-insensitive) takes precedence, then the first
+usable translation. An unusable `name` falls back to `short_name` with the same
+rules; if neither supplies text, the station remains available with an empty name
+(the globe uses its station-ID label and the tool returns `null`). Malformed
+translation entries do not interrupt loading of the other stations. This covers
+station names, not complete GBFS v3 support.
+`scripts/qa-gbfs-names.mjs` checks synthetic localized names through the real layer,
+station selection, keyboard dismissal, mobile cards and bike-share tool against
+either a dev or preview server (`--url` selects the target).
 
 The station reader addresses the proxy as `/api/gbfs/<encoded feed URL>`; the
 feed address is read from the path, and a query-string form is refused with a 400. GBFS refuses upstream redirects and enforces its 5 MiB response cap while
@@ -3058,7 +3089,7 @@ its criteria cannot be silently ignored.
 | Satellites             | CelesTrak                                                                                                                                                                                       | `src/data/satellites.js`                              | `/api/celestrak`                                         | 120s                                                                              |
 | Space Missions (30d)   | Launch Library 2 + CelesTrak                                                                                                                                                                    | `src/data/rocketLaunches.js`                          | `/api/launches` + `/api/celestrak/active`                | 5 min                                                                             |
 | Traffic | Selectable TomTom / OpenStreetMap / Hybrid roads; optional TomTom flow (BYOK) | `src/data/traffic.js` | browser-direct OpenFreeMap tiles; `/api/tomtom` for flow | viewport-driven; capped tile cache |
-| CCTV                   | Austin + Caltrans (CA) + TfL London + Ontario 511 + Fintraffic (FI) + DriveBC (BC) + TxDOT (TX) + Estonia (Tallinn, Tarktee) + Live Traffic NSW + Open Calgary Open Data + Statens vegvesen (NO, stills + live HLS) + Street View fallback | `src/data/cctv.js`                                    | `/api/cctv`                                              | 10s (active)                                                                      |
+| CCTV                   | Austin + Caltrans (CA) + TfL London + Ontario 511 + Fintraffic (FI) + DriveBC (BC) + TxDOT (TX) + Estonia (Tallinn, Tarktee) + Live Traffic NSW + Open Calgary Open Data + Statens vegvesen (NO, stills + live HLS) + NYC DOT TMC (opt-in) + Street View fallback | `src/data/cctv.js`                                    | `/api/cctv`                                              | 10s (active)                                                                      |
 | Radio                  | Radio Browser (public-domain station directory)                                                                                                                                                 | `src/data/radio.js`                                   | `/api/radio/stations`, `/api/radio/click/:uuid`          | 45 min directory refresh                                                          |
 | Transit 🚌             | Operator GTFS-Realtime VehiclePositions (7 keyless regions, `src/data/transitFeeds.js`)                                                                                                         | `src/layers/transit/` via `src/app/layers/transit.js` | `/api/transit`                                           | 15s (poll + delayed playback)                                                     |
 | Bikeshare 🚲           | GBFS (Lyft + BCycle)                                                                                                                                                                            | `src/data/bikeshare.js`                               | `/api/gbfs`                                              | 60s                                                                               |
@@ -3221,7 +3252,12 @@ brings `map: photoreal` and refuses another map; not with `follow`), links as
 `sl=<source>,<lat>,<lon>`; `show_in_gods_eye_view` accepts it, the globe panel
 applies it through the action, and a plain link runs the action once restored
 (one shot: the rewritten hash drops `sl`). In embed mode the photo opens as
-the lifted viewer, since the rail holding the panel is hidden there. A plain
+the lifted viewer, since the rail holding the panel is hidden there, and Esc
+closes it rather than shrinking it into that rail. A caller's abort is
+honoured through the viewer's mount and load, not just the lookup, and only
+the lookup that still owns the panel may change its spinner or error. A
+passive link's photos stand down if anyone navigated (a gesture, a search,
+the assistant) while the link waited behind its own marks. A plain
 link never loads a photo from a source that bills every load
 (`billedPerImage` on the provider; Google): the action runs with
 `autoOpen: false`, arms the lookup on the layer (`armNearest`: the link's

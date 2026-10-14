@@ -730,3 +730,68 @@ test('an aborted install never runs the link photos', async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(calls, []);
 });
+
+test('a passive link stands down when someone navigated while it waited behind its marks', async () => {
+  const calls = [];
+  let releaseMarks = null;
+  const shell = {
+    initialRestorePromise: Promise.resolve(),
+    _navigationGeneration: 7,
+  };
+  const run = async (name) => {
+    calls.push(name);
+    if (name === 'annotate_map')
+      await new Promise((resolve) => {
+        releaseMarks = resolve;
+      });
+    return { ok: true };
+  };
+  const an = encodeURIComponent(
+    JSON.stringify([{ type: 'pin', target: 'Austin' }]),
+  );
+  installViews({
+    shell,
+    viewer: fakeViewer(),
+    dataManager: fakeLayers(new Set()),
+    run,
+    location: {
+      search: '',
+      hash: `#v=2&lat=1&lon=2&an=${an}&sl=mapillary,1.00000,2.00000`,
+    },
+    windowRef: new EventTarget(),
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(calls, ['annotate_map']);
+  shell._navigationGeneration = 8; // the recipient searched, or the assistant flew
+  releaseMarks();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(
+    calls,
+    ['annotate_map'],
+    'the link did not fly over the newer navigation',
+  );
+
+  // Unchanged navigation: the photos open as before.
+  const quiet = [];
+  installViews({
+    shell: {
+      initialRestorePromise: Promise.resolve(),
+      _navigationGeneration: 3,
+    },
+    viewer: fakeViewer(),
+    dataManager: fakeLayers(new Set()),
+    run: async (name) => {
+      quiet.push(name);
+      return { ok: true };
+    },
+    location: {
+      search: '',
+      hash: `#v=2&lat=1&lon=2&an=${an}&sl=mapillary,1.00000,2.00000`,
+    },
+    windowRef: new EventTarget(),
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(quiet, ['annotate_map', 'show_street_level']);
+});

@@ -277,7 +277,16 @@ export function installViews({
   );
   // What the link itself asks for runs first, one thing at a time; posted
   // views queue behind it. One failing step does not take the next with it.
-  let queue = ready;
+  // The camera's owner at restore: anyone who navigates while the link's
+  // steps wait (a gesture, a search, the assistant) takes it, and a passive
+  // link must not fly over them.
+  let generationAtRestore = null;
+  let queue = ready.then(() => {
+    generationAtRestore = shell._navigationGeneration;
+  });
+  const navigatedSinceRestore = () =>
+    Number.isFinite(generationAtRestore) &&
+    shell._navigationGeneration !== generationAtRestore;
   const linkStep = (work) =>
     queue.then(async () => {
       if (signal?.aborted) return;
@@ -299,6 +308,7 @@ export function installViews({
     : streetLevelFromParams(hashParams);
   if (streetLevel)
     queue = linkStep(async () => {
+      if (navigatedSinceRestore()) return;
       const result = await run(
         'show_street_level',
         streetLevelArgs(streetLevel, { autoOpen: isEmbeddedInline() }),

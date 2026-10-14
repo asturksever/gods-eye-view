@@ -1405,3 +1405,77 @@ test('set_street_level with no arguments reads the settings and changes nothing'
   assert.equal(status.provider, 'mapillary');
   assert.equal(layer.getUIState().filter.pano, 'flat');
 });
+
+test('openNearest keeps honouring the caller after the lookup: an abort while the viewer loads opens nothing', async (t) => {
+  let releaseMount = null;
+  const provider = fakeProvider({ nearestImage: async () => 'img-1' });
+  const create = provider.create;
+  provider.create = (context) => {
+    const instance = create(context);
+    const mount = instance.viewer.mount;
+    instance.viewer.mount = async (...args) => {
+      await new Promise((resolve) => {
+        releaseMount = resolve;
+      });
+      return mount(...args);
+    };
+    return instance;
+  };
+  const { layer } = await enabledLayer(t, [provider]);
+  const { fakeHost } =
+    await import('../../testSupport/googleStreetViewFakes.mjs');
+  layer.attachViewerHost(fakeHost());
+  const controller = new AbortController();
+  const pending = layer.openNearest(
+    { lat: 1, lon: 2 },
+    { frame: false, signal: controller.signal },
+  );
+  for (let i = 0; i < 20 && !releaseMount; i++) await settle();
+  assert.ok(releaseMount, 'the lookup answered and the viewer is mounting');
+  controller.abort();
+  releaseMount();
+  assert.equal(await pending, false);
+  assert.deepEqual(provider.calls.open, [], 'the photo was never opened');
+  assert.equal(layer.getUIState().street.open, false);
+  assert.equal(layer.getUIState().street.loading, false);
+});
+
+test('an aborted older lookup leaves its replacement’s spinner alone', async (t) => {
+  const answers = [];
+  const provider = fakeProvider({
+    nearestImage: (_point, { signal } = {}) =>
+      new Promise((resolve, reject) => {
+        answers.push(resolve);
+        signal?.addEventListener('abort', () =>
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+        );
+      }),
+  });
+  const { layer } = await enabledLayer(t, [provider]);
+  const { fakeHost } =
+    await import('../../testSupport/googleStreetViewFakes.mjs');
+  layer.attachViewerHost(fakeHost());
+  const older = new AbortController();
+  const first = layer.openNearest(
+    { lat: 1, lon: 2 },
+    { frame: false, signal: older.signal },
+  );
+  await settle();
+  // A newer request replaces it, and its caller withdraws the old one too.
+  const second = layer.openNearest({ lat: 3, lon: 4 }, { frame: false });
+  older.abort();
+  assert.equal(await first, false);
+  assert.equal(
+    layer.getUIState().street.loading,
+    true,
+    'the newer lookup is still loading',
+  );
+  answers.at(-1)(null);
+  assert.equal(await second, false);
+  assert.equal(layer.getUIState().street.loading, false);
+  assert.match(
+    layer.getUIState().street.error,
+    /No street-level imagery/,
+    'the newer lookup reports its own result',
+  );
+});
