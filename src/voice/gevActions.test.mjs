@@ -3892,8 +3892,12 @@ function createStreetLevelHarness({
   lit = { mapillary: true, google: false },
   enabled = false,
   keyRequired = false,
+  configured = !keyRequired,
   nearest = 'pano-a',
   paramsAccepted = true,
+  enableResult = true,
+  listGoogle = true,
+  duringLookup = null,
 } = {}) {
   const order = [];
   const { viewer, styleManager } = createVoiceNavigationHarness();
@@ -3913,6 +3917,7 @@ function createStreetLevelHarness({
     return { ok: true, activeStack: id, error: null };
   };
   let params = { ...lit };
+  let keyRejected = false;
   const street = { imageId: null, error: null };
   const names = { google: 'Google Street View', mapillary: 'Mapillary' };
   const layer = {
@@ -3924,9 +3929,9 @@ function createStreetLevelHarness({
             id,
             name: names[id],
             on: params[id] === true,
-            configured: !keyRequired,
-            keyRequired,
-            keyRejected: false,
+            configured,
+            keyRequired: keyRequired || keyRejected,
+            keyRejected,
             groundClick: id === 'google',
             billed: id === 'google',
             available: id !== 'google' || stack === 'photoreal',
@@ -3935,7 +3940,7 @@ function createStreetLevelHarness({
         : null,
     getUIState: () => ({
       providers: ['mapillary', 'google']
-        .filter((id) => id !== 'google' || stack === 'photoreal')
+        .filter((id) => id !== 'google' || (stack === 'photoreal' && listGoogle))
         .map((id) => ({
           id,
           name: id === 'google' ? 'Google Street View' : 'Mapillary',
@@ -3956,6 +3961,18 @@ function createStreetLevelHarness({
     async openNearest(point, options) {
       order.push(`open:${options.providerIds.join('+')}:${options.radiusM ?? 'default'}:${options.frame}${point ? '' : ':view-centre'}`);
       if (options.signal?.aborted) return false;
+      if (duringLookup) {
+        const effect = duringLookup();
+        if (effect === 'key-rejected') {
+          keyRejected = true;
+          street.error = 'Google refused GOOGLE_MAPS_API_KEY for Street View';
+          return false;
+        }
+        if (effect === 'layer-off') {
+          enabled = false;
+          return false;
+        }
+      }
       if (!nearest) {
         street.error = `No street-level imagery within ${options.radiusM ?? 50} m of ${point ? 'that point' : 'the view centre'}`;
         return false;
@@ -3978,6 +3995,7 @@ function createStreetLevelHarness({
     },
     async setEnabled(id) {
       order.push(`enable:${id}`);
+      if (enableResult === false) return false;
       enabled = true;
       return true;
     },
@@ -4065,7 +4083,7 @@ test('show_street_level reports each stage it could not pass', async () => {
 
   const keylessHarness = createStreetLevelHarness({ enabled: true, keyRequired: true });
   const keyless = await keylessHarness.runner('show_street_level', {
-    latitude: 1, longitude: 2, provider: 'google',
+    latitude: 1, longitude: 2, provider: 'google', fly: false,
   });
   assert.deepEqual([keyless.ok, keyless.stage], [false, 'key']);
   assert.match(keyless.error, /needs its key/);
@@ -4221,6 +4239,10 @@ test('show_street_level with autoOpen:false arms a billed source and leaves the 
     'map and source are ready, the lookup is armed at the point, nothing is loaded',
   );
   assert.match(armed.say, /^Google Street View is ready at .*press OPEN/);
+  assert.deepEqual(
+    { ...armed, say: undefined, display: undefined },
+    { ok: true, action: 'show_street_level', provider: 'google', providerName: 'Google Street View', label: '38.5799, -121.4937', armed: true, flew: false, say: undefined, display: undefined },
+  );
   const free = createStreetLevelHarness({ enabled: true, activeStack: 'osm' });
   const opened = await free.runner('show_street_level', {
     latitude: 38.5799, longitude: -121.4937, provider: 'mapillary', fly: false, autoOpen: false,
@@ -4228,4 +4250,99 @@ test('show_street_level with autoOpen:false arms a billed source and leaves the 
   assert.equal(opened.ok, true, opened.error);
   assert.equal(opened.armed, undefined);
   assert.equal(opened.imageId, 'pano-a');
+});
+
+test('show_street_level tells a failed enable, a delisted source, a key refused mid-lookup and a layer switched off apart', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const at = { latitude: 1, longitude: 2, provider: 'google', fly: false };
+  const notEnabled = await createStreetLevelHarness({ activeStack: 'photoreal', enableResult: false }).runner('show_street_level', at);
+  assert.deepEqual([notEnabled.ok, notEnabled.stage, notEnabled.cancelled], [false, 'layer', false]);
+  assert.match(notEnabled.say, /Couldn't turn on Street Level/);
+
+  const delisted = await createStreetLevelHarness({ enabled: true, activeStack: 'photoreal', listGoogle: false }).runner('show_street_level', at);
+  assert.deepEqual([delisted.ok, delisted.stage], [false, 'provider']);
+  assert.equal(delisted.error, 'not on this map');
+
+  const refused = await createStreetLevelHarness({ enabled: true, activeStack: 'photoreal', duringLookup: () => 'key-rejected' }).runner('show_street_level', at);
+  assert.deepEqual([refused.ok, refused.stage, refused.keyRejected], [false, 'key', true]);
+  assert.equal(refused.say, 'Google Street View refused its key.');
+
+  const switchedOff = await createStreetLevelHarness({ enabled: true, activeStack: 'photoreal', duringLookup: () => 'layer-off' }).runner('show_street_level', at);
+  assert.deepEqual([switchedOff.ok, switchedOff.stage, switchedOff.cancelled], [false, 'imagery', true]);
+  assert.equal(switchedOff.say, undefined, 'a request the user withdrew is not spoken');
+
+  // A source whose status call says it is not configured is key-gated even
+  // before its coverage reports a missing key.
+  const unconfigured = createStreetLevelHarness({ enabled: true, activeStack: 'photoreal', configured: false });
+  const gated = await unconfigured.runner('show_street_level', at);
+  assert.deepEqual([gated.ok, gated.stage], [false, 'key']);
+  assert.deepEqual(unconfigured.order, [], 'nothing changed');
+});
+
+test('show_street_level without a flight geocodes a name, locates an item, and reports what it cannot place', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const hit = createStreetLevelHarness({ enabled: true, activeStack: 'osm' });
+  const points = [];
+  const open = hit.layer.openNearest;
+  hit.layer.openNearest = (point, options) => {
+    points.push(point);
+    return open(point, options);
+  };
+  const runner = createGevActionRunner({
+    viewer: createVoiceNavigationHarness().viewer,
+    styleManager: { mapStackController: { getActiveId: () => 'osm' }, setMapStack: async () => ({ ok: true }) },
+    dataManager: hit.dataManager,
+    placeSearch: {
+      geocode: async (query) =>
+        query === 'Capitol Mall'
+          ? { place: { lat: 38.5792, lng: -121.4958, label: 'Capitol Mall, Sacramento' } }
+          : { place: null, answered: true },
+    },
+  });
+  const found = await runner('show_street_level', { query: 'Capitol Mall', provider: 'mapillary', fly: false });
+  assert.equal(found.ok, true, found.error);
+  assert.equal(found.label, 'Capitol Mall, Sacramento');
+  assert.deepEqual(points.at(-1), { lat: 38.5792, lon: -121.4958 });
+  assert.equal(found.flew, false);
+
+  const miss = await runner('show_street_level', { query: 'Atlantis Boulevard', provider: 'mapillary', fly: false });
+  assert.deepEqual([miss.ok, miss.stage], [false, 'location']);
+  assert.equal(miss.say, "Couldn't find Atlantis Boulevard.");
+  assert.equal(points.length, 1, 'a miss asks for no imagery');
+
+  const gone = await runner('show_street_level', {
+    provider: 'mapillary', fly: false, entity: { layerId: 'cctv', id: 'cam-gone', label: 'Camera 7' },
+  });
+  assert.deepEqual([gone.ok, gone.stage], [false, 'location']);
+  assert.equal(gone.say, "Couldn't find Camera 7.");
+
+  // A flight that reports no coordinates cannot be followed by a lookup.
+  const noPoint = createGevActionRunner({
+    viewer: createVoiceNavigationHarness().viewer,
+    styleManager: { mapStackController: { getActiveId: () => 'osm' }, setMapStack: async () => ({ ok: true }) },
+    dataManager: hit.dataManager,
+    searchNavigation: async (_viewer, query, options) => {
+      options.onComplete?.();
+      return { label: query, navigationMode: 'city-overview', rangeM: null };
+    },
+  });
+  const unplaced = await noPoint('show_street_level', { query: 'Somewhere', provider: 'mapillary' });
+  assert.deepEqual([unplaced.ok, unplaced.stage], [false, 'location']);
+  assert.match(unplaced.error, /no position/);
+});
+
+test('fly_to_location reports the overview centre for a city framed as a whole, and the first POI for a close view', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const { viewer, styleManager } = createVoiceNavigationHarness();
+  viewer.camera.lookAt = () => {};
+  viewer.camera.flyTo = (options) => options.complete?.();
+  viewer.camera.flyToBoundingSphere = (_s, options) => options.complete?.();
+  styleManager.runImmediateLocationNavigation = (navigate) => styleManager.runImmediateNavigation('location', navigate);
+  const runner = createGevActionRunner({ viewer, styleManager, dataManager: { layers: new Map(), getAll: () => [] } });
+  const overview = await runner('fly_to_location', { locationId: 'austin' });
+  assert.equal(overview.ok, true);
+  assert.ok(Math.abs(overview.latitude - 30.31) < 0.001, String(overview.latitude));
+  assert.ok(Math.abs(overview.longitude - -97.75) < 0.001, String(overview.longitude));
+  const close = await runner('fly_to_location', { locationId: 'austin', viewMode: 'close' });
+  assert.deepEqual([close.latitude, close.longitude], [30.2747, -97.7403]);
 });

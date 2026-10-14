@@ -15,8 +15,9 @@ import * as Cesium from 'cesium';
 import { announceNavigationAuthority } from '../navigationPolicy.js';
 import {
   annotationsFromParams,
-  streetLevelFromParams,
   createView,
+  followFromParams,
+  streetLevelFromParams,
 } from '../view/index.js';
 
 export const EMBED_VIEW_MESSAGE = 'gev:view';
@@ -275,24 +276,32 @@ export function installViews({
     String(location?.hash || '').replace(/^#/, ''),
   );
   // What the link itself asks for runs first, one thing at a time; posted
-  // views queue behind it.
+  // views queue behind it. One failing step does not take the next with it.
   let queue = ready;
+  const linkStep = (work) =>
+    queue.then(async () => {
+      if (signal?.aborted) return;
+      try {
+        await work();
+      } catch {
+        /* reported by the action itself */
+      }
+    });
   const linked = annotationsFromParams(hashParams);
   if (linked.length)
-    queue = queue.then(async () => {
-      if (!signal?.aborted) await run('annotate_map', { annotations: linked });
-    });
+    queue = linkStep(() => run('annotate_map', { annotations: linked }));
   // A link to street-level photos opens them once the link has restored. A
-  // plain link stops short of a billed load and leaves it to a click; an
-  // embedded view is the client's own request.
-  const streetLevel = streetLevelFromParams(hashParams);
-  const embedded = isEmbedded(location);
+  // link anyone can publish stops short of a billed load and leaves it to a
+  // click; only the panel page's own link (inline embed) is the client's
+  // request. A link that follows an entity keeps the camera on it.
+  const streetLevel = followFromParams(hashParams)
+    ? null
+    : streetLevelFromParams(hashParams);
   if (streetLevel)
-    queue = queue.then(async () => {
-      if (signal?.aborted) return;
+    queue = linkStep(async () => {
       const result = await run(
         'show_street_level',
-        streetLevelArgs(streetLevel, { autoOpen: embedded }),
+        streetLevelArgs(streetLevel, { autoOpen: isEmbeddedInline() }),
       );
       if (result?.armed === true) {
         // The restore window keeps the panel collapsed; OPEN must be in view.
@@ -302,8 +311,7 @@ export function installViews({
         shell._showToast?.(ARMED_TOAST);
       }
     });
-  queue = queue.catch(() => {});
-  if (!embedded) return () => {};
+  if (!isEmbedded(location)) return () => {};
 
   windowRef.document.body.classList.add('ui-embed');
   shell.setCleanView?.(true);

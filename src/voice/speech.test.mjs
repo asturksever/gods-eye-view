@@ -545,3 +545,31 @@ test('street-level speech names the source and the place, and says which step fa
     'Looking for imagery at Eiffel Tower.',
   );
 });
+
+test('the capture month is a UTC month whatever the timezone, and labels name the place', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url');
+  const speech = fileURLToPath(new URL('./speech.js', import.meta.url));
+  // Google dates a panorama 2024-05 as the first of the month, UTC. West of
+  // Greenwich that instant is still April; the card must still say May.
+  const out = execFileSync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `import { attachVoiceResult } from ${JSON.stringify(speech)};
+       const r = attachVoiceResult('show_street_level', { ok: true, providerName: 'Google Street View', label: 'x', capturedAt: Date.UTC(2024, 4, 1) });
+       process.stdout.write(r.display.lines[1]);`,
+    ],
+    { env: { ...process.env, TZ: 'America/Los_Angeles' }, encoding: 'utf8' },
+  );
+  assert.equal(out, 'Captured May 2024');
+  const { narrationLabel } = await import('./speech.js');
+  assert.equal(narrationLabel('show_street_level', { query: 'Eiffel Tower' }), 'Eiffel Tower');
+  assert.equal(narrationLabel('show_street_level', {}), '');
+  assert.equal(
+    planStepLabel('show_street_level', { latitude: 1, longitude: 2 }),
+    'Street level at this spot',
+  );
+  assert.equal(planStepLabel('show_street_level', {}), 'Street level at the view centre');
+});

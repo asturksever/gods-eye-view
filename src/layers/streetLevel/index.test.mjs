@@ -891,14 +891,26 @@ test('providerStatus reports name, key state and billing on any map', async (t) 
   assert.equal(layer.requiredMapStack('mapillary'), null);
 });
 
-test('an armed lookup opens at its point and radius on the next OPEN press, and clears on close', async (t) => {
-  const { layer, fake } = await withStreetView(t);
+test('an armed lookup asks nothing until the OPEN press, then opens at its point and radius once', async (t) => {
+  const { layer, fake, mapillaryLookups } = await withStreetView(t);
   layer.setProviderEnabled('google', true);
   await settle();
+  const before = fake.lookups.length;
   layer.armNearest(
     { lat: 38.57986, lon: -121.49372 },
     { providerIds: ['google'], radiusM: 250 },
   );
+  await settle();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  // The click gate: arming is free. No provider was asked, nothing opened.
+  assert.equal(
+    fake.lookups.length,
+    before,
+    'no Google lookup before the press',
+  );
+  assert.deepEqual(mapillaryLookups, [], 'no Mapillary lookup either');
+  assert.equal(layer.getUIState().street.open, false);
+  assert.equal(layer.getUIState().street.loading, false);
   assert.deepEqual(layer.getUIState().street.armed, {
     point: { lat: 38.57986, lon: -121.49372 },
     providerIds: ['google'],
@@ -911,6 +923,11 @@ test('an armed lookup opens at its point and radius on the next OPEN press, and 
     aim: 'screen-centre',
   });
   assert.equal(opened, true);
+  assert.equal(
+    fake.lookups.length,
+    before + 1,
+    'exactly one lookup for the press',
+  );
   const request = fake.lookups.at(-1);
   assert.deepEqual(
     request.location,
@@ -933,4 +950,106 @@ test('an armed lookup opens at its point and radius on the next OPEN press, and 
     'an explicit point wins',
   );
   assert.equal(layer.getUIState().street.armed, null);
+  // Only the OPEN press consumes the armed point: "street view here" after a
+  // pan is a new request at the view centre, and it drops the armed one.
+  layer.closeViewer();
+  layer.armNearest(
+    { lat: 10, lon: 20 },
+    { providerIds: ['google'], radiusM: 250 },
+  );
+  await layer.openNearest(null, { providerIds: ['google'], frame: false });
+  const centre = fake.lookups.at(-1);
+  assert.notDeepEqual(
+    centre.location,
+    { lat: 10, lng: 20 },
+    'the view centre, not the armed point',
+  );
+  assert.equal(centre.radius, 50, 'and the default radius');
+  assert.equal(layer.getUIState().street.armed, null, 'dropped');
+  // Opening any image, or switching the layer off, clears it too.
+  layer.armNearest({ lat: 10, lon: 20 }, { providerIds: ['google'] });
+  await layer.openImage('google', 'pano-a');
+  assert.equal(layer.getUIState().street.armed, null, 'cleared by an open');
+  layer.armNearest({ lat: 10, lon: 20 }, { providerIds: ['google'] });
+  layer.disable();
+  assert.equal(layer.getUIState().street.armed, null, 'cleared by disable');
+});
+
+test('a caller’s signal: an aborted one asks nothing, and a provider that ignores the abort still opens nothing', async (t) => {
+  const { layer, fake } = await withStreetView(t);
+  layer.setProviderEnabled('google', true);
+  await settle();
+  const before = fake.lookups.length;
+  const done = new AbortController();
+  done.abort();
+  assert.equal(
+    await layer.openNearest(
+      { lat: 38.58, lon: -121.49 },
+      { providerIds: ['google'], frame: false, signal: done.signal },
+    ),
+    false,
+  );
+  assert.equal(
+    fake.lookups.length,
+    before,
+    'an already-aborted signal asks nothing',
+  );
+});
+
+test('a provider that ignores the abort and answers late still opens nothing', async (t) => {
+  let seen = null;
+  let release = null;
+  const slow = fakeProvider({
+    nearestImage: async (_point, { signal } = {}) => {
+      seen = signal;
+      await new Promise((resolve) => {
+        release = resolve;
+      });
+      return 'late-image';
+    },
+  });
+  const { layer: ignoring } = await enabledLayer(t, [slow]);
+  const { fakeHost } =
+    await import('../../testSupport/googleStreetViewFakes.mjs');
+  ignoring.attachViewerHost(fakeHost());
+  const controller = new AbortController();
+  const pending = ignoring.openNearest(
+    { lat: 1, lon: 2 },
+    { frame: false, signal: controller.signal },
+  );
+  await settle();
+  controller.abort();
+  assert.equal(seen?.aborted, true, 'the provider sees the abort');
+  release();
+  assert.equal(await pending, false);
+  const street = ignoring.getUIState().street;
+  assert.equal(street.open, false, 'the late answer opened nothing');
+  assert.equal(street.loading, false, 'no stuck spinner');
+  assert.equal(street.error, null);
+});
+
+test('providerStatus reports a keyless source on any map', async (t) => {
+  const keyless = await withStreetView(t, {
+    mapStack: 'osm',
+    mapillaryKeyless: true,
+  });
+  await settle();
+  const mapillary = keyless.layer.providerStatus('mapillary');
+  assert.equal(mapillary.configured, false);
+  assert.equal(mapillary.keyRequired, true);
+  assert.equal(mapillary.keyRejected, false);
+});
+
+test('providerStatus reports a refused key on any map', async (t) => {
+  const refused = await withStreetView(t, { mapStack: 'osm' });
+  refused.loader.refuseKey();
+  await settle();
+  const google = refused.layer.providerStatus('google');
+  assert.equal(
+    google.keyRequired,
+    true,
+    'a refused key gates like a missing one',
+  );
+  assert.equal(google.keyRejected, true);
+  assert.equal(google.available, false, 'still not on this map');
 });

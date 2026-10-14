@@ -686,10 +686,11 @@ export function createStreetLevelLayer({
       } = {},
     ) {
       if (callerSignal?.aborted) return false;
-      // An OPEN press after a link armed a lookup opens what the link asked.
+      // An OPEN press after a link armed a lookup opens what the link asked;
+      // any other lookup is a new request and drops the armed one.
       const armed = state.street.armed;
       state.street.armed = null;
-      if (!point && armed) {
+      if (!point && aim === 'screen-centre' && armed) {
         point = armed.point;
         providerIds ??= armed.providerIds;
         radiusM ??= armed.radiusM;

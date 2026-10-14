@@ -2084,11 +2084,14 @@ async function main() {
       );
       if (fixtures) {
         const photo = fixture.images[0];
+        // The camera sits ~330 m north of the photo: the lookup must use the
+        // link's point, not the view centre.
+        const cameraLat = Number((photo.lat + 0.003).toFixed(6));
         await step(
-          'a link to street-level photos (sl=) opens the nearest one after it restores',
+          'a link to street-level photos (sl=) opens the one at its point after it restores',
           async () => {
             await page.goto(
-              `${url.split('#')[0]}#v=2&lat=${photo.lat}&lon=${photo.lon}&alt=600&heading=0&pitch=-60&roll=0&sl=mapillary,${photo.lat},${photo.lon}`,
+              `${url.split('#')[0]}#v=2&lat=${cameraLat}&lon=${photo.lon}&alt=600&heading=0&pitch=-60&roll=0&sl=mapillary,${photo.lat},${photo.lon}`,
               { waitUntil: 'domcontentloaded' },
             );
             // A hash change alone keeps the document: the link is read on load.
@@ -2098,9 +2101,10 @@ async function main() {
             const street = (await ui()).street;
             assert.equal(street.error, null, `viewer error: ${street.error}`);
             assert.equal(street.providerId, 'mapillary');
-            assert.ok(
-              fixtureIds.has(street.imageId),
-              `a fixture photo opened: ${street.imageId}`,
+            assert.equal(
+              street.imageId,
+              photo.id,
+              `the photo at the link's point opened, not the nearest to the camera: ${street.imageId}`,
             );
             assert.equal(
               await page.evaluate(() => location.hash.includes('sl=')),
@@ -2145,6 +2149,66 @@ async function main() {
           'fixtures only',
           'a link to street-level photos (sl=) and the show_street_level action open a fixture photo',
         );
+      await step(
+        'an sl=google link never loads a photo by itself: keyless it stops at the key, keyed it arms and waits for OPEN',
+        async ({ skip }) => {
+          const streetLevel = () =>
+            window.__godsEyeView.dataManager.layers.get('street-level').module;
+          const point = STREET_VIEW_STREET;
+          await page.goto(
+            `${url.split('#')[0]}#v=2&lat=${point.lat}&lon=${point.lon}&alt=600&heading=0&pitch=-60&roll=0&map=osm&sl=google,${point.lat},${point.lon}`,
+            { waitUntil: 'domcontentloaded' },
+          );
+          await page.reload({ waitUntil: 'domcontentloaded' });
+          await clearFirstRun(page);
+          await page.waitForFunction(
+            () => Boolean(window.__godsEyeView?.voiceCommands?.runner),
+            { timeout: 60_000 },
+          );
+          if (!googleKey) {
+            // Without a key the action fails before it changes anything.
+            await new Promise((resolve) => setTimeout(resolve, 3_000));
+            const after = await page.evaluate(
+              `(() => { const m = (${streetLevel})(); const u = m.getUIState(); return { stack: window.__godsEyeView.mapStackController.getActiveId(), google: m.getParams().google === true, armed: u.street.armed, open: u.street.open }; })()`,
+            );
+            assert.deepEqual(
+              after,
+              { stack: 'osm', google: false, armed: null, open: false },
+              'a keyless Street View link changes nothing',
+            );
+            return skip('no Google key');
+          }
+          if (!(await stacks.photoreal())) return skip('no Google 3D');
+          const armed = await settle(
+            page,
+            `(() => { const u = (${streetLevel})().getUIState(); return u.street.armed !== null && u.providers.some((p) => p.id === 'google' && p.on); })()`,
+            undefined,
+            { timeout: 90_000 },
+          );
+          assert.ok(armed, 'the link armed Street View');
+          await new Promise((resolve) => setTimeout(resolve, 5_000));
+          const waiting = await page.evaluate(
+            `(() => { const u = (${streetLevel})().getUIState(); return { open: u.street.open, loading: u.street.loading, imageId: u.street.imageId, stack: window.__godsEyeView.mapStackController.getActiveId() }; })()`,
+          );
+          assert.deepEqual(
+            waiting,
+            { open: false, loading: false, imageId: null, stack: 'photoreal' },
+            'nothing loaded without a click',
+          );
+          await page.$eval('#sl-nearest-btn', (button) => {
+            if (button.disabled) throw new Error('OPEN is disabled');
+            button.click();
+          });
+          await page.waitForFunction(
+            `(() => { const s = (${streetLevel})().getUIState().street; return (s.imageId && !s.loading) || s.error; })()`,
+            { timeout: 90_000 },
+          );
+          const street = (await ui()).street;
+          assert.equal(street.error, null, `viewer error: ${street.error}`);
+          assert.equal(street.providerId, 'google');
+          assert.ok(street.imageId, 'the press opened the panorama');
+        },
+      );
       if (fixtures)
         await step(
           'keyless install (a second page, no key on the server) gates the controls and reports KEY REQUIRED',

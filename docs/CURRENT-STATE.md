@@ -3209,8 +3209,14 @@ applies it through the action, and a plain link runs the action once restored
 the lifted viewer, since the rail holding the panel is hidden there. A plain
 link never loads a photo from a source that bills every load
 (`billedPerImage` on the provider; Google): the action runs with
-`autoOpen: false`, arms the panel and a toast points at OPEN GOOGLE STREET
-VIEW. Embedded views open the photo.
+`autoOpen: false`, arms the lookup on the layer (`armNearest`: the link's
+point and radius, consumed only by the next OPEN press (`aim:
+'screen-centre'`); any other lookup, open, close or disable drops it), opens
+the panel and a toast points at OPEN GOOGLE STREET VIEW. Only the panel
+page's own link (inline embed) and posted views open the photo; `?embed=1`
+on a published link does not. A link that follows an entity ignores `sl`.
+The look-at default applies below 20 km and above -5° of pitch; otherwise
+the camera's own point is used.
 
 Street Level has two browser gates. `npm run qa:street-level -- --url <server>`
 runs against real Mapillary and needs `MAPILLARY_CLIENT_TOKEN`. `npm run

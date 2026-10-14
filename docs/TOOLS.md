@@ -111,8 +111,9 @@ and open photos. The `street-level` layer is turned on. Links carry it as
 `show_street_level` action, which flies to the point at street framing and
 opens the nearest photo. A plain link with a `google` source stops before the
 billed load: the panel is armed and OPEN GOOGLE STREET VIEW is one click away.
-A view posted into the embedded app opens the photo, since it is the client's
-own request.
+A view posted into the embedded app, or the panel page's own opening link,
+opens the photo, since it is the client's own request; `?embed=1` on a
+published link does not. A link that follows an entity ignores `sl`.
 
 Tools take a view as `VIEW_ARGUMENTS`: an `area` to frame from above, or a
 `camera`, plus `layers`, `style`, `map`, `follow`, `annotations` and

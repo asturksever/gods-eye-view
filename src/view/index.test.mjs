@@ -255,3 +255,89 @@ test('street-level photos: a tilted camera opens them where it looks, a link can
       bad,
     );
 });
+
+test('the look-at default is street-scale only, follows the heading, and wraps at the antimeridian', async () => {
+  const { followFromParams, streetLevelFromParams } =
+    await import('./index.js');
+  const at = (camera) =>
+    createView({ camera, street_level: { provider: 'mapillary' } })
+      .street_level;
+  // Looking east from 1,000 m at 45° in Paris: ~1 km east is ~0.0137° of longitude.
+  const east = at({
+    lat: 48.85,
+    lon: 2.2945,
+    altitude_m: 1000,
+    heading_deg: 90,
+    pitch_deg: -45,
+  });
+  assert.ok(Math.abs(east.lon - (2.2945 + 0.01365)) < 0.0005, String(east.lon));
+  assert.ok(Math.abs(east.lat - 48.85) < 0.0002, String(east.lat));
+  // Looking west from the same place lands west.
+  assert.ok(
+    at({
+      lat: 48.85,
+      lon: 2.2945,
+      altitude_m: 1000,
+      heading_deg: 270,
+      pitch_deg: -45,
+    }).lon < 2.2945,
+  );
+  // At the horizon, with no altitude, or above street scale: the camera's own point.
+  assert.deepEqual(at({ lat: 1, lon: 2, altitude_m: 1000, pitch_deg: 0 }), {
+    provider: 'mapillary',
+    lat: 1,
+    lon: 2,
+  });
+  assert.deepEqual(at({ lat: 1, lon: 2, pitch_deg: -30 }), {
+    provider: 'mapillary',
+    lat: 1,
+    lon: 2,
+  });
+  assert.deepEqual(at({ lat: 1, lon: 2, altitude_m: 50_000, pitch_deg: -30 }), {
+    provider: 'mapillary',
+    lat: 1,
+    lon: 2,
+  });
+  // Across the antimeridian the longitude wraps instead of clamping.
+  const wrapped = at({
+    lat: 0,
+    lon: 179.999,
+    altitude_m: 1000,
+    heading_deg: 90,
+    pitch_deg: -45,
+  });
+  assert.ok(wrapped.lon < -179.9, String(wrapped.lon));
+
+  // A followed link keeps its camera: the photos are dropped even when both are in the hash.
+  const followed = viewToParams(
+    createView({
+      camera: { lat: 1, lon: 2 },
+      follow: { kind: 'satellite', id: '25544' },
+    }),
+  );
+  followed.set('sl', 'google,1.00000,2.00000');
+  assert.deepEqual(followFromParams(followed), {
+    kind: 'satellite',
+    id: '25544',
+  });
+  assert.equal(viewFromParams(followed).street_level, null);
+  assert.equal(followFromParams(new URLSearchParams('v=2&lat=1&lon=2')), null);
+
+  // Strict decimal degrees: no exponents, hex, blanks or over-long values.
+  for (const bad of [
+    'google,1e1,2',
+    'google,0x10,2',
+    'google, 1,2',
+    'google,1.,2',
+    `google,${'1.0000000'.padEnd(60, '0')},2`,
+  ])
+    assert.equal(
+      streetLevelFromParams(new URLSearchParams({ sl: bad })),
+      null,
+      bad,
+    );
+  assert.deepEqual(
+    streetLevelFromParams(new URLSearchParams({ sl: ',-1.5,2' })),
+    { lat: -1.5, lon: 2 },
+  );
+});

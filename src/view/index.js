@@ -80,18 +80,28 @@ const STREET_LEVEL_MAP = Object.freeze({ google: 'photoreal' });
 const STREET_LEVEL_PARAM = 'sl';
 const EARTH_RADIUS_M = 6_371_000;
 
+/** Above this a camera frames a region, not a street: photos open under it. */
+const LOOK_AT_MAX_ALTITUDE_M = 20_000;
+/** Flatter than this the look-at point is at the horizon: use the camera's. */
+const LOOK_AT_MIN_PITCH_DEG = -5;
+
 /**
- * The ground point a camera looks at: straight below it when it looks down,
- * else ahead along its heading by altitude / tan(pitch), capped at ten
- * altitudes. The inverse of a tilted area framing.
+ * The ground point a street-scale camera looks at: straight below it when it
+ * looks down, else ahead along its heading by altitude / tan(pitch). A camera
+ * with no altitude, above street scale, or aimed at the horizon gives its
+ * own point. Longitude wraps at the antimeridian.
  */
 function lookAtPoint(camera) {
   const pitch = Number(camera.pitch_deg ?? -90);
-  const altitude = Number(camera.altitude_m ?? 800_000);
-  if (!(pitch > -89) || !(altitude > 0))
+  const altitude = Number(camera.altitude_m);
+  if (
+    !(altitude > 0) ||
+    altitude > LOOK_AT_MAX_ALTITUDE_M ||
+    !(pitch > -89) ||
+    pitch > LOOK_AT_MIN_PITCH_DEG
+  )
     return { lat: camera.lat, lon: camera.lon };
-  const down = Math.tan((-pitch * Math.PI) / 180);
-  const ground = Math.min(altitude / Math.max(down, 1e-6), 10 * altitude);
+  const ground = altitude / Math.tan((-pitch * Math.PI) / 180);
   const heading = ((Number(camera.heading_deg) || 0) * Math.PI) / 180;
   const dLat =
     ((ground * Math.cos(heading)) / EARTH_RADIUS_M) * (180 / Math.PI);
@@ -99,7 +109,11 @@ function lookAtPoint(camera) {
   const dLon =
     ((ground * Math.sin(heading)) / (EARTH_RADIUS_M * cosLat)) *
     (180 / Math.PI);
-  return { lat: camera.lat + dLat, lon: camera.lon + dLon };
+  const lon = camera.lon + dLon;
+  return {
+    lat: clamp(camera.lat + dLat, -90, 90),
+    lon: lon > 180 ? lon - 360 : lon < -180 ? lon + 360 : lon,
+  };
 }
 
 /** Annotation kinds the app draws, as in its annotate_map action. */
@@ -456,12 +470,26 @@ export function streetLevelFromParams(params) {
   if (parts.length !== 3) return null;
   const [provider, lat, lon] = parts;
   if (provider && !VIEW_STREET_LEVEL_PROVIDERS.includes(provider)) return null;
-  const point = {
-    lat: latitude(lat.trim() ? Number(lat) : NaN),
-    lon: longitude(lon.trim() ? Number(lon) : NaN),
-  };
+  // Plain decimal degrees only: no exponents, hex or blanks.
+  const DECIMAL = /^-?\d{1,3}(\.\d{1,8})?$/;
+  if (!DECIMAL.test(lat) || !DECIMAL.test(lon)) return null;
+  const point = { lat: latitude(Number(lat)), lon: longitude(Number(lon)) };
   if (point.lat === undefined || point.lon === undefined) return null;
   return { ...(provider ? { provider } : {}), ...point };
+}
+
+/** The entity a decoded layer state follows, or null. */
+function followFromState(state) {
+  for (const [kind, followed] of Object.entries(FOLLOWABLE)) {
+    const id = state?.options?.[followed.owner]?.[followed.key];
+    if (id !== null && id !== undefined) return { kind, id: String(id) };
+  }
+  return null;
+}
+
+/** The entity a share link follows, or null. */
+export function followFromParams(params) {
+  return followFromState(decodeLayerStateParams(params));
 }
 
 /** The view a set of share-link hash parameters restores, or null. */
@@ -474,12 +502,7 @@ export function viewFromParams(params) {
     return Number.isFinite(value) ? value : undefined;
   };
   const state = decodeLayerStateParams(params);
-  let follow = null;
-  for (const [kind, followed] of Object.entries(FOLLOWABLE)) {
-    const id = state?.options?.[followed.owner]?.[followed.key];
-    if (id !== null && id !== undefined && !follow)
-      follow = { kind, id: String(id) };
-  }
+  const follow = followFromState(state);
   const map = params.get('map');
   // A link is untrusted input: its photos win over a map their source cannot
   // show on, and a followed entity keeps the camera.
