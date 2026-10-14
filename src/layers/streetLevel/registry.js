@@ -49,6 +49,7 @@ export function filtersOf(provider) {
  * @property {(sequenceId: string) => Promise<void>} [selectSequence]
  * @property {() => void} [clearSequence]
  * @property {() => {selectedId: string|null, images: number, loading: boolean}} [sequenceStats]
+ * @property {() => Array<{id: string, parts: Array<Array<[number, number]>>}>} [coverageLines]   The coverage lines drawn now, as [lon, lat] parts (diagnostics and the browser gate).
  * @property {(point: {lat: number, lon: number}, options?: {signal?: AbortSignal, radiusM?: number}) => Promise<string|null>} nearestImage   An aborted lookup gives up (it may reject with an AbortError). `radiusM` asks for a wider search than NEAREST_RADIUS_M; a provider that cannot search wider ignores it.
  * @property {ViewerAdapter} viewer
  *

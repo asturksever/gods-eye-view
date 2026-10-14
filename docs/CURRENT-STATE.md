@@ -3200,7 +3200,11 @@ For a source without a coverage layer the lookup widens to 250 m
 (`NEAREST_RADIUS_MAX_M`; Google honours it, Mapillary's API caps at 50 m);
 clicks keep 50 m. The layer exposes `requiredMapStack(id)` and
 `providerStatus(id)` for callers that must decide before the panel lists a
-source. Views carry the same request as `street_level` (`src/view/index.js`:
+source, and `coverageLines(id)` (the lines a provider draws now, current and
+stale tiles, as `[lon, lat]` parts) for diagnostics and the browser gate,
+which aims its line clicks at that geometry, waits for the asynchronous
+ground primitives to be ready, and clicks in the same JavaScript turn as the
+pick so a rebuilt frame cannot come between them. Views carry the same request as `street_level` (`src/view/index.js`:
 source and point, defaulting to where the camera looks; a `google` source
 brings `map: photoreal` and refuses another map; not with `follow`), links as
 `sl=<source>,<lat>,<lon>`; `show_in_gods_eye_view` accepts it, the globe panel

@@ -489,6 +489,10 @@ export function createStreetLevelLayer({
       const def = definitionsFrozen.find((entry) => entry.id === providerId);
       return def?.requiresMapStack || null;
     },
+    /** The coverage lines a provider draws now (see `coverageLines`). */
+    coverageLines(providerId) {
+      return state.providers.get(providerId)?.instance.coverageLines?.() ?? [];
+    },
     /**
      * A provider's name and key state on any map (the panel lists a provider
      * only on the map it needs). `configured` is null until its status call

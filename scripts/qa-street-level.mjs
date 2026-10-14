@@ -381,7 +381,9 @@ async function clickPanelControl(page, selector, { timeout = 5_000 } = {}) {
 
 /** Load the app and clear the first-run dialog. */
 export async function boot(page, url) {
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  // A cold dev server compiles the app on first load; under load that can
+  // take longer than the default 30 s.
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await clearFirstRun(page);
 }
 
@@ -417,6 +419,133 @@ function waitForCoverage(page, { timeout = 90_000 } = {}) {
     },
     { timeout },
   );
+}
+
+/**
+ * Coverage that has stopped changing: live tiles keep streaming in after the
+ * first ones, and every batch rebuilds the ground primitives a click aims at.
+ */
+function waitForCoverageSettled(
+  page,
+  { quietMs = 1_200, timeout = 60_000 } = {},
+) {
+  return page.waitForFunction(
+    (quiet) => {
+      const u = window.__godsEyeView.dataManager.layers
+        .get('street-level')
+        .module.getUIState();
+      const now = Date.now();
+      const last = window.__qaCoverageWatch || { count: -1, since: now };
+      if (u.coverage.loading || u.coverage.count !== last.count) {
+        window.__qaCoverageWatch = { count: u.coverage.count, since: now };
+        return false;
+      }
+      return u.coverage.count > 0 && now - last.since >= quiet;
+    },
+    { timeout, polling: 200 },
+    quietMs,
+  );
+}
+
+/**
+ * Coverage lines are asynchronous ground primitives: built over frames (many
+ * of them on a software renderer), and not pickable until built. Wait until
+ * every primitive the layer owns reports ready.
+ */
+function waitForLinesReady(page, { timeout = 120_000 } = {}) {
+  return page.waitForFunction(
+    () => {
+      const scene = window.__godsEyeView.viewer.scene;
+      let total = 0;
+      let ready = 0;
+      const visit = (collection) => {
+        if (!collection || typeof collection.get !== 'function') return;
+        for (let i = 0; i < collection.length; i++) {
+          const item = collection.get(i);
+          if (!item) continue;
+          if (typeof item.get === 'function' && 'length' in item) visit(item);
+          else if ('ready' in item && 'geometryInstances' in item) {
+            total++;
+            if (item.ready) ready++;
+          }
+        }
+      };
+      visit(scene.primitives);
+      visit(scene.groundPrimitives);
+      window.__qaLinesReady = { total, ready };
+      return total > 0 && ready === total;
+    },
+    { timeout, polling: 250 },
+  );
+}
+
+/**
+ * Install `findPickPoint` in the page, so a pick and the click on it can
+ * happen in one JavaScript turn: no frame can rebuild the primitive between
+ * finding the pixel and clicking it. The click is the pointer pair Cesium's
+ * LEFT_CLICK is made of, dispatched on the canvas.
+ */
+async function installPicker(page) {
+  await page.evaluate(`window.__qaFindPickPoint = ${findPickPoint};`);
+}
+
+/** In the page: find a pickable pixel for `spec` and click it at once. */
+function findAndClickPickPoint(spec) {
+  const hit = window.__qaFindPickPoint(spec);
+  if (!hit) return null;
+  const canvas = window.__godsEyeView.viewer.scene.canvas;
+  const init = (buttons) => ({
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    clientX: hit.x,
+    clientY: hit.y,
+    screenX: hit.x,
+    screenY: hit.y,
+    button: 0,
+    buttons,
+    pointerId: 1,
+    pointerType: 'mouse',
+    isPrimary: true,
+    view: window,
+  });
+  canvas.dispatchEvent(new PointerEvent('pointerdown', init(1)));
+  canvas.dispatchEvent(new PointerEvent('pointerup', init(0)));
+  return hit;
+}
+
+/**
+ * Select a sequence by clicking its line: find and click in one turn, wait
+ * for the selection, and start over on a scene that rebuilt under the click.
+ */
+async function selectSequenceByClick(
+  page,
+  spec,
+  { attempts = 3, findTimeout = 60_000, selectTimeout = 12_000 } = {},
+) {
+  const tried = [];
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const handle = await page.waitForFunction(
+      findAndClickPickPoint,
+      { timeout: findTimeout, polling: 300 },
+      spec,
+    );
+    const at = await handle.jsonValue();
+    const selected = await settle(
+      page,
+      (id) => {
+        const q = window.__godsEyeView.dataManager.layers
+          .get('street-level')
+          .module.getUIState().sequence;
+        return q.selectedId === id && !q.loading && q.images > 0;
+      },
+      at.id,
+      { timeout: selectTimeout },
+    );
+    if (selected) return { at, attempt, tried };
+    tried.push(`${Math.round(at.x)},${Math.round(at.y)} on ${at.id}`);
+  }
+  return { at: null, attempt: attempts, tried };
 }
 
 async function assertKeylessGate(page) {
@@ -455,6 +584,7 @@ export function findPickPoint({
   points,
   billboardIds,
   billboardPrefix = null,
+  linesFrom = null,
 }) {
   const viewer = window.__godsEyeView.viewer;
   const scene = viewer.scene;
@@ -462,6 +592,46 @@ export function findPickPoint({
   const rect = canvas.getBoundingClientRect();
   const Cartographic = viewer.camera.positionCartographic.constructor;
   let Cartesian2 = null;
+  // Live coverage: aim at the lines the provider drew, nearest the middle of
+  // the screen first. A blind pixel scan needs thousands of picks, each a
+  // render, which a loaded machine cannot finish in time.
+  if (!points && linesFrom) {
+    const lines = window.__godsEyeView.dataManager.layers
+      .get('street-level')
+      .module.coverageLines(linesFrom);
+    const samples = [];
+    for (const line of lines) {
+      if (id !== null && line.id !== id) continue;
+      for (const part of line.parts) {
+        const step = Math.max(1, Math.floor(part.length / 6));
+        for (let i = 0; i < part.length; i += step) samples.push(part[i]);
+      }
+    }
+    const centreX = rect.width / 2;
+    const centreY = rect.height / 2;
+    const onScreen = [];
+    for (const [lon, lat] of samples) {
+      const at = scene.cartesianToCanvasCoordinates(
+        scene.globe.ellipsoid.cartographicToCartesian(
+          Cartographic.fromDegrees(lon, lat, 0),
+        ),
+      );
+      if (!at) continue;
+      if (
+        at.x < rect.width * 0.1 ||
+        at.x > rect.width * 0.9 ||
+        at.y < rect.height * 0.15 ||
+        at.y > rect.height * 0.85
+      )
+        continue;
+      onScreen.push([lon, lat, Math.hypot(at.x - centreX, at.y - centreY)]);
+    }
+    onScreen.sort((a, b) => a[2] - b[2]);
+    // The nearest sixty; the blind scan below remains the fallback.
+    points = onScreen.length
+      ? onScreen.slice(0, 60).map(([lon, lat]) => [lon, lat])
+      : null;
+  }
   const windowPoint = (x, y) => (Cartesian2 ? new Cartesian2(x, y) : { x, y });
   const wanted = (picked) => {
     const pid =
@@ -521,7 +691,9 @@ export function findPickPoint({
         const hit = tryAt(cx + dx, cy + dy);
         if (hit) return hit;
       }
-  if (points || billboardIds) return null;
+  // Known points (fixtures, billboards) are exact: no scan for them. Lines
+  // aimed from geometry fall through to the scan, as before.
+  if ((points && !linesFrom) || billboardIds) return null;
   for (let y = rect.height * 0.25; y < rect.height * 0.8; y += 18)
     for (let x = rect.width * 0.25; x < rect.width * 0.7; x += 6) {
       const hit = tryAt(x, y);
@@ -805,11 +977,18 @@ async function main() {
               window.__godsEyeView.mapStackController.setStack(stackId),
             id,
           );
-          await settle(
+          // A stack switch loads imagery; under load that outlasts the
+          // default wait. A step must never go on with the wrong map.
+          const switched = await settle(
             page,
             (stackId) =>
               window.__godsEyeView.mapStackController.getActiveId() === stackId,
             id,
+            { timeout: 60_000 },
+          );
+          assert.ok(
+            switched,
+            `the map stack switched to ${id} (active: ${await stacks.active()})`,
           );
         },
       };
@@ -1115,38 +1294,35 @@ async function main() {
             PHOTO_LINE.south +
               ((i + 2) / 13) * (PHOTO_LINE.north - PHOTO_LINE.south),
           ]);
-          // Ground primitives are built over a few frames: poll for a pick.
-          const handle = await page.waitForFunction(
-            findPickPoint,
-            { timeout: 30_000, polling: 250 },
-            {
-              prefix: 'mly:seq:',
-              id: target,
-              points: fixtures ? along : null,
-              billboardIds: null,
-            },
-          );
-          const at = await handle.jsonValue();
-          await page.mouse.click(at.x, at.y);
-          const selected = await uiUntil(
-            (u, id) =>
-              u.sequence.selectedId === id &&
-              !u.sequence.loading &&
-              u.sequence.images > 0,
-            at.id,
-            { timeout: 30_000 },
-          );
+          // Live tiles keep arriving and every batch rebuilds the lines: wait
+          // for them to settle, then find and click in one turn.
+          await waitForCoverageSettled(page);
+          await waitForLinesReady(page);
+          await waitForStill(page, PANEL_ID);
+          await installPicker(page);
+          const { at, attempt, tried } = await selectSequenceByClick(page, {
+            prefix: 'mly:seq:',
+            id: target,
+            points: fixtures ? along : null,
+            billboardIds: null,
+            linesFrom: fixtures ? null : 'mapillary',
+          });
           const sequence = (await ui()).sequence;
           assert.ok(
-            selected,
-            `the click at ${Math.round(at.x)},${Math.round(at.y)} on ${at.id} selected it: ${JSON.stringify(sequence)}`,
+            at,
+            `a click on a coverage line selected its sequence (tried ${tried.join(' | ')}): ${JSON.stringify(sequence)}`,
           );
+          if (attempt > 1)
+            console.log(
+              `  (selected on attempt ${attempt}; the scene rebuilt under ${tried.join(' | ')})`,
+            );
           if (fixtures)
             assert.equal(sequence.images, fixture.images.length, 'every photo');
-          // The cones are on the globe: one of them picks as an image.
+          // The cones are on the globe: one of them picks as an image. They
+          // are drawn once the sequence's photos arrive, over a few frames.
           const cone = await page.waitForFunction(
             findPickPoint,
-            { timeout: 15_000, polling: 250 },
+            { timeout: 45_000, polling: 300 },
             {
               prefix: 'mly:img:',
               id: null,
