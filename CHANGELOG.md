@@ -15,6 +15,9 @@
   is found and a 360°, flat or SINCE filter the source honours is on, the
   answer names the filter.
 
+- Snow flakes sway within a fixed range instead of drifting sideways faster the
+  longer the app runs; the Wind setting still scales the sway.
+
 - The right rail ignores panels that other CSS hides, such as during an event
   view, so they no longer force one-panel-at-a-time layout or collapse visible
   panels. Panels the rail collapses itself are still restored.
