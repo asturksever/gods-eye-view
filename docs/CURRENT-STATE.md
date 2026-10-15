@@ -4178,6 +4178,10 @@ for, resolved lazily after env loading. It replaces the empty default list;
 there is no built-in fallback. Local/private instances are allowed. The stable
 `gods-eye-view/…` User-Agent is unchanged. URLs never appear in response headers
 or upstream errors, including old cached endpoint metadata.
+Disk cache entries for both routes carry a SHA-256 tag of the configured
+instance set (order does not matter) and are served only while it matches, so
+repointing `OVERPASS_UPSTREAMS` refetches instead of serving another instance's
+answers; untagged entries stop serving once an instance is configured.
 
 The shared transport guards `/api/overpass` and `/api/military-installations`.
 With no configured upstream, each route serves existing cache data (including
