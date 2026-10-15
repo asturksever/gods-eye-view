@@ -21,6 +21,7 @@ import {
   loadCataloniaSourcesFromOpenData,
   loadDelDOTSourcesFromOpenData,
   loadKingCountySourcesFromOpenData,
+  loadWsdotSourcesFromOpenData,
   loadVegvesenSourcesFromOpenData,
   loadNycSourcesFromOpenData,
   loadTorontoSourcesFromOpenData,
@@ -113,6 +114,11 @@ const LIVE_PACKS = [
     name: 'kingcounty',
     enabled: () => envEnabled('CCTV_KINGCOUNTY_ENABLED'),
     load: loadKingCountySourcesFromOpenData,
+  },
+  {
+    name: 'wsdot',
+    enabled: () => envEnabled('CCTV_WSDOT_ENABLED'),
+    load: loadWsdotSourcesFromOpenData,
   },
   {
     name: 'vegvesen',
