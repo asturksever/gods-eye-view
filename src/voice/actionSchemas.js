@@ -127,9 +127,6 @@ const schemas = [
           type: 'string',
           enum: ['google', 'mapillary', 'kartaview'],
         },
-        fly: {
-          type: 'boolean',
-        },
         referent: {
           type: 'integer',
         },

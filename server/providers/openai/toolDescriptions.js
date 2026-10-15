@@ -67,22 +67,17 @@ export const ACTION_DESCRIPTIONS = {
   },
   show_street_level: {
     description:
-      'Street-level photos of a place: "show me X on Street View", "X on Mapillary", "street-level imagery of X". One call flies there, switches the map when the source needs it (Google Street View shows only on Google 3D; each panorama is billed to the Google Maps key), lights the source in STREET LEVEL, turns the layer on and opens the nearest photo. No query: the view centre.',
+      'Fly to a place and open its nearest street-level photo; Street View switches to Google 3D (billed per panorama). No query: view centre.',
     $position: 1,
     parameters: {
       properties: {
         query: {
-          description:
-            'Place name or address. "pointer" = the spot under the cursor.',
+          description: 'Place or address; "pointer" = under the cursor.',
           $position: 1,
         },
         provider: {
           description:
-            'google for "Street View"; mapillary, kartaview by name; omit otherwise (the lit source).',
-          $position: 1,
-        },
-        fly: {
-          description: 'Omit; false keeps the camera still.',
+            'google = Street View, mapillary, kartaview by name; omit: the lit source.',
           $position: 1,
         },
         referent: {
