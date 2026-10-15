@@ -15,6 +15,18 @@
   is found and a 360°, flat or SINCE filter the source honours is on, the
   answer names the filter.
 
+- Add City of Toronto RESCU traffic cameras as a keyless CCTV source pack: the
+  ~336 municipal cameras the Ontario 511 pack does not carry — downtown
+  arterials plus the Gardiner, DVP, Allen and Lake Shore. The list is the
+  City's own open data feed; frames are built from the documented
+  `loc####.jpg` convention and a digits-only camera number, so the frame proxy
+  is pinned to the portal origin by construction. The dataset publishes no
+  camera facing — its `D1`-`D4` fields describe static 2016 comparison images,
+  not the live pan-tilt-zoom frame — so headings use the shared id-hash
+  fallback at low confidence and are corrected with the calibration gizmo.
+  Carries the required Open Government Licence – Toronto attribution. Disable
+  with `CCTV_TORONTO_ENABLED=0`.
+
 - Stop one retired bikeshare feed from reporting the whole layer as failed.
   City feeds are fetched independently, but failure was recorded in a single
   flag that only a successful *activation* cleared — and an already-loaded city
@@ -304,6 +316,21 @@
   Thanks to [Shayan Khan](https://github.com/devv-shayan) for #621 and
   [TheSmokeDev](https://github.com/TheSmokeDev) for the credential handling
   from #653.
+
+- **Docker install path.** `docker compose up` builds on CI's Node 24.14.0 image,
+  pinned by digest, and serves the app on `http://localhost:4173` with no local
+  Node install. The repo is bind-mounted and the container runs as the host user
+  (never root), so `.env`,
+  `.gev-cache`, and `.gev-logs` persist on the host exactly as they do under
+  `npm run dev` — Provider Settings included. The launcher
+  (`scripts/docker-start.mjs`) trusts the container's gateway address for that
+  panel, since that is where Docker delivers the host's own browser from; the
+  opt-in behind it, `GEV_KEY_SETUP_TRUSTED_PEERS`, takes exact addresses only
+  and is unset (so loopback-only, unchanged) under every other launcher.
+  Thanks to [jklaze](https://github.com/jklaze) for finding and diagnosing the
+  container-to-host 403, and to [14traits](https://github.com/14traits),
+  [PoBruno](https://github.com/PoBruno) and [milu70hub](https://github.com/milu70hub)
+  for testing on Apple silicon, Docker Engine on Linux, and NAS hosts.
 
 - Stdio servers from one install share a panel key so a page read from one
   process can make requests through another. Concurrent malformed-key repairs

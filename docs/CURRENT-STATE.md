@@ -977,7 +977,25 @@ id-hash fallback at low confidence.
 
 Once enabled, the 250 cameras nearest the five borough cores load.
 `CCTV_NYC_MAX_SOURCES` sets the pack cap (8–400). The catalog-wide ceiling stays at 4,000 and is shared
-round-robin, so adding this pack does not silently drop another region.
+round-robin: no region is dropped outright, but when the packs together exceed
+the ceiling, adding a pack trims cameras from the largest packs.
+
+## City of Toronto RESCU CCTV source pack
+
+The CCTV catalog adds the City of Toronto RESCU traffic cameras — downtown
+arterials plus the Gardiner, DVP, Allen and Lake Shore, which the Ontario 511
+pack does not cover. The server reads the keyless camera list the City
+publishes on its open data portal (`tmcearthcameras.json`, served as JSONP).
+The list has no URL field: frame URLs are built from each validated, digits-only
+camera number on the fixed origin
+`https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/`.
+The feed has no compass data, so headings are low-confidence priors. Some
+cameras return a 200 "Image Unavailable" placeholder frame instead of an error.
+
+By default all ~336 cameras load, nearest downtown first.
+`CCTV_TORONTO_MAX_SOURCES` sets the pack cap (8–500) and
+`CCTV_TORONTO_ENABLED=0` turns the pack off. The pack shares the 4,000
+catalog-wide ceiling round-robin with the other packs.
 
 ## DriveBC CCTV source pack
 
@@ -3192,7 +3210,7 @@ its criteria cannot be silently ignored.
 | Satellites             | CelesTrak                                                                                                                                                                                       | `src/data/satellites.js`                              | `/api/celestrak`                                         | 120s                                                                              |
 | Space Missions (30d)   | Launch Library 2 + CelesTrak                                                                                                                                                                    | `src/data/rocketLaunches.js`                          | `/api/launches` + `/api/celestrak/active`                | 5 min                                                                             |
 | Traffic | Selectable TomTom / OpenStreetMap / Hybrid roads; optional TomTom flow (BYOK) | `src/data/traffic.js` | browser-direct OpenFreeMap tiles; `/api/tomtom` for flow | viewport-driven; capped tile cache |
-| CCTV                   | Austin + Caltrans (CA) + TfL London + Ontario 511 + Fintraffic (FI) + DriveBC (BC) + TxDOT (TX) + Estonia (Tallinn, Tarktee) + Live Traffic NSW + Open Calgary Open Data + Statens vegvesen (NO, stills + live HLS) + NYC DOT TMC (opt-in) + Street View fallback | `src/data/cctv.js`                                    | `/api/cctv`                                              | 10s (active)                                                                      |
+| CCTV                   | Austin + Caltrans (CA) + TfL London + Ontario 511 + Fintraffic (FI) + DriveBC (BC) + TxDOT (TX) + Estonia (Tallinn, Tarktee) + Live Traffic NSW + Open Calgary Open Data + Statens vegvesen (NO, stills + live HLS) + NYC DOT TMC (opt-in) + City of Toronto RESCU + Street View fallback | `src/data/cctv.js`                                    | `/api/cctv`                                              | 10s (active)                                                                      |
 | Radio                  | Radio Browser (public-domain station directory)                                                                                                                                                 | `src/data/radio.js`                                   | `/api/radio/stations`, `/api/radio/click/:uuid`          | 45 min directory refresh                                                          |
 | Transit 🚌             | Operator GTFS-Realtime VehiclePositions (7 keyless regions, `src/data/transitFeeds.js`)                                                                                                         | `src/layers/transit/` via `src/app/layers/transit.js` | `/api/transit`                                           | 15s (poll + delayed playback)                                                     |
 | Bikeshare 🚲           | GBFS (Lyft + BCycle + Social Bicycles + PBSC incl. Bike Share Toronto + Urban Sharing, Entur, JCDecaux NO)                                                                                                                                        | `src/data/bikeshare.js`                               | `/api/gbfs`                                              | 60s                                                                               |

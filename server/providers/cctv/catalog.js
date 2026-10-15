@@ -20,6 +20,7 @@ import {
   loadDelDOTSourcesFromOpenData,
   loadVegvesenSourcesFromOpenData,
   loadNycSourcesFromOpenData,
+  loadTorontoSourcesFromOpenData,
 } from './sources.js';
 
 /** Env kill switch: unset or anything but "0" means enabled. */
@@ -108,6 +109,11 @@ const LIVE_PACKS = [
     name: 'nyc',
     enabled: () => envOptIn('CCTV_NYC_ENABLED'),
     load: loadNycSourcesFromOpenData,
+  },
+  {
+    name: 'toronto',
+    enabled: () => envEnabled('CCTV_TORONTO_ENABLED'),
+    load: loadTorontoSourcesFromOpenData,
   },
 ];
 /**

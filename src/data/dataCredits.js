@@ -269,6 +269,12 @@ export const DATA_CREDITS = [
       NYC_DOT_DISCLAIMER,
   },
   {
+    key: 'toronto-cctv',
+    html:
+      'Traffic cameras (Toronto): contains information licensed under the ' +
+      '<a href="https://www.toronto.ca/city-government/data-research-maps/open-data/open-data-licence/" target="_blank" rel="noopener">Open Government Licence – Toronto</a>',
+  },
+  {
     key: 'gbfs',
     html:
       'Bikeshare availability: GBFS operator feeds ' +
