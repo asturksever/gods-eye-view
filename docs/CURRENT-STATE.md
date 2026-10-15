@@ -1192,6 +1192,28 @@ Sharing asks of clients of the Oslo, Bergen and Trondheim Bysykkel feeds
 their GBFS tree: `api.entur.io` to `/mobility/v2/gbfs/` and `api.cyclocity.fr`
 (Bysykkel Lillestrøm) to `/contracts/`.
 
+## Upstream body bounds
+
+FIRMS CSV, CelesTrak TLE groups, adsb.lol military responses, TomTom flow
+tiles, OpenSky states/all and adsbdb lookups now read their bodies through the
+shared streaming readers in `src/sources/httpBody.js`, so a declared or observed body
+over the cap is refused with `RESPONSE_TOO_LARGE` and cancelled rather than
+buffered. TomTom flow tiles use `readResponseBytesCapped` alongside
+GTFS-Realtime. Each read takes the route's abort signal, so a body still
+streaming when the deadline fires is cancelled. Caps are bounds, not budgets, sized well
+above measured payloads: FIRMS 64 MiB per satellite source, CelesTrak 16 MiB
+per group, OpenSky `states/all` 8 MiB, adsb.lol `/v2/mil` 8 MiB, TomTom tiles
+8 MiB and adsbdb lookups 1 MiB. Where a route already had a deadline (FIRMS
+60 s, CelesTrak 20 s, TomTom 15 s, adsbdb 8 s, and each 10 s OpenSky
+`states/all` attempt) it already bounded the body read, because aborting a
+fetch signal also aborts its body; the capped reader takes the same signal.
+The adsb.lol military poll, which had no deadline, now waits at most 12
+seconds for headers and body together. An oversized OpenSky snapshot is not
+retried, and an OpenSky 429 starts its cooldown from the response headers and
+cancels the body unread. A rejected or timed-out body is an upstream miss and
+follows each route's existing error and cached-data paths. FIRMS map-key
+status, the OpenSky token exchange and CCTV media keep their current handling.
+
 ## Remaining local service modules
 
 Overpass query validation, geometry simplification, disk caching and upstream
@@ -3172,7 +3194,7 @@ its criteria cannot be silently ignored.
 | CCTV                   | Austin + Caltrans (CA) + TfL London + Ontario 511 + Fintraffic (FI) + DriveBC (BC) + TxDOT (TX) + Estonia (Tallinn, Tarktee) + Live Traffic NSW + Open Calgary Open Data + Statens vegvesen (NO, stills + live HLS) + NYC DOT TMC (opt-in) + Street View fallback | `src/data/cctv.js`                                    | `/api/cctv`                                              | 10s (active)                                                                      |
 | Radio                  | Radio Browser (public-domain station directory)                                                                                                                                                 | `src/data/radio.js`                                   | `/api/radio/stations`, `/api/radio/click/:uuid`          | 45 min directory refresh                                                          |
 | Transit 🚌             | Operator GTFS-Realtime VehiclePositions (7 keyless regions, `src/data/transitFeeds.js`)                                                                                                         | `src/layers/transit/` via `src/app/layers/transit.js` | `/api/transit`                                           | 15s (poll + delayed playback)                                                     |
-| Bikeshare 🚲           | GBFS (Lyft + BCycle + Urban Sharing, Entur, JCDecaux NO)                                                                                                                                        | `src/data/bikeshare.js`                               | `/api/gbfs`                                              | 60s                                                                               |
+| Bikeshare 🚲           | GBFS (Lyft + BCycle + Social Bicycles + PBSC incl. Bike Share Toronto + Urban Sharing, Entur, JCDecaux NO)                                                                                                                                        | `src/data/bikeshare.js`                               | `/api/gbfs`                                              | 60s                                                                               |
 | Directions 🧭          | OSRM on FOSSGIS servers (OpenStreetMap)                                                                                                                                                         | `src/data/directions.js`                              | `/api/route` (`steps=1`)                                 | on placement / mode change                                                        |
 | Datacenters ▣          | OSM extract (bundled)                                                                                                                                                                           | `src/data/localLayers.js`                             | —                                                        | static                                                                            |
 | Dams ▰                 | OpenInfraMap/OSM extract (bundled)                                                                                                                                                              | `src/data/localLayers.js`                             | —                                                        | static                                                                            |

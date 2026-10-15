@@ -15,6 +15,37 @@
   is found and a 360°, flat or SINCE filter the source honours is on, the
   answer names the filter.
 
+- Stop one retired bikeshare feed from reporting the whole layer as failed.
+  City feeds are fetched independently, but failure was recorded in a single
+  flag that only a successful *activation* cleared — and an already-loaded city
+  never activates again. A dead feed re-entering camera range therefore latched
+  LOAD FAILED permanently over a map still drawing every other city's stations.
+  Failure is now tracked per city: a city that fails beside others still
+  drawing marks the layer DEGRADED, polls that all fail over previously drawn
+  points read STALE without advancing freshness, and LOAD FAILED is reported
+  only when nothing is left to draw. A city that recovers clears its own
+  failure, a failure is dropped once its city leaves range or the camera rises
+  above the activation altitude, and late results from superseded requests are
+  ignored.
+
+  Repointed the three feeds whose operators had moved: Reddy Bikeshare (Buffalo)
+  to Social Bicycles, Tugo (Tucson) and Trinity Metro (Fort Worth) to PBSC.
+  Dropped CoGo (Columbus) and Broward B-cycle (Fort Lauderdale), whose systems
+  have wound down — CoGo's feed reports no stations and last moved a bike in
+  March 2025. The three repointed feeds were verified live.
+
+- Add Bike Share Toronto (1,069 stations) to the bikeshare registry. The system
+  publishes the same PBSC GBFS v2 feeds as the Austin, Honolulu and Chattanooga
+  entries, so it needs no new plumbing; a registry test now holds every city's
+  feed URLs against the proxy host and path allowlists, so a city the proxy
+  would refuse fails the suite instead of rendering an empty layer.
+
+- GBFS v3 station names use English translations when available, then the first
+  usable translation or short name. Empty or malformed names no longer appear as
+  `[object Object]` or interrupt station loading; legacy string names remain
+  supported in the globe and bike-share tools. Thanks to
+  [Kristóf Kékesi](https://github.com/KristofKekesi) (#61).
+
 - Overpass and military-installation disk caches no longer serve answers from a
   previously configured `OVERPASS_UPSTREAMS` instance after it is repointed.
 
@@ -161,6 +192,17 @@
   stale, moved-camera, invalid and oversized captures still fail closed.
 
 ## [Unreleased]
+
+- Bound six upstream body reads (FIRMS CSV, CelesTrak TLE groups, adsb.lol
+  `/v2/mil`, TomTom flow tiles, OpenSky `states/all` and adsbdb lookups) with
+  streaming size caps that cancel the body at the cap or the route's deadline;
+  the adsb.lol military poll gains a deadline of its own. An oversized OpenSky
+  snapshot is not retried, and an OpenSky 429 starts its cooldown before the
+  body is read.
+
+- Keep later satellites when a TLE catalog entry is missing an orbital line.
+  The parser skips the incomplete set and resumes at the next complete named
+  set, instead of losing the rest of the group (#906).
 
 - Satellite clouds keep Clouds only / Full as quick endpoints and add a continuous
   cloud-filter slider: 0% is Full, 100% is the existing brightness key, and
