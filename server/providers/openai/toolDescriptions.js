@@ -67,7 +67,7 @@ export const ACTION_DESCRIPTIONS = {
   },
   show_street_level: {
     description:
-      'Fly to a place and open its nearest street-level photo; Street View switches to Google 3D (billed per panorama). No query: view centre.',
+      'Fly to a place and open its nearest street-level photo; Street View switches to Google 3D (billed). No query: view centre.',
     $position: 1,
     parameters: {
       properties: {
