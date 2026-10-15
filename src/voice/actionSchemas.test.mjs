@@ -36,8 +36,9 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // consolidated tool wording (each policy stated once); model-facing tools
     // omit top-level anyOf (OpenAI rejects it). Contacts list routing preserves
     // requested radius and center authority in descriptions only.
-    // Street Level adds its toggle enum values and generated alias hint;
-    // show_street_level (fly, map, source, photo) is the only later change.
+    // Street Level and GNSS extend the manifest; tracked and analyst aircraft
+    // describe broadcasts; show_street_level (fly, map, source, photo) is the
+    // only change on top of main.
     SHOW_STREET_LEVEL_PAYLOAD_DIGEST,
   );
   // Every shipped tool is byte-identical to the previous release: the new
@@ -56,12 +57,12 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     .digest('hex');
   assert.equal(
     shipped,
-    '9eb113454c5af5e32e27ffcdc7919d0e4600ba1d204f8f175e071152be41ad0f',
+    '9398815a573ab29ecc3ce527f6e1a2ad883804e7696e0444aebb11f973700d4b',
   );
 });
 
 const SHOW_STREET_LEVEL_PAYLOAD_DIGEST =
-  'a1d8f6d6fa3fda47931b1f656d5459d47974da1778ff42c3bac0e6cc227e54b1';
+  'c70b951d98a05187b789c066e20a32d553d51403b512bce132a54c4824141a7d';
 
 test('descriptions customize wording without changing immutable shared arguments', () => {
   const descriptions = {
