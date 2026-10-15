@@ -15,6 +15,16 @@
   is found and a 360°, flat or SINCE filter the source honours is on, the
   answer names the filter.
 
+- Refuse still-image cameras on the CCTV media relay. `/api/cctv/media` is the
+  live-feed route, but it also relayed any registered still camera through an
+  ordinary fetch that followed redirects to any host, passed through whatever
+  content type came back and had no cap on the body, bypassing every protection
+  `/api/cctv/frame` applies to the same URL. Only HLS, MP4, WebM and MJPEG
+  feeds are relayed now; a still camera, or an unknown id, gets a JSON 404
+  without an upstream request and is served only through `/api/cctv/frame`.
+  The client already loaded stills through `/frame`, so nothing it requests
+  changes.
+
 - Add Lithuania's public Via Lietuva / Eismoinfo road cameras to CCTV, with published coordinates, on-demand snapshots, attribution and bounded catalog requests. No API key is required. The pack is opt-in (`CCTV_LITHUANIA_ENABLED=1`) because its camera endpoints are the eismoinfo.lt website backend, not a service listed in Via Lietuva's open-data statement, so the licence for the photos is unconfirmed.
 
 - Add King County road cameras (Washington State) as a keyless CCTV source
@@ -390,6 +400,18 @@
   the pack, `CCTV_VEGVESEN_MAX_SOURCES` caps it (keeping cameras nearest the
   largest cities) and `CCTV_VEGVESEN_VIDEO=0` keeps stills only. Attributed
   under NLOD 2.0.
+
+- Add Catalonia (Servei Català de Trànsit) as a keyless CCTV source pack: ~130
+  cameras from a WFS/GML feed that aggregates SCT's own highway cameras with
+  hotlinked Barcelona and Terrassa municipal cameras, each partner named as a
+  credit beside the shared provider. Ambient-card refresh paced to 3 minutes,
+  matching the empirically observed upstream cadence. `CCTV_CATALONIA_MAX_SOURCES`
+  sets the cap and `CCTV_CATALONIA_ENABLED=0` turns the pack off. The catalog
+  is fetched over https with redirects refused and a 1 MiB body cap, and frame
+  links carrying userinfo or an explicit port, or outside the publisher's frame
+  directory, are rejected even on an allowlisted host. Camera ids come from
+  each frame's SCT camera file or image path rather than the feed's
+  restart-dependent feature id, and rows the feed repeats collapse to one.
 
 - Import your own GeoJSON, KML, KMZ and GPX files from DISPLAY or by dropping
   them onto the app. Show, hide, fly to or remove each file for the session.
