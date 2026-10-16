@@ -1050,6 +1050,8 @@
   "src/costEndpointThrottle.test.mjs",
   "src/sources/gbfsStations.test.mjs",
   "scripts/qa-gbfs-names.mjs",
+  "scripts/generate-icons.mjs",
+  "src/tooling/webAppIcons.test.mjs",
   "src/ui/flyToDataSource.js",
   "src/ui/flyToDataSource.test.mjs"
 ]

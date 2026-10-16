@@ -15,6 +15,14 @@
   is found and a 360°, flat or SINCE filter the source honours is on, the
   answer names the filter.
 
+- Ship a web app manifest and raster home-screen icons, so adding the app to a
+  phone home screen or installing it on desktop uses the God's Eye View mark
+  instead of a blank tile. The icons are generated from `public/logo.svg` by
+  `node scripts/generate-icons.mjs` and committed, so a plain `vite build` needs
+  no image toolchain. The existing SVG favicon still serves the browser tab.
+  Manifest paths are relative to the manifest, so a build served under a path
+  prefix installs and launches inside that prefix.
+
 - Cyclone advisories no longer go dark while NHC publishes an advisory ahead
   of its nominal time: advisory and position times up to 90 minutes ahead of
   the server clock are accepted (previously 5 minutes), so the whole feed is
