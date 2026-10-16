@@ -331,6 +331,30 @@ const RAW_GBFS_CITY_REGISTRY = [
     provider: 'Bike Itaú',
   },
   {
+    id: 'bogota-tembici',
+    city: 'Bogotá, Colombia',
+    centerLat: 4.6533,
+    centerLon: -74.0836,
+    loadRadiusKm: 90,
+    stationInformationUrl:
+      'https://bogota.publicbikesystem.net/customer/gbfs/v2/en/station_information.json',
+    stationStatusUrl:
+      'https://bogota.publicbikesystem.net/customer/gbfs/v2/en/station_status.json',
+    provider: 'Tembici Bogotá',
+  },
+  {
+    id: 'santiago-bike-itau',
+    city: 'Santiago, Chile',
+    centerLat: -33.4372,
+    centerLon: -70.6506,
+    loadRadiusKm: 90,
+    stationInformationUrl:
+      'https://santiago.publicbikesystem.net/customer/gbfs/v2/en/station_information.json',
+    stationStatusUrl:
+      'https://santiago.publicbikesystem.net/customer/gbfs/v2/en/station_status.json',
+    provider: 'Bike Itaú Santiago',
+  },
+  {
     id: 'toronto-bike-share',
     city: 'Toronto, ON',
     centerLat: 43.6532,
