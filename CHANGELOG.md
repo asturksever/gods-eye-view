@@ -13,6 +13,15 @@
   MobilityData's systems catalogue; AMBici's is CC0. `gbfs.nextbike.net` joins
   the proxy allowlist. These are the layer's first stations in Spain.
 
+- Bound how often the GBFS proxy will relay. `/api/gbfs` already restricted
+  where it could go — https, an allowlisted host, a station feed path, no
+  redirects, a 12-second deadline and a 5 MB body cap — but nothing restricted
+  how often, so the dev server would make unlimited requests at a third-party
+  bikeshare operator on any caller's behalf. The route now admits 120
+  requests/minute per client address, refusing the rest with 429 and
+  `Retry-After` before any outbound fetch. The bikeshare layer needs about 15 a
+  minute with every catalogued system in range, so ordinary use is unchanged.
+
 - Add nine Ontario transit feeds: TTC, MiWay, Hamilton HSR, Durham Region,
   YRT/Viva, Guelph, Burlington, Barrie and Kingston, each carrying its own
   licence quote and attribution. A feed can now name its own modes, so Toronto's
