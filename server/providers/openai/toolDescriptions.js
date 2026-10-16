@@ -77,7 +77,7 @@ export const ACTION_DESCRIPTIONS = {
         },
         provider: {
           description:
-            'google = Street View, mapillary, kartaview by name; omit: the lit source.',
+            'google = Street View; others by name; omit: the lit source.',
           $position: 1,
         },
         referent: {

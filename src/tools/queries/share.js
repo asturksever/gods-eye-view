@@ -131,7 +131,8 @@ export const showInGodsEyeView = defineTool({
     'framed from above or a camera position, with chosen data layers, visual ' +
     'style and map, optionally following an aircraft (or riding in its ' +
     'cockpit view) or a satellite, with marks drawn on the map, or opening ' +
-    'street-level photos (Google Street View or Mapillary) at a place.',
+    'street-level photos (Google Street View, Mapillary, KartaView or ' +
+    'Panoramax) at a place.',
   inputSchema: {
     type: 'object',
     properties: VIEW_ARGUMENTS,

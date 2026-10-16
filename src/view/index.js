@@ -76,6 +76,7 @@ export const VIEW_STREET_LEVEL_PROVIDERS = Object.freeze([
   'google',
   'mapillary',
   'kartaview',
+  'panoramax',
 ]);
 const STREET_LEVEL_MAP = Object.freeze({ google: 'photoreal' });
 const STREET_LEVEL_PARAM = 'sl';
@@ -223,9 +224,10 @@ export const VIEW_PROPERTIES = Object.freeze({
     type: 'object',
     description:
       'Open street-level photos at a point: Google Street View (google; the ' +
-      'map becomes Google 3D) or Mapillary. lat/lon default to the spot the ' +
-      'camera looks at. The app flies there and opens the nearest photo. ' +
-      'Not with follow.',
+      'map becomes Google 3D), Mapillary, KartaView or Panoramax. lat/lon ' +
+      'default to the spot the camera looks at. The app flies there and ' +
+      'opens the nearest photo; a plain link with google only arms it, ' +
+      'leaving the billed load to a click. Not with follow.',
     properties: {
       provider: { type: 'string', enum: [...VIEW_STREET_LEVEL_PROVIDERS] },
       lat: { type: 'number', minimum: -90, maximum: 90 },

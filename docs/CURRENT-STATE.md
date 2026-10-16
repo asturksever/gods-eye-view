@@ -3594,8 +3594,8 @@ name, coordinates, a pointed spot, a numbered item, or nothing for the view
 centre), switches to the map the source needs (Google Street View: Google 3D),
 lights that source through `setLayerParams` with origin `voice` (one source at
 a time, kept in the share link like a chip click), turns the layer on and
-calls `openNearest`. `provider` is `google` for "Street View", `mapillary` or
-`kartaview` by name, else the lit source. Stages fail separately (`location`, `map`,
+calls `openNearest`. `provider` is `google` for "Street View", `mapillary`,
+`kartaview` or `panoramax` by name, else the lit source. Stages fail separately (`location`, `map`,
 `provider`, `layer`, `key`, `imagery`; an empty `imagery` result names a
 narrowing 360°/flat or SINCE filter the source honours, as `filter`) and a
 newer turn retires the lookup

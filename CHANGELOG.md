@@ -1,6 +1,6 @@
 # Changelog
 
-- "Show me X on Street View" (or on Mapillary or KartaView): a
+- "Show me X on Street View" (or on Mapillary, KartaView or Panoramax): a
   `show_street_level` voice and typed action flies to the place, switches to
   Google 3D when the source needs it, lights that source in Street Level,
   turns the layer on and opens the nearest photo, reporting which step

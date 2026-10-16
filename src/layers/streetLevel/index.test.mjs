@@ -1549,3 +1549,68 @@ test('show_street_level opens a KartaView photo, and a plain link opens it at on
   assert.equal(plain.filter, undefined, 'no filter, no hint');
   assert.doesNotMatch(plain.error, /filter/);
 });
+
+test('show_street_level switches from KartaView to Panoramax and opens its photo at once, unbilled', async (t) => {
+  const { createGevActionRunner } = await import('../../voice/gevActions.js');
+  const mapillary = fakeProvider();
+  const kartaview = fakeProvider({ id: 'kartaview', pickPrefix: 'kv:' });
+  kartaview.name = 'KartaView';
+  kartaview.defaultOn = false;
+  const panoramax = fakeProvider({
+    id: 'panoramax',
+    pickPrefix: 'px:',
+    nearestImage: async () => 'px-1',
+  });
+  panoramax.name = 'Panoramax';
+  panoramax.label = 'PANORAMAX';
+  panoramax.defaultOn = false;
+  const { layer, viewer } = await enabledLayer(t, [
+    mapillary,
+    kartaview,
+    panoramax,
+  ]);
+  const { fakeHost } =
+    await import('../../testSupport/googleStreetViewFakes.mjs');
+  layer.attachViewerHost(fakeHost());
+  viewer.clock ??= { onTick: { addEventListener: () => () => {} } };
+  viewer.camera.moveEnd ??= { addEventListener() {} };
+  layer.setParams({ mapillary: false, kartaview: true, panoramax: false });
+  const dataManager = {
+    layers: new Map([['street-level', { module: layer }]]),
+    isEnabled: () => true,
+    getLayerParams: () => layer.getParams(),
+    setLayerParams: (_id, params) => {
+      layer.setParams(params);
+      return true;
+    },
+    getAll: () => [{ id: 'street-level', name: 'Street Level', enabled: true }],
+  };
+  const styleManager = {
+    mapStackController: { getActiveId: () => 'osm' },
+    setMapStack: async () => ({ ok: false, error: 'no map switch expected' }),
+  };
+  const runner = createGevActionRunner({ viewer, styleManager, dataManager });
+  // The way a plain sl=panoramax link calls it: autoOpen false.
+  const result = await runner('show_street_level', {
+    latitude: 48.8874,
+    longitude: 2.3495,
+    provider: 'panoramax',
+    fly: false,
+    autoOpen: false,
+  });
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.armed, undefined, 'not armed: Panoramax bills nothing');
+  assert.equal(result.providerName, 'Panoramax');
+  assert.deepEqual(
+    layer
+      .getUIState()
+      .providers.filter((p) => p.on)
+      .map((p) => p.id),
+    ['panoramax'],
+    'KartaView switched off',
+  );
+  assert.deepEqual(panoramax.calls.open, ['px-1']);
+  assert.deepEqual(kartaview.calls.open, [], 'nothing asked of KartaView');
+  assert.equal(layer.providerStatus('panoramax').billed, false);
+  assert.equal(layer.requiredMapStack('panoramax'), null);
+});

@@ -568,6 +568,7 @@ const STREET_LEVEL_SOURCE_NAMES = Object.freeze({
   google: 'Street View',
   mapillary: 'Mapillary',
   kartaview: 'KartaView',
+  panoramax: 'Panoramax',
 });
 
 /** A short on-screen label for one tool call in the voice card's plan. */

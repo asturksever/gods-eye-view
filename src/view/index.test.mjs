@@ -135,6 +135,7 @@ test('street-level photos travel in the link, light their source and bring their
     'google',
     'mapillary',
     'kartaview',
+    'panoramax',
   ]);
   const view = createView({
     camera: { lat: 38.5799, lon: -121.4937, altitude_m: 400 },
@@ -155,7 +156,7 @@ test('street-level photos travel in the link, light their source and bring their
   assert.equal(state.options['street-level'].mapillary, false);
   assert.equal(
     state.options['street-level'].providerSwitches,
-    'google-1*kartaview-0',
+    'google-1*kartaview-0*panoramax-0',
     'Street View on, KartaView off',
   );
 
@@ -172,7 +173,7 @@ test('street-level photos travel in the link, light their source and bring their
   assert.equal(lit.mapillary, true);
   assert.equal(
     lit.providerSwitches,
-    'google-0*kartaview-0',
+    'google-0*kartaview-0*panoramax-0',
     'a Mapillary link lights Mapillary only',
   );
   const anySource = createView({
@@ -460,7 +461,7 @@ test('KartaView photos travel in a link and light KartaView alone, on any map', 
   assert.equal(lit.mapillary, false);
   assert.equal(
     lit.providerSwitches,
-    'google-0*kartaview-1',
+    'google-0*kartaview-1*panoramax-0',
     'KartaView on, the others off',
   );
   assert.deepEqual(
@@ -470,5 +471,31 @@ test('KartaView photos travel in a link and light KartaView alone, on any map', 
       lat: 1,
       lon: 2,
     },
+  );
+});
+
+test('Panoramax photos travel in a link and light Panoramax alone, on any map', async () => {
+  const { streetLevelFromParams } = await import('./index.js');
+  const { decodeLayerStateParams } = await import('../data/layerState.js');
+  const view = createView({
+    camera: { lat: 48.8874, lon: 2.3495, altitude_m: 400 },
+    map: 'osm',
+    street_level: { provider: 'panoramax' },
+  });
+  assert.equal(view.map, 'osm', 'Panoramax needs no particular map');
+  assert.deepEqual(view.layers, ['street-level']);
+  const params = viewToParams(view);
+  assert.equal(params.get('sl'), 'panoramax,48.88740,2.34950');
+  assert.deepEqual(viewFromParams(params), view);
+  const lit = decodeLayerStateParams(params).options['street-level'];
+  assert.equal(lit.mapillary, false);
+  assert.equal(
+    lit.providerSwitches,
+    'google-0*kartaview-0*panoramax-1',
+    'Panoramax on, the others off',
+  );
+  assert.deepEqual(
+    streetLevelFromParams(new URLSearchParams({ sl: 'panoramax,1,2' })),
+    { provider: 'panoramax', lat: 1, lon: 2 },
   );
 });

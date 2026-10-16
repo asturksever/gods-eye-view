@@ -597,3 +597,13 @@ test('an empty street-level search names the imagery filter that hid the photos'
   );
   assertSpeakable(out.say);
 });
+
+test('the plan step names Panoramax as a source', () => {
+  assert.equal(
+    planStepLabel('show_street_level', {
+      query: 'Montmartre',
+      provider: 'panoramax',
+    }),
+    'Panoramax at Montmartre',
+  );
+});
