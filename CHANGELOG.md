@@ -15,6 +15,15 @@
   is found and a 360°, flat or SINCE filter the source honours is on, the
   answer names the filter.
 
+- Bound how often the GBFS proxy will relay. `/api/gbfs` already restricted
+  where it could go — https, an allowlisted host, a station feed path, no
+  redirects, a 12-second deadline and a 5 MB body cap — but nothing restricted
+  how often, so the dev server would make unlimited requests at a third-party
+  bikeshare operator on any caller's behalf. The route now admits 120
+  requests/minute per client address, refusing the rest with 429 and
+  `Retry-After` before any outbound fetch. The bikeshare layer needs about 15 a
+  minute with every catalogued system in range, so ordinary use is unchanged.
+
 - Add nine Ontario transit feeds: TTC, MiWay, Hamilton HSR, Durham Region,
   YRT/Viva, Guelph, Burlington, Barrie and Kingston, each carrying its own
   licence quote and attribution. A feed can now name its own modes, so Toronto's
@@ -174,6 +183,9 @@
 - Tool string length validation counts Unicode characters correctly, including characters outside the basic multilingual plane.
 
 - Director timeline seeks cross the dateline along the short longitude arc.
+
+- Keep unknown GBFS availability counts neutral instead of turning null or empty
+  values into zero bikes.
 
 - Recent Imagery continues past malformed records in full catalog pages, respects the requested record limit, and reports results as truncated when that limit drops valid records.
 

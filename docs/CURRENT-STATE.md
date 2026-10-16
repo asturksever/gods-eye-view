@@ -1262,6 +1262,15 @@ cancels the body unread. A rejected or timed-out body is an upstream miss and
 follows each route's existing error and cached-data paths. FIRMS map-key
 status, the OpenSky token exchange and CCTV media keep their current handling.
 
+The route also bounds request frequency: 120 requests/minute per client
+address, with a global backstop of three times that. A refused request answers
+429 with `Retry-After` and `Cache-Control: no-store` and performs no outbound
+fetch. The bikeshare layer's own demand is about 15 requests a minute with
+every catalogued system in range, so an ordinary session never meets the limit;
+the method, host and path guards run unchanged.
+
+Updated: September 21, 2026
+
 ## Remaining local service modules
 
 Overpass query validation, geometry simplification, disk caching and upstream
@@ -1345,6 +1354,9 @@ and stale/error responses remain unchanged. Each has a Node-only package entry
 under `gods-eye-view/server/providers/`. Portable terrain mechanics, traffic tile
 math and GBFS source rules are available under `gods-eye-view/sources/`.
 The browser layers and their rendering remain in their existing modules.
+GBFS null or empty availability counts retain an unknown value through station
+parsing and rendering; they use the neutral station color rather than reporting
+an empty dock. Explicit zero and caller-supplied numeric fallbacks remain valid.
 
 ## Terrain height cache bound
 
