@@ -1,41 +1,10 @@
 # Changelog
 
-- "Show me X on Street View" (or on Mapillary, KartaView or Panoramax): a
-  `show_street_level` voice and typed action flies to the place, switches to
-  Google 3D when the source needs it, lights that source in Street Level,
-  turns the layer on and opens the nearest photo, reporting which step
-  failed. Views and share links carry the
-  same request (`street_level`, `sl=`), so `show_in_gods_eye_view` and a link
-  can open a panorama at a place. Street View lookups from a geocoded place
-  search up to 250 m; clicks keep 50 m. A plain link with `sl=google` arms
-  Street View and leaves the billed load to a press of OPEN GOOGLE STREET
-  VIEW; embedded views open it. The source the action lights stays lit like a
-  chip click. An unavailable map stack now reports the controller's
-  own reason instead of always asking for a Cesium ion token. When nothing
-  is found and a 360°, flat or SINCE filter the source honours is on, the
-  answer names the filter.
-
-- Local FM seek finds stations after wrapping around 87.5–108 MHz, covers both
-  band edges, skips the starting station and rejects spectra from an earlier
-  tune (Aditya, @Rohilalala, #1174).
-- Local RTL-SDR keeps USB reads queued in order and bounds pending decoder
-  work. A stalled or overloaded decoder stops with an explicit error; stopping
-  terminates its worker and rejects late audio. FM playback buffers short
-  scheduling gaps, caps its audio queue at 256 ms, and reduces display updates
-  and spectrum calculations while listening.
-
-- Add Bogotá (Tembici, 250 stations) and Santiago de Chile (Bike Itaú, 200
-  stations) to the GBFS bikeshare registry, the layer's first stations in
-  Colombia and Chile. Both are PBSC feeds like the Brazilian Bike Itaú cities,
-  so no proxy change is needed. Both feeds also list depot stations on other
-  continents (São Paulo, Madrid) as in service; stations outside a city's load
-  radius are now dropped instead of drawn as live docks.
-
-- Add Barcelona's bike share to the GBFS registry: Bicing (543 stations, the
-  city's PBSC system) and AMBici (237 e-bike stations across the metropolitan
-  area, run by nextbike). Both are keyless GBFS 2.3 feeds listed in
-  MobilityData's systems catalogue; AMBici's is CC0. `gbfs.nextbike.net` joins
-  the proxy allowlist. These are the layer's first stations in Spain.
+- The tracked-aircraft descriptor now publishes `verticalRateMps`, on both the
+  civil and military layers, so a consumer reading `getTrackedInfo()` no longer
+  has to reach past it into the raw poll record for climb/descent. Reported,
+  never derived: an aircraft that has not transmitted a rate reads as `null`
+  rather than a level-flight `0`.
 
 - Add nine Ontario transit feeds: TTC, MiWay, Hamilton HSR, Durham Region,
   YRT/Viva, Guelph, Burlington, Barrie and Kingston, each carrying its own
