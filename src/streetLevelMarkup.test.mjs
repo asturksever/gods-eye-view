@@ -116,7 +116,9 @@ test('OPEN STREET VIEW keeps its width beside a long coverage line', () => {
 });
 
 test('embed mode shows an open photo over the globe, filling the overlay', () => {
-  const overlay = css.match(/body\.ui-embed \.sl-viewer-wrap-embed \{([^}]*)\}/);
+  const overlay = css.match(
+    /body\.ui-embed \.sl-viewer-wrap-embed \{([^}]*)\}/,
+  );
   assert.ok(overlay, 'embed styles the viewer it moves over the globe');
   for (const rule of ['position: fixed', 'inset: 12px', 'z-index: 1000'])
     assert.ok(overlay[1].includes(rule), rule);
