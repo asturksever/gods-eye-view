@@ -727,16 +727,6 @@ html:not([lang='en']) .pp-slider-row > .pp-slider-mini-label {
 .pp-select {
   flex: 1;
   min-width: 0;
-  height: 24px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 6px;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.6px;
-  padding: 2px 6px;
-  outline: none;
 }
 
 /* DISPLAY ▸ Draw: shape segment, label field, colour, and the one-line hint */

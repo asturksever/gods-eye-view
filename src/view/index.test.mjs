@@ -499,3 +499,20 @@ test('Panoramax photos travel in a link and light Panoramax alone, on any map', 
     { provider: 'panoramax', lat: 1, lon: 2 },
   );
 });
+
+test('inherited and unknown style keys do not corrupt a restored view', () => {
+  for (const style of [
+    'constructor',
+    '__proto__',
+    'toString',
+    'hasOwnProperty',
+    'unknown',
+  ]) {
+    const view = viewFromParams(
+      new URLSearchParams({ lat: '10', lon: '20', style, map: 'osm' }),
+    );
+    assert.equal(view.style, null);
+    assert.equal(view.map, 'osm');
+    assert.equal(view.camera.lat, 10);
+  }
+});
