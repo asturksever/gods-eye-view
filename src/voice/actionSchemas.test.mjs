@@ -1,3 +1,4 @@
+import { realtimeInstructions } from '../../server/providers/openai/instructions.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -37,8 +38,9 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // omit top-level anyOf (OpenAI rejects it). Contacts list routing preserves
     // requested radius and center authority in descriptions only.
     // Street Level, GNSS and air quality (ECCC AQHI) extend the manifest;
-    // tracked and analyst aircraft describe broadcasts; show_street_level
-    // (map, source, photo) is the only change on top of main.
+    // tracked and analyst aircraft describe broadcasts; globe rotation adds
+    // one motion; show_street_level (map, source, photo) is the only change
+    // on top of main.
     SHOW_STREET_LEVEL_PAYLOAD_DIGEST,
   );
   // Every shipped tool is byte-identical to the previous release: the new
@@ -57,12 +59,12 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     .digest('hex');
   assert.equal(
     shipped,
-    '775ba323384b4c1b62fb8415bac52aecc3fc668e20bedcfa57e426dcd1da3969',
+    '967b5a043b812e2f8c1e190fc571cf12b960c9d4486df736902221aab4d99cf6',
   );
 });
 
 const SHOW_STREET_LEVEL_PAYLOAD_DIGEST =
-  'b08de88ab9cf7c0525e4a9ae42ff6175616f6f69e4730500da2417430038f021';
+  '5730cd99966a696771b62edb8b29e7a84cda685958a14889e84a0a93f7653ce3';
 
 test('descriptions customize wording without changing immutable shared arguments', () => {
   const descriptions = {
@@ -131,6 +133,17 @@ test('all legacy action arguments are byte-identical after removing the delibera
   delete property('show_data_layers_menu').layerId.enum;
   delete property('get_entity_context').layerId.enum;
   delete property('analyst_query').layers.items.enum;
+  // Earth-centered rotation is additive; local camera yaw keeps its contract.
+  const motion = property('move_camera').motion;
+  assert.deepEqual(motion.enum, [
+    'orbit',
+    'pan',
+    'tilt',
+    'rotate',
+    'rotate_globe',
+    'stop',
+  ]);
+  motion.enum = motion.enum.filter((value) => value !== 'rotate_globe');
   const panels = property('set_panel_open').panelId;
   panels.enum = panels.enum.filter(
     (id) => !['weather-panel', 'recent-imagery-panel'].includes(id),
@@ -170,6 +183,24 @@ test('all legacy action arguments are byte-identical after removing the delibera
   );
 });
 
+test('globe rotation is an additive camera motion with the existing control arguments', () => {
+  const schema = GEV_ACTION_SCHEMAS.find(
+    (tool) => tool.name === 'move_camera',
+  ).parameters;
+  for (const motion of ['rotate_globe', 'rotate', 'orbit', 'pan', 'tilt']) {
+    assert.deepEqual(
+      validateArgs(schema, {
+        motion,
+        direction: 'right',
+        speed: 'slow',
+        mode: 'continuous',
+      }),
+      [],
+    );
+  }
+  assert.ok(validateArgs(schema, { motion: 'spin_camera' }).length > 0);
+});
+
 test('track_entity accepts a referent alone but rejects an empty target', () => {
   const schema = GEV_ACTION_SCHEMAS.find(
     (tool) => tool.name === 'track_entity',
@@ -207,4 +238,16 @@ test('the benchmark still rejects an empty track_entity although the model-facin
     }),
     [],
   );
+});
+
+test('globe reset guidance requires a separate explicit command after refusal', () => {
+  const paragraph = realtimeInstructions()
+    .split('\n')
+    .find((line) => line.includes('globe-view-required'));
+  assert.ok(paragraph);
+  assert.match(paragraph, /calls only move_camera motion rotate_globe/);
+  assert.match(paragraph, /explicit user Reset\/Show Globe View/);
+  assert.match(paragraph, /never from your own plan/);
+  assert.match(paragraph, /bare yes\/ok/);
+  assert.match(paragraph, /Do not ask a question/);
 });
