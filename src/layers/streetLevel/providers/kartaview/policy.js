@@ -1,4 +1,5 @@
 import { COLORS as SHARED_COLORS, PROVIDER_COLORS } from '../../policy.js';
+import { msg } from '../../../../i18n/index.js';
 
 export { NEAREST_RADIUS_M } from '../../policy.js';
 
@@ -13,7 +14,7 @@ export const KARTAVIEW_LABEL = 'KARTAVIEW';
  */
 export const KARTAVIEW_API_HOST = 'https://api.kartaview.org';
 /** KartaView's image proxy: resizes a photo given its base64url address. */
-export const KARTAVIEW_CDN_HOST = 'https://cdn.kartaview.org';
+const KARTAVIEW_CDN_HOST = 'https://cdn.kartaview.org';
 
 /** Stable id prefixes for picked primitives; every one starts with `kv:`. */
 export const PICK_PREFIX = Object.freeze({
@@ -36,21 +37,21 @@ export const COVERAGE_STREET_ZOOM_BELOW_M = 2_500;
 export const COVERAGE_MAX_HEIGHT_M = 6_000;
 export const COVERAGE_TUNING = Object.freeze({
   maxTiles: 9,
-  overviewMaxTiles: 0,
   // Chained ways are short: a dense downtown z13 tile holds ~1,500, so each
   // tile may draw 1,600 (a frame stays at 16.7 ms with 4,400 drawn).
   maxSequences: 14_400,
   lineWidthPx: 2.5,
-  overviewPointPx: 2.5,
   moveDebounceMs: 320,
   viewRangeMinM: 2_500,
   viewRangePerHeight: 10,
-  viewNearM: 1_000,
+  // Lines carry no date to sort by: keep KartaView's order.
+  keepOrder: true,
 });
-export const TOO_HIGH_HINT = 'zoom in to see KartaView coverage';
-export const NO_COVERAGE_HINT = 'no KartaView photos in view';
-export const RATE_LIMITED_MESSAGE =
-  'KartaView is rate-limiting requests — they resume on their own';
+export const TOO_HIGH_HINT = msg('zoom in to see KartaView coverage');
+export const NO_COVERAGE_HINT = msg('no KartaView photos in view');
+export const RATE_LIMITED_MESSAGE = msg(
+  'KartaView is rate-limiting requests — they resume on their own',
+);
 
 /**
  * The photo API answers 429 to more than about three requests at once, so
@@ -81,8 +82,9 @@ export const IMAGE_TIMEOUT_MS = 15_000;
 export const IMAGE_PROBE_TIMEOUT_MS = 8_000;
 /** Nearest photos probed (at once) before giving up on archived ones; ‹ › skip this many. */
 export const NEAREST_PROBES = 6;
-export const ARCHIVED_MESSAGE =
-  'KartaView’s photos here are archived and cannot be shown';
+export const ARCHIVED_MESSAGE = msg(
+  'KartaView’s photos here are archived and cannot be shown',
+);
 
 /** Photos asked for around a point; the API returns them nearest first. */
 export const NEAREST_LIMIT = 10;
@@ -132,12 +134,12 @@ export const MASK_MAX_BYTES = 2 * 1024 * 1024;
 export const MASK_KEEP_SHARE = 0.5;
 /** Points along a segment are tested this many mask pixels apart. */
 export const MASK_SAMPLE_PX = 2;
-export const MASK_SLOW_MESSAGE =
-  'KartaView did not filter this area in time — move the map to ask again';
-export const FILTERED_OUT_MESSAGE =
-  'None of KartaView’s photos here pass the imagery filter';
-/** Under the SINCE slider while KartaView is lit. */
-export const SINCE_NOTE = 'KartaView: by upload date';
+export const MASK_SLOW_MESSAGE = msg(
+  'KartaView did not filter this area in time — move the map to ask again',
+);
+export const FILTERED_OUT_MESSAGE = msg(
+  'None of KartaView’s photos here pass the imagery filter',
+);
 
 /** The UTC calendar day of `ms`, as KartaView's startDate reads it. */
 function utcDay(ms) {
@@ -220,9 +222,32 @@ export function kartaViewTimeMs(value) {
       String(value ?? ''),
     );
   if (!match) return null;
-  const [, y, mo, d, h = '0', mi = '0', s = '0'] = match;
-  if (Number(y) < 1990) return null;
-  const ms = Date.UTC(+y, +mo - 1, +d, +h, +mi, +s);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hours = Number(match[4] ?? 0);
+  const minutes = Number(match[5] ?? 0);
+  const seconds = Number(match[6] ?? 0);
+  if (year < 1990) return null;
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    hours > 23 ||
+    minutes > 59 ||
+    seconds > 59
+  )
+    return null;
+  // Date.UTC rolls 31 February into March. A photo would then pass or fail
+  // the day filter on the wrong calendar day, so an impossible date is unknown.
+  const ms = Date.UTC(year, month - 1, day, hours, minutes, seconds);
+  const parsed = new Date(ms);
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  )
+    return null;
   return Number.isFinite(ms) ? ms : null;
 }
 

@@ -1,5 +1,8 @@
+import { t } from '../i18n/index.js';
 import { syncChipGroup } from './chipGroup.js';
 import { syncRowList } from './rowList.js';
+import { formatScaleLabel, unitLabel } from './unitLabels.js';
+import { createSlider } from './slider.js';
 
 const set = (node, key, value) => {
   if (node[key] !== value) node[key] = value;
@@ -12,6 +15,13 @@ const order = (parent, nodes) =>
     if (parent.children[i] !== node)
       parent.insertBefore(node, parent.children[i] || null);
   });
+
+// "960 — 1050+ гПа": the unit stays with the last number.
+const scaleText = (low, high, units) => {
+  const unit = unitLabel(units);
+  const range = `${formatScaleLabel(low)} — ${formatScaleLabel(high)}`;
+  return unit ? `${range}\u00a0${unit}` : range;
+};
 
 /** Optional, ordered blocks without disclosure state. All controls are keyed. */
 export function createRailCardBlocks({ container, cardId, onParams }) {
@@ -81,12 +91,11 @@ export function createRailCardBlocks({ container, cardId, onParams }) {
               'rail-card-setting-range-label',
               block.rangeRow,
             );
-            block.rangeInput = make(
-              'input',
-              'rail-card-setting-range',
-              block.rangeRow,
-            );
-            block.rangeInput.type = 'range';
+            block.rangeInput = createSlider({
+              documentRef: document,
+              className: 'rail-card-setting-range',
+            });
+            block.rangeRow.appendChild(block.rangeInput);
             block.rangeValue = make(
               'span',
               'rail-card-setting-range-value',
@@ -159,8 +168,8 @@ export function createRailCardBlocks({ container, cardId, onParams }) {
             block.clear.type = 'button';
             block.clear.dataset.actionId = 'clear';
             block.clear.textContent = '×';
-            block.clear.setAttribute('aria-label', 'Clear reading');
-            block.clear.title = 'Clear reading';
+            block.clear.setAttribute('aria-label', t('Clear reading'));
+            block.clear.title = t('Clear reading');
             bind((event) => {
               if (event.target === block.clear) dispatch(block.props.clear);
             });
@@ -300,7 +309,7 @@ export function createRailCardBlocks({ container, cardId, onParams }) {
             block.scale,
             'textContent',
             visible
-              ? `${legend.labels[0]} — ${legend.labels.at(-1)} ${legend.units || ''}`.trim()
+              ? scaleText(legend.labels[0], legend.labels.at(-1), legend.units)
               : '',
           );
         } else if (props.type === 'actions') {

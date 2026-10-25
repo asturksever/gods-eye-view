@@ -1,17 +1,10 @@
 # Changelog
 
-- Add Bogotá (Tembici, 250 stations) and Santiago de Chile (Bike Itaú, 200
-  stations) to the GBFS bikeshare registry, the layer's first stations in
-  Colombia and Chile. Both are PBSC feeds like the Brazilian Bike Itaú cities,
-  so no proxy change is needed. Both feeds also list depot stations on other
-  continents (São Paulo, Madrid) as in service; stations outside a city's load
-  radius are now dropped instead of drawn as live docks.
-
-- Add Barcelona's bike share to the GBFS registry: Bicing (543 stations, the
-  city's PBSC system) and AMBici (237 e-bike stations across the metropolitan
-  area, run by nextbike). Both are keyless GBFS 2.3 feeds listed in
-  MobilityData's systems catalogue; AMBici's is CC0. `gbfs.nextbike.net` joins
-  the proxy allowlist. These are the layer's first stations in Spain.
+- The tracked-aircraft descriptor now publishes `verticalRateMps`, on both the
+  civil and military layers, so a consumer reading `getTrackedInfo()` no longer
+  has to reach past it into the raw poll record for climb/descent. Reported,
+  never derived: an aircraft that has not transmitted a rate reads as `null`
+  rather than a level-flight `0`.
 
 - Bound how often the GBFS proxy will relay. `/api/gbfs` already restricted
   where it could go — https, an allowlisted host, a station feed path, no
@@ -170,6 +163,18 @@
   the five borough cores load and `CCTV_NYC_MAX_SOURCES` changes the cap. The catalog-wide ceiling is
   unchanged; extra cameras share it round-robin with the other packs.
 
+- Spanish interface (`es`), translated by @meirm (#602) and reviewed against the
+  current English.
+
+- Interface localization, starting with Russian. UI text is marked with
+  `t()`, `tn()` (plurals) and `msg()` in code and `data-i18n*` in markup, keyed
+  by the English text itself; each language is one flat JSON catalog
+  (`src/i18n/locales/ru.json`). The language comes from `?lang=`, the language
+  picker (the globe button in the bottom-right corner), then the browser
+  language; English stays the default and the fallback. `npm run i18n`, also
+  run by `npm test`, fails on missing, unused or broken translations. Built on
+  the i18n foundation by @meirm (#601), with the Russian catalog started
+  from #312. It also fails on UI text that is not marked at all.
 - Street Level counts unique tiles before ranking so overlapping dateline halves
   in polar views do not waste slots in the 16-tile overview budget.
 
@@ -321,9 +326,8 @@
   [NotProniss](https://github.com/NotProniss) (#1084).
 
 - Street Level: Panoramax is the fourth provider, keyless. Light its chip
-  (orange; off by default, one provider at a time): from orbit dots show
-  where the federated commons has pictures, and below about 60 km its
-  sequences draw as lines from `api.panoramax.xyz` vector tiles. A click on a
+  (orange; off by default, one provider at a time): below about 60 km the
+  federated commons' sequences draw as lines from `api.panoramax.xyz` vector tiles. A click on a
   line opens that sequence's picture nearest the click without moving the
   camera, flat or 360°, with cones along the sequence around it and ‹ › /
   ← → following the picture's own links. The 360° and since filters apply,
@@ -381,10 +385,10 @@
   Maps JavaScript API) and click a street, or press OPEN STREET VIEW, to
   open Google's own panorama in
   the panel, with its arrows, the address and month in the caption, a link
-  to Google Maps and FOLLOW. Share links carry it in the provider switches
+  to Google Maps. Share links carry it in the provider switches
   (`r.google-1`). One provider is lit at a time (lighting one switches the
   other off), Mapillary by default since it is free. Street View's panoramas
-  are all 360°, so the IMAGERY and SINCE filters and the legend apply to
+  are all 360°, so the IMAGERY and SINCE filters apply to
   Mapillary only and hide while GOOGLE STREET VIEW is lit; its globe marker
   is a Google-blue view cone.
 
@@ -423,21 +427,16 @@
   proposed diagnosis in #927, and [kvnloo](https://github.com/kvnloo) for identifying
   the repair race. Windows/Claude Desktop Cowork confirmation remains outstanding.
 
-- Street Level: a street-level imagery layer modelled on the iD editor's photo
-  overlay, with Mapillary as its first provider (free client token, CC BY-SA 4.0
-  imagery). One right-rail panel holds a chip per provider, shared 360°/flat and
-  captured-since filters, and an embedded viewer with EXPAND, FIT/FILL and
-  FOLLOW (Google 3D only). Coverage lines and image cones are drawn from orbit
-  down to a single street; on Google 3D they sit on the bare earth, refined
-  against the rendered mesh near the camera, so trees and buildings hide them.
-  Share links carry the provider switches, the filters and the panel's collapsed
-  state. A server proxy caches Mapillary coverage tiles (24 h, 1 GiB on disk),
-  refuses cross-site requests, rate-limits per IP and backs off when Mapillary
-  rejects the token or rate-limits.
-
-- The CCTV and Street Level panels are portable: drag the header to float the
-  panel, resize it from any edge or corner, and double-click the header to dock
-  it again. The position persists across reloads.
+- Street Level: street-level imagery from providers, Mapillary first (free
+  client token, CC BY-SA 4.0). A right-rail panel holds a chip per provider,
+  360°/flat and captured-since filters and an embedded viewer with EXPAND and
+  FIT/FILL. Coverage lines (below 60 km) and image cones drape on terrain and
+  Google 3D tiles; opening a photo frames it with one camera flight. Share
+  links carry the provider switches, the filters and the panel's collapsed
+  state. A server proxy adds the token to Mapillary coverage tiles, trims and
+  caches them for 24 h, refuses cross-site requests and redirects, and limits
+  load per IP and upstream. The panel reads KEY REQUIRED without a token and
+  KEY REJECTED when Mapillary refuses it.
 
 - Add Norway's city bikes to the Bike Share layer: Oslo, Bergen and
   Trondheim Bysykkel (Urban Sharing), Kolumbus Bysykkel in Stavanger and

@@ -9,7 +9,6 @@ import {
   FEED_STALE_AFTER_MS,
   MAX_VEHICLES_TOTAL,
   MISSED_POLLS_TO_DROP,
-  TRANSIT_POLL_MS,
   isStaleVehicleFix,
   transitVehicleKey,
   vehicleReportTimeMs,
@@ -476,6 +475,7 @@ export function createIngestion({ state, services, parts, source }) {
           `[Data:Transit] ${feed.id} poll failed:`,
           error?.message || error,
         );
+        // i18n-ignore: English data, translated on display (ui/statusText.js)
         status.error = `${feed.name} feed unavailable`;
         status.retryInSec = Number.isFinite(error?.retryInSec)
           ? error.retryInSec

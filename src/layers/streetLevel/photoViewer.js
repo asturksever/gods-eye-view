@@ -4,20 +4,31 @@ import {
   wrapDegrees,
 } from './panorama.js';
 import { imageSize } from './imageSize.js';
+import { msg, t } from '../../i18n/index.js';
+
+/**
+ * EXPAND puts the viewer's wrap full screen, or (iPhone) opens it as a
+ * popover. Each is tried on its own: a browser that cannot parse one
+ * (Safari before 16.4) throws on the selector.
+ */
+const EXPANDED_SELECTORS = [
+  '.sl-viewer-wrap:fullscreen',
+  '.sl-viewer-wrap:popover-open',
+];
 
 /** A photo download (tens of kilobytes to a few megabytes). */
-export const IMAGE_TIMEOUT_MS = 15_000;
+const IMAGE_TIMEOUT_MS = 15_000;
 
 /** A picture file or decoded side past these is refused (a photo is a few MB). */
 export const MAX_IMAGE_BYTES = 48 * 1024 * 1024;
 export const MAX_IMAGE_SIDE = 16_384;
 /** 64 MP: 256 MB once decoded to RGBA. A 16,384 px square is four times that. */
-export const MAX_IMAGE_PIXELS = 8_192 * 8_192;
+const MAX_IMAGE_PIXELS = 8_192 * 8_192;
 /** Where in a file to look for its dimensions (a JPEG's EXIF comes first). */
 const HEADER_BYTES = 256 * 1024;
 
 /** Whether a picture this size is past what the viewer decodes. */
-export function tooManyPixels(width, height) {
+function tooManyPixels(width, height) {
   return (
     width > MAX_IMAGE_SIDE ||
     height > MAX_IMAGE_SIDE ||
@@ -26,7 +37,7 @@ export function tooManyPixels(width, height) {
 }
 
 /** Panorama texture widths: enough for a docked viewer, and for an expanded one. */
-export const PANO_MID_SIZE = Object.freeze([2048, 1024]);
+const PANO_MID_SIZE = Object.freeze([2048, 1024]);
 export const PANO_FULL_SIZE = Object.freeze([4096, 2048]);
 
 /**
@@ -44,7 +55,7 @@ export function loadImage(
     crossOrigin = true,
     timeoutMs = IMAGE_TIMEOUT_MS,
     resize = null,
-    failure = 'The photo could not be loaded',
+    failure = msg('The photo could not be loaded'),
     signal = null,
   } = {},
 ) {
@@ -144,7 +155,7 @@ async function loadBitmap(url, timeoutMs, resize, failure, signal) {
  * A picture refused for its size (`tooLarge`): the viewer will not load
  * that file another way, an <img> having no size limit at all.
  */
-export function oversized(failure) {
+function oversized(failure) {
   return Object.assign(new Error(failure), { tooLarge: true });
 }
 
@@ -534,14 +545,14 @@ export function createPhotoViewer({
   /**
    * Docked, Esc anywhere in the viewer's box (the photo, its toolbar, its
    * caption) is the provider's before the panel's, which would collapse;
-   * expanded, the dialog's own Esc shrinks it.
+   * expanded, the panel's own Esc shrinks it.
    */
   function onEscapeKey(event) {
     if (
       event.key !== 'Escape' ||
       event.shiftKey ||
       event.defaultPrevented ||
-      root?.closest?.('.sl-viewer-wrap-expanded') ||
+      isExpanded() ||
       !onEscape()
     )
       return;
@@ -602,11 +613,14 @@ export function createPhotoViewer({
     root.setAttribute('role', 'group');
     root.setAttribute(
       'aria-label',
-      `${name} photo. ← and → step along the sequence. On a 360° photo, drag or use Shift+← →, ↑ ↓ to look around, and + − to zoom`,
+      t(
+        '{name} photo. ← and → step along the sequence. On a 360° photo, drag or use Shift+← →, ↑ ↓ to look around, and + − to zoom',
+        { name },
+      ),
     );
     picture = doc.createElement('img');
     picture.className = 'sl-photo-flat';
-    picture.alt = `${name} street-level photo`;
+    picture.alt = t('{name} street-level photo', { name });
     picture.draggable = false;
     picture.hidden = true;
     canvas = makeCanvas(doc);
@@ -624,8 +638,8 @@ export function createPhotoViewer({
       });
       return button;
     };
-    prevButton = nav('Previous photo in this sequence (←)', '‹', -1);
-    nextButton = nav('Next photo in this sequence (→)', '›', 1);
+    prevButton = nav(t('Previous photo in this sequence (←)'), '‹', -1);
+    nextButton = nav(t('Next photo in this sequence (→)'), '›', 1);
     root.append(picture, canvas, prevButton, nextButton);
     host.append(root);
     listen(root, 'keydown', onKeyDown);
@@ -735,9 +749,15 @@ export function createPhotoViewer({
     }
   }
 
-  /** The viewer is the expanded dialog, not docked in the panel. */
+  /** The viewer is expanded (full screen, or the iPhone popover), not docked in the panel. */
   function isExpanded() {
-    return Boolean(root?.closest?.('.sl-viewer-wrap-expanded'));
+    return EXPANDED_SELECTORS.some((selector) => {
+      try {
+        return Boolean(root?.closest?.(selector));
+      } catch {
+        return false;
+      }
+    });
   }
 
   /** Another photo, or none: a sharper panorama still on its way is not needed. */

@@ -2,11 +2,12 @@
 import * as Cesium from 'cesium';
 import { createImportImageBudget } from './geoImportImages.js';
 import { createImportedPins } from './geoImportPins.js';
+import { msg } from '../i18n/marker.js';
 
 /** Largest file accepted, in bytes. */
-export const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
+const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
 /** Largest total a KMZ may inflate to — a zip bomb stops here. */
-export const MAX_KMZ_INFLATED_BYTES = 120 * 1024 * 1024;
+const MAX_KMZ_INFLATED_BYTES = 120 * 1024 * 1024;
 /** Most files on the globe at once. */
 export const MAX_IMPORTED_FILES = 12;
 /** Most entities one file may create before it is refused. */
@@ -14,9 +15,9 @@ export const MAX_IMPORT_ENTITIES = 20_000;
 /** Most vertices (points of every line, ring and marker) in one file. */
 export const MAX_IMPORT_POSITIONS = 250_000;
 /** Most normalized style definitions and local image links in one KML/KMZ. */
-export const MAX_KML_LINKS = 2_000;
+const MAX_KML_LINKS = 2_000;
 /** Longest plain-text name kept from a file's features. */
-export const MAX_IMPORT_NAME_LENGTH = 120;
+const MAX_IMPORT_NAME_LENGTH = 120;
 /** What the file picker offers. */
 export const GEO_FILE_ACCEPT = '.geojson,.json,.kml,.kmz,.gpx';
 
@@ -61,11 +62,17 @@ const KML_REMOVED_ELEMENTS = new Set([
   'httpQuery',
 ]);
 
-/** An error whose message is meant for the person who chose the file. */
+/**
+ * An error whose message is meant for the person who chose the file. The
+ * message stays English; `template` and `values`, when given, let the UI show
+ * it in the active language.
+ */
 export class GeoImportError extends Error {
-  constructor(message) {
+  constructor(message, template = message, values = {}) {
     super(message);
     this.name = 'GeoImportError';
+    this.template = template;
+    this.values = values;
   }
 }
 
@@ -124,12 +131,14 @@ export function parseGeoJsonText(text) {
   try {
     value = JSON.parse(String(text).replace(/^﻿/, ''));
   } catch {
-    throw new GeoImportError('That file is not valid JSON.');
+    throw new GeoImportError(msg('That file is not valid JSON.'));
   }
   if (!value || typeof value !== 'object' || !GEOJSON_TYPES.has(value.type))
-    throw new GeoImportError('That JSON file is not GeoJSON.');
+    throw new GeoImportError(msg('That JSON file is not GeoJSON.'));
   if (value.type === 'FeatureCollection' && !Array.isArray(value.features))
-    throw new GeoImportError('That FeatureCollection has no features list.');
+    throw new GeoImportError(
+      msg('That FeatureCollection has no features list.'),
+    );
   return value;
 }
 
@@ -164,7 +173,7 @@ export function countGeoJsonGeometry(
       for (let i = 0; i < list.length; i++) {
         if (list[i]?.type !== 'Feature')
           throw new GeoImportError(
-            'Every GeoJSON feature must have type Feature.',
+            msg('Every GeoJSON feature must have type Feature.'),
           );
         stack.push(list[i]);
       }
@@ -183,11 +192,11 @@ export function countGeoJsonGeometry(
     if (node.type === 'GeometryCollection') {
       const list = node.geometries;
       if (!Array.isArray(list))
-        throw new GeoImportError('That GeoJSON has invalid geometries.');
+        throw new GeoImportError(msg('That GeoJSON has invalid geometries.'));
       for (let i = 0; i < list.length; i++) {
         if (!list[i] || ['Feature', 'FeatureCollection'].includes(list[i].type))
           throw new GeoImportError(
-            'That GeoJSON contains an unsupported geometry.',
+            msg('That GeoJSON contains an unsupported geometry.'),
           );
         stack.push(list[i]);
       }
@@ -216,7 +225,9 @@ export function countGeoJsonGeometry(
       while (coords.length) {
         const [c, remaining] = coords.pop();
         if (!Array.isArray(c))
-          throw new GeoImportError('That GeoJSON has invalid coordinates.');
+          throw new GeoImportError(
+            msg('That GeoJSON has invalid coordinates.'),
+          );
         if (remaining === 0) {
           if (
             c.length < 2 ||
@@ -226,7 +237,9 @@ export function countGeoJsonGeometry(
             Math.abs(c[1]) > 90 ||
             (c.length === 3 && Math.abs(c[2]) > 1_000_000)
           )
-            throw new GeoImportError('That GeoJSON has invalid coordinates.');
+            throw new GeoImportError(
+              msg('That GeoJSON has invalid coordinates.'),
+            );
           positions += 1;
           if (positions > maxPositions) return result('positions');
         } else
@@ -234,7 +247,7 @@ export function countGeoJsonGeometry(
       }
     } else
       throw new GeoImportError(
-        'That GeoJSON contains an unsupported geometry.',
+        msg('That GeoJSON contains an unsupported geometry.'),
       );
   }
   return result();
@@ -245,17 +258,36 @@ function overLimitError({ over, features }) {
   if (over === 'entities')
     return new GeoImportError(
       `That file creates more than ${MAX_IMPORT_ENTITIES.toLocaleString()} map objects (the limit).`,
+      msg('That file creates more than {limit} map objects (the limit).'),
+      { limit: MAX_IMPORT_ENTITIES.toLocaleString() },
     );
   if (over === 'links')
     return new GeoImportError(
       `That file has more than ${MAX_KML_LINKS.toLocaleString()} style definitions and image links after cleanup (the limit).`,
+      msg(
+        'That file has more than {limit} style definitions and image links after cleanup (the limit).',
+      ),
+      { limit: MAX_KML_LINKS.toLocaleString() },
     );
   if (over === 'features')
     return new GeoImportError(
       `That file has more than ${MAX_IMPORT_ENTITIES.toLocaleString()} features (the limit).`,
+      msg('That file has more than {limit} features (the limit).'),
+      { limit: MAX_IMPORT_ENTITIES.toLocaleString() },
+    );
+  const limit = MAX_IMPORT_POSITIONS.toLocaleString();
+  if (features)
+    return new GeoImportError(
+      `That file has more than ${limit} points (the limit) across ${features.toLocaleString()} features.`,
+      msg(
+        'That file has more than {limit} points (the limit) across {features} features.',
+      ),
+      { limit, features: features.toLocaleString() },
     );
   return new GeoImportError(
-    `That file has more than ${MAX_IMPORT_POSITIONS.toLocaleString()} points (the limit)${features ? ` across ${features.toLocaleString()} features` : ''}.`,
+    `That file has more than ${limit} points (the limit).`,
+    msg('That file has more than {limit} points (the limit).'),
+    { limit },
   );
 }
 
@@ -302,14 +334,16 @@ async function inflateRaw(bytes, maxBytes) {
       total += value.length;
       if (total > maxBytes)
         throw new GeoImportError(
-          'That KMZ unpacks to more than the import limit.',
+          msg('That KMZ unpacks to more than the import limit.'),
         );
       chunks.push(value);
     }
   } catch (error) {
     await reader.cancel().catch(() => {});
     if (error instanceof GeoImportError) throw error;
-    throw new GeoImportError('That KMZ is damaged and could not be unpacked.');
+    throw new GeoImportError(
+      msg('That KMZ is damaged and could not be unpacked.'),
+    );
   }
   const out = new Uint8Array(total);
   let at = 0;
@@ -332,7 +366,7 @@ export async function readZipEntries(
   { maxInflatedBytes = MAX_KMZ_INFLATED_BYTES } = {},
 ) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const fail = (message = 'That KMZ is not a readable zip archive.') => {
+  const fail = (message = msg('That KMZ is not a readable zip archive.')) => {
     throw new GeoImportError(message);
   };
   // End of central directory: 22 bytes plus a comment of up to 64 KiB.
@@ -352,7 +386,7 @@ export async function readZipEntries(
   const dirSize = view.getUint32(eocd + 12, true);
   let at = view.getUint32(eocd + 16, true);
   if (count === 0xffff || at === 0xffffffff || at + dirSize > eocd)
-    fail('That KMZ uses a zip format this import does not read.');
+    fail(msg('That KMZ uses a zip format this import does not read.'));
   const entries = new Map();
   const names = new TextDecoder();
   let inflated = 0;
@@ -370,9 +404,9 @@ export async function readZipEntries(
     const name = names.decode(bytes.subarray(at + 46, at + 46 + nameLength));
     at += 46 + nameLength + extraLength + commentLength;
     if (name.endsWith('/')) continue;
-    if (flags & 0x1) fail('That KMZ is encrypted.');
+    if (flags & 0x1) fail(msg('That KMZ is encrypted.'));
     if (compressed === 0xffffffff || size === 0xffffffff)
-      fail('That KMZ uses a zip format this import does not read.');
+      fail(msg('That KMZ uses a zip format this import does not read.'));
     if (local + 30 > bytes.length || view.getUint32(local, true) !== 0x04034b50)
       fail();
     const start =
@@ -386,10 +420,13 @@ export async function readZipEntries(
     if (method === 0) contents = data;
     else if (method === 8)
       contents = await inflateRaw(data, maxInflatedBytes - inflated);
-    else fail('That KMZ uses a compression method this import does not read.');
+    else
+      fail(
+        msg('That KMZ uses a compression method this import does not read.'),
+      );
     inflated += contents.length;
     if (inflated > maxInflatedBytes)
-      fail('That KMZ unpacks to more than the import limit.');
+      fail(msg('That KMZ unpacks to more than the import limit.'));
     entries.set(name, contents);
   }
   return entries;
@@ -765,7 +802,7 @@ export function countKmlGeometry(
         !Number.isFinite(value) ||
         Math.abs(value) > limit
       )
-        throw new GeoImportError('That KML has invalid geometry bounds.');
+        throw new GeoImportError(msg('That KML has invalid geometry bounds.'));
     }
     // Cesium creates entities for folders, a parent for every placemark, and
     // a child for each geometry in a MultiGeometry, including nested containers.
@@ -822,7 +859,7 @@ function checkKmlPosition(tuple) {
     Math.abs(numbers[1]) > 90 ||
     (numbers.length === 3 && Math.abs(numbers[2]) > 1_000_000)
   )
-    throw new GeoImportError('That KML has invalid coordinates.');
+    throw new GeoImportError(msg('That KML has invalid coordinates.'));
 }
 
 /**
@@ -843,7 +880,7 @@ export function gpxToGeoJson(
 ) {
   const root = doc.documentElement;
   if (root?.localName !== 'gpx')
-    throw new GeoImportError('That GPX file has no <gpx> document.');
+    throw new GeoImportError(msg('That GPX file has no <gpx> document.'));
   const features = [];
   let positions = 0;
   const point = (el) => {
@@ -1003,32 +1040,113 @@ export function detachImportedTime(dataSource) {
   return dataSource;
 }
 
+/** Repair only the first KML opening tag, scanning its delimiter once. */
+export function repairKmlRootNamespaces(value, what = 'KML') {
+  const text = String(value);
+  // Skip XML comments and processing instructions without treating their
+  // literal '<kml' text as an opening root tag.
+  let start = 0;
+  for (;;) {
+    start = text.indexOf('<', start);
+    if (start < 0) return text;
+    if (text.slice(start, start + 9).toUpperCase() === '<!DOCTYPE') {
+      let quote = null;
+      let subsetDepth = 0;
+      let end = start + 9;
+      for (; end < text.length; end++) {
+        const char = text[end];
+        if (quote) {
+          if (char === quote) quote = null;
+        } else if (char === '"' || char === "'") quote = char;
+        else if (char === '<' && text.startsWith('<!--', end)) {
+          // Comments and processing instructions inside the internal subset
+          // carry no declaration syntax; jump past them as a whole.
+          const skip = text.indexOf('-->', end + 4);
+          if (skip < 0) return text;
+          end = skip + 2;
+        } else if (char === '<' && text.startsWith('<?', end)) {
+          const skip = text.indexOf('?>', end + 2);
+          if (skip < 0) return text;
+          end = skip + 1;
+        } else if (char === '[') subsetDepth++;
+        else if (char === ']') subsetDepth--;
+        else if (char === '>' && subsetDepth === 0) break;
+      }
+      if (end === text.length) return text;
+      start = end + 1;
+      continue;
+    }
+    const close = text.startsWith('<!--', start)
+      ? '-->'
+      : text.startsWith('<?', start)
+        ? '?>'
+        : null;
+    if (!close) break;
+    const end = text.indexOf(close, start + 2);
+    if (end < 0) return text; // The XML parser reports an unterminated preamble.
+    start = end + close.length;
+  }
+  const match = /^<kml\b/i.exec(text.slice(start, start + 5));
+  if (!match) return text;
+  let quote = null;
+  let end = -1;
+  for (let index = start + match[0].length; index < text.length; index++) {
+    const char = text[index];
+    if (char === '<') break; // Raw '<' is invalid even inside an XML attribute.
+    if (quote) {
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '>') {
+      end = index + 1;
+      break;
+    }
+  }
+  if (end < 0)
+    throw new GeoImportError(
+      `That ${what} file is not valid XML.`,
+      msg('That {format} file is not valid XML.'),
+      { format: what },
+    );
+  // Walk the root's attributes in order so quoted values are never read as
+  // declarations. Anything the walk cannot tokenize is kept verbatim for the
+  // XML parser to judge.
+  const seen = new Set();
+  const attribute = /(\s+)([^\s=/>"']+)\s*=\s*("[^"]*"|'[^']*')/y;
+  let position = start + match[0].length;
+  let root = text.slice(start, position);
+  for (;;) {
+    attribute.lastIndex = position;
+    const found = attribute.exec(text);
+    if (!found || attribute.lastIndex > end) break;
+    position = attribute.lastIndex;
+    const prefix = /^xmlns:([\w.-]+)$/.exec(found[2])?.[1];
+    if (prefix && seen.has(prefix)) continue;
+    if (prefix) seen.add(prefix);
+    root += found[0];
+  }
+  root += text.slice(position, end);
+  if (!seen.has('xsi') && /[<\s]xsi:/.test(text))
+    root = root.replace(
+      /(\/?)>$/,
+      ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"$1>',
+    );
+  return text.slice(0, start) + root + text.slice(end);
+}
+
 function parseXml(text, what) {
   // Match the namespace repairs Cesium applies to ordinary exported KML.
-  if (what !== 'GPX')
-    text = String(text).replace(/<kml\b[^>]*>/i, (root) => {
-      const seen = new Set();
-      root = root.replace(
-        /\s+xmlns:([\w.-]+)\s*=\s*(["'])[^"']*\2/g,
-        (declaration, prefix) => {
-          if (seen.has(prefix)) return '';
-          seen.add(prefix);
-          return declaration;
-        },
-      );
-      if (!seen.has('xsi') && /[<\s]xsi:/.test(text))
-        root = root.replace(
-          />$/,
-          ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">',
-        );
-      return root;
-    });
+  if (what !== 'GPX') text = repairKmlRootNamespaces(text, what);
   const doc = new DOMParser().parseFromString(
     String(text).replace(/^﻿/, ''),
     'application/xml',
   );
   if (doc.getElementsByTagName('parsererror').length)
-    throw new GeoImportError(`That ${what} file is not valid XML.`);
+    throw new GeoImportError(
+      `That ${what} file is not valid XML.`,
+      msg('That {format} file is not valid XML.'),
+      { format: what },
+    );
   return doc;
 }
 
@@ -1066,7 +1184,9 @@ function checkLocalImages(doc, entries = new Map(), main = '') {
       }
     } catch {
       throw new GeoImportError(
-        'That file has an unreadable image or exceeds the 16-megapixel image limit.',
+        msg(
+          'That file has an unreadable image or exceeds the 16-megapixel image limit.',
+        ),
       );
     }
   }
@@ -1086,7 +1206,7 @@ async function loadKml(doc, viewer, signal) {
         }),
         new Promise((_, reject) => {
           const failed = () => {
-            reject(new GeoImportError('That KML could not be read.'));
+            reject(new GeoImportError(msg('That KML could not be read.')));
           };
           globalThis.addEventListener?.('error', failed);
           removeError = () => globalThis.removeEventListener?.('error', failed);
@@ -1116,7 +1236,9 @@ async function settleGroundPins(dataSource, viewer, signal) {
         if (!position) continue;
         const cartographic = Cesium.Cartographic.fromCartesian(position);
         if (!cartographic)
-          throw new GeoImportError('That file has invalid point coordinates.');
+          throw new GeoImportError(
+            msg('That file has invalid point coordinates.'),
+          );
         pins.push({
           entity,
           original: position,
@@ -1192,7 +1314,9 @@ async function settleGroundPins(dataSource, viewer, signal) {
       const c = points[i] && Cesium.Cartographic.fromCartesian(points[i]);
       if (!c)
         throw new GeoImportError(
-          'Ground heights are not available for that file. Try again when the map has loaded.',
+          msg(
+            'Ground heights are not available for that file. Try again when the map has loaded.',
+          ),
         );
       item.groundHeight = c.height;
       c.height += item.offset;
@@ -1216,7 +1340,8 @@ async function boundedImport(promise, signal) {
         abort = () => reject(signal.reason);
         signal?.addEventListener('abort', abort, { once: true });
         timer = setTimeout(
-          () => reject(new GeoImportError('That file took too long to read.')),
+          () =>
+            reject(new GeoImportError(msg('That file took too long to read.'))),
           60_000,
         );
       }),
@@ -1244,16 +1369,18 @@ export async function loadGeoFile(
     : AbortSignal.timeout(60_000);
   signal?.throwIfAborted();
   if (!file || !Number.isFinite(file.size))
-    throw new GeoImportError('Nothing to import.');
+    throw new GeoImportError(msg('Nothing to import.'));
   if (file.size > MAX_IMPORT_BYTES)
     throw new GeoImportError(
       `That file is larger than ${MAX_IMPORT_BYTES / 1024 / 1024} MiB.`,
+      msg('That file is larger than {size} MiB.'),
+      { size: MAX_IMPORT_BYTES / 1024 / 1024 },
     );
   let bytes = new Uint8Array(await boundedImport(file.arrayBuffer(), signal));
   const format = detectGeoFileFormat(file.name, bytes.subarray(0, 1024));
   if (!format)
     throw new GeoImportError(
-      'Only GeoJSON, KML, KMZ and GPX files can be imported.',
+      msg('Only GeoJSON, KML, KMZ and GPX files can be imported.'),
     );
   const stroke = Cesium.Color.fromCssColorString(color);
   const urls = [];
@@ -1276,7 +1403,7 @@ export async function loadGeoFile(
       const size = countGeoJsonGeometry(geojson);
       if (size.over) throw overLimitError(size);
       if (!size.positions)
-        throw new GeoImportError('That file has nothing to draw.');
+        throw new GeoImportError(msg('That file has nothing to draw.'));
       prepareGeoJson(geojson);
       bytes = null;
       dataSource = await boundedImport(
@@ -1299,7 +1426,8 @@ export async function loadGeoFile(
       if (format === 'kmz') {
         entries = await readZipEntries(bytes);
         main = kmzMainDocument(entries);
-        if (!main) throw new GeoImportError('That KMZ holds no KML document.');
+        if (!main)
+          throw new GeoImportError(msg('That KMZ holds no KML document.'));
         text = decodeXml(entries.get(main));
         resolveLocal = kmzImageResolver(entries, main, (url) => urls.push(url));
       } else {
@@ -1325,6 +1453,8 @@ export async function loadGeoFile(
     if (error instanceof GeoImportError) throw error;
     throw new GeoImportError(
       `That ${format.toUpperCase()} file could not be read.`,
+      msg('That {format} file could not be read.'),
+      { format: format.toUpperCase() },
     );
   }
   const entityCount = dataSource.entities.values.length;
@@ -1332,6 +1462,11 @@ export async function loadGeoFile(
     revoke();
     throw new GeoImportError(
       `That file has ${entityCount.toLocaleString()} map objects; the limit is ${MAX_IMPORT_ENTITIES.toLocaleString()}.`,
+      msg('That file has {count} map objects; the limit is {limit}.'),
+      {
+        count: entityCount.toLocaleString(),
+        limit: MAX_IMPORT_ENTITIES.toLocaleString(),
+      },
     );
   }
   const now = Cesium.JulianDate.now();
@@ -1346,7 +1481,7 @@ export async function loadGeoFile(
   );
   if (!drawable) {
     revoke();
-    throw new GeoImportError('That file has nothing to draw.');
+    throw new GeoImportError(msg('That file has nothing to draw.'));
   }
   scrubImportedEntities(dataSource);
   try {
@@ -1356,7 +1491,7 @@ export async function loadGeoFile(
     throw error instanceof GeoImportError
       ? error
       : new GeoImportError(
-          'Ground heights could not be read. Try that file again.',
+          msg('Ground heights could not be read. Try that file again.'),
         );
   }
   // Keep the clock invariant explicit even though unused KML dates have
@@ -1366,7 +1501,7 @@ export async function loadGeoFile(
     pins = createImportedPins(dataSource, viewer);
   } catch {
     revoke();
-    throw new GeoImportError('That file has invalid point graphics.');
+    throw new GeoImportError(msg('That file has invalid point graphics.'));
   }
   // The display name travels beside the data source (the file name, not
   // anything the document says about itself).

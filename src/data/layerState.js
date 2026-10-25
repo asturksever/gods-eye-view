@@ -1,3 +1,6 @@
+// Restore labels are marked with msg(); ui/shareRestoration.js translates them.
+// Local, not i18n/marker.js: the token-ledger tests run this file in isolation.
+const msg = (text) => text;
 import { normalizeIdSwitches, patchRequestedIdSwitches } from './idSwitches.js';
 import reservationRows from './layerStateTokenReservations.json' with { type: 'json' };
 
@@ -151,26 +154,6 @@ function trackingIdOption(key, token, defaultValue = null) {
     normalize: bounded,
     encode: (value) => String(value),
     decode: bounded,
-  });
-}
-
-function stringOption(key, token, defaultValue) {
-  return Object.freeze({
-    key,
-    token,
-    defaultValue,
-    normalize: (value) => {
-      if (typeof value === 'number' && Number.isFinite(value))
-        return String(value).trim().toLowerCase();
-      if (typeof value !== 'string') return null;
-      const normalized = value.trim().toLowerCase();
-      return normalized ? normalized : null;
-    },
-    encode: (value) => String(value),
-    decode: (value) =>
-      typeof value === 'string' && value.trim()
-        ? value.trim().toLowerCase()
-        : null,
   });
 }
 
@@ -473,19 +456,19 @@ export const SHARE_TRACKING_RESTORE_POLICIES = Object.freeze({
     optionOwner: 'flights',
     optionKey: 'selectedFlightsTrackingId',
     expiryWindowMs: 90_000,
-    label: 'flight',
+    label: msg('flight'),
   }),
   military: Object.freeze({
     optionOwner: 'flights',
     optionKey: 'selectedMilitaryTrackingId',
     expiryWindowMs: 45_000,
-    label: 'military flight',
+    label: msg('military flight'),
   }),
   satellites: Object.freeze({
     optionOwner: 'satellites',
     optionKey: 'selectedSatTrackingId',
     expiryWindowMs: 300_000,
-    label: 'satellite',
+    label: msg('satellite'),
   }),
 });
 
