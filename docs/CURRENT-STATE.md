@@ -3750,6 +3750,10 @@ disabled. With it, coverage draws as z11–14 sequence lines below 60 km; the pr
 tiles (12 MB → ~80 KB) and shares one upstream fetch between concurrent
 requests for a tile.
 
+Line coverage accepts a provider’s numeric `zoomFor` result or its legacy
+`{zoom, kind}` shape. Overview levels and invalid zooms show the zoom-in hint
+instead of silently requesting no tiles.
+
 Coverage is z11–14 sequence lines below 60 km; above that nothing is drawn and
 the panel says to zoom in. Tiles come from the visible ground within range of
 the camera, nearest first, at most 9 (the halves of a view across
