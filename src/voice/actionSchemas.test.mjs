@@ -38,16 +38,35 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // consolidated tool wording (each policy stated once); model-facing tools
     // omit top-level anyOf (OpenAI rejects it). Contacts list routing preserves
     // requested radius and center authority in descriptions only.
-    // Street Level and GNSS extend the manifest; tracked and analyst aircraft describe broadcasts.
-    // Air quality (ECCC AQHI) extends the manifest.
-    // Globe rotation adds one motion; visual keyhole fit and explicit
-    // reset guidance/defaults update only move_camera and mode descriptions.
-    // S2 GhostMaps extends the generated layer enums.
-    // Panel adds named voice targets and timeout; shared Panel/Cockpit guidance
-    // is consolidated without changing either feature's arguments.
+    // Street Level, GNSS and air quality (ECCC AQHI) extend the manifest;
+    // tracked and analyst aircraft describe broadcasts; globe rotation adds
+    // one motion; S2 GhostMaps and the voice panel (named targets, timeout)
+    // follow; show_street_level (map, source, photo) is the only change on
+    // top of main.
+    SHOW_STREET_LEVEL_PAYLOAD_DIGEST,
+  );
+  // Every shipped tool is byte-identical to the previous release: the new
+  // tool is the whole difference, so a later edit cannot hide in a re-pin.
+  const shipped = createHash('sha256')
+    .update(
+      JSON.stringify(
+        stable(
+          GEV_REALTIME_TOOLS.filter(
+            (tool) =>
+              !['set_cyber_sonar', 'show_street_level'].includes(tool.name),
+          ),
+        ),
+      ),
+    )
+    .digest('hex');
+  assert.equal(
+    shipped,
     '9ee82c4214499280c208c93751b19d7b724c81b7727a2d0c6dab0184749fbe15',
   );
 });
+
+const SHOW_STREET_LEVEL_PAYLOAD_DIGEST =
+  '3560c397b90af12ab5f4da8303810bed7ffda573f7cb7382af6af49598ea569f';
 
 test('descriptions customize wording without changing immutable shared arguments', () => {
   const descriptions = {
@@ -108,6 +127,7 @@ test('all legacy action arguments are byte-identical after removing the delibera
         'next_satellite_pass',
         'set_cyber_sonar',
         'set_voice_inactivity_timeout',
+        'show_street_level',
       ].includes(tool.name),
   );
   // Layer enums are generated from the voice layer manifest and pinned by
