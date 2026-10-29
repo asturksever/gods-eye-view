@@ -41,8 +41,9 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // Street Level, GNSS and air quality (ECCC AQHI) extend the manifest;
     // tracked and analyst aircraft describe broadcasts; globe rotation adds
     // one motion; S2 GhostMaps and the voice panel (named targets, timeout)
-    // follow; Snow leaves the set_visual_style enum; show_street_level (map,
-    // source, photo) is the only change on top of main.
+    // follow; Snow leaves the set_visual_style enum and the Operator HUD
+    // layout leaves set_hud's layout enum; show_street_level (map, source,
+    // photo) is the only change on top of main.
     SHOW_STREET_LEVEL_PAYLOAD_DIGEST,
   );
   // Every shipped tool is byte-identical to the previous release: the new
@@ -61,12 +62,12 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     .digest('hex');
   assert.equal(
     shipped,
-    '724a82b538a12a994401fc941e175625b032bfb96109934e091d3ef5b9600909',
+    'f47a7f78f13b1f79978fa524fad2618e32bd813e1a5dfd746bf35d29909fc91b',
   );
 });
 
 const SHOW_STREET_LEVEL_PAYLOAD_DIGEST =
-  '253e0befdf4ddde0c05b2b87967d75ed2e64cfe57e89436f8aa616c3080fe9e7';
+  '768edfd8e5ac882ac3b19fb4a9cb029bf3b162beec1dba532bf323a7c9d4fdd8';
 
 test('descriptions customize wording without changing immutable shared arguments', () => {
   const descriptions = {
@@ -186,9 +187,10 @@ test('all legacy action arguments are byte-identical after removing the delibera
     delete center.properties[axis].minimum;
     delete center.properties[axis].maximum;
   }
-  // Cyber adds one HUD layout.
+  // Cyber adds one HUD layout and Operator was retired.
   const hud = property('set_hud').layout;
-  hud.enum = hud.enum.filter((layout) => layout !== 'cyber');
+  assert.deepEqual(hud.enum, ['tactical', 'minimal', 'cyber']);
+  hud.enum = ['tactical', 'operator', 'minimal'];
   // Snow is retired from set_visual_style; restore it to keep the legacy pin.
   const visualStyle = legacy.find((tool) => tool.name === 'set_visual_style')
     .parameters.properties.style;
