@@ -12,6 +12,7 @@ import {
   encodeLayerStateParams,
 } from '../data/layerState.js';
 import { encodeIdSwitches } from '../data/idSwitches.js';
+import { RETIRED_STYLES } from '../visualStylePolicy.js';
 
 /** Visual styles by internal name, with the name share links use. */
 export const STYLE_URL_NAMES = Object.freeze({
@@ -21,7 +22,6 @@ export const STYLE_URL_NAMES = Object.freeze({
   thermal: 'flir',
   anime: 'anime',
   noir: 'noir',
-  snow: 'snow',
 });
 
 const STYLES_BY_URL_NAME = Object.freeze(
@@ -328,6 +328,7 @@ export function createView({
 } = {}) {
   if (!Number.isFinite(camera?.lat) || !Number.isFinite(camera?.lon))
     throw new TypeError('A view needs a camera lat and lon');
+  if (RETIRED_STYLES.includes(style)) style = 'normal';
   if (style !== null && !VIEW_STYLES.includes(style))
     throw new TypeError(`Unknown view style: ${style}`);
   if (map !== null && !VIEW_MAPS.includes(map))
@@ -526,9 +527,11 @@ export function viewFromParams(params) {
       pitch_deg: number('pitch'),
     },
     layers: state?.enabledLayerIds ?? [],
-    style: Object.hasOwn(STYLES_BY_URL_NAME, params.get('style'))
-      ? STYLES_BY_URL_NAME[params.get('style')]
-      : null,
+    style: RETIRED_STYLES.includes(params.get('style'))
+      ? 'normal'
+      : Object.hasOwn(STYLES_BY_URL_NAME, params.get('style'))
+        ? STYLES_BY_URL_NAME[params.get('style')]
+        : null,
     map: needs ? needs : VIEW_MAPS.includes(map) ? map : null,
     follow,
     annotations: annotationsFromParams(params),

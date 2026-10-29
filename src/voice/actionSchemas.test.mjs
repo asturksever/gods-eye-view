@@ -41,8 +41,8 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // Street Level, GNSS and air quality (ECCC AQHI) extend the manifest;
     // tracked and analyst aircraft describe broadcasts; globe rotation adds
     // one motion; S2 GhostMaps and the voice panel (named targets, timeout)
-    // follow; show_street_level (map, source, photo) is the only change on
-    // top of main.
+    // follow; Snow leaves the set_visual_style enum; show_street_level (map,
+    // source, photo) is the only change on top of main.
     SHOW_STREET_LEVEL_PAYLOAD_DIGEST,
   );
   // Every shipped tool is byte-identical to the previous release: the new
@@ -61,12 +61,12 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     .digest('hex');
   assert.equal(
     shipped,
-    '9ee82c4214499280c208c93751b19d7b724c81b7727a2d0c6dab0184749fbe15',
+    '724a82b538a12a994401fc941e175625b032bfb96109934e091d3ef5b9600909',
   );
 });
 
 const SHOW_STREET_LEVEL_PAYLOAD_DIGEST =
-  '3560c397b90af12ab5f4da8303810bed7ffda573f7cb7382af6af49598ea569f';
+  '253e0befdf4ddde0c05b2b87967d75ed2e64cfe57e89436f8aa616c3080fe9e7';
 
 test('descriptions customize wording without changing immutable shared arguments', () => {
   const descriptions = {
@@ -189,6 +189,18 @@ test('all legacy action arguments are byte-identical after removing the delibera
   // Cyber adds one HUD layout.
   const hud = property('set_hud').layout;
   hud.enum = hud.enum.filter((layout) => layout !== 'cyber');
+  // Snow is retired from set_visual_style; restore it to keep the legacy pin.
+  const visualStyle = legacy.find((tool) => tool.name === 'set_visual_style')
+    .parameters.properties.style;
+  assert.deepEqual(visualStyle.enum, [
+    'normal',
+    'retro',
+    'surveillance',
+    'thermal',
+    'anime',
+    'noir',
+  ]);
+  visualStyle.enum = [...visualStyle.enum, 'snow'];
   // Derived by applying the same removals to the 4b56d0e9 actionSchemas.
   assert.equal(
     createHash('sha256').update(JSON.stringify(legacy)).digest('hex'),

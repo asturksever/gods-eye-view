@@ -500,6 +500,14 @@ test('Panoramax photos travel in a link and light Panoramax alone, on any map', 
   );
 });
 
+test('a view naming the retired Snow style opens on Normal', () => {
+  const camera = { lat: 1, lon: 2 };
+  assert.equal(createView({ camera, style: 'snow' }).style, 'normal');
+  const view = viewFromParams(new URLSearchParams('lat=1&lon=2&style=snow'));
+  assert.equal(view.style, 'normal');
+  assert.equal(viewToParams(view).get('style'), 'normal');
+});
+
 test('inherited and unknown style keys do not corrupt a restored view', () => {
   for (const style of [
     'constructor',
