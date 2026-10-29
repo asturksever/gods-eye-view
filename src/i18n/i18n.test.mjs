@@ -36,6 +36,9 @@ test('normalizeLocale folds regional variants and rejects unshipped tags', () =>
   assert.equal(normalizeLocale('uk'), 'uk');
   assert.equal(normalizeLocale('uk-UA'), 'uk');
   assert.equal(normalizeLocale('en_GB'), 'en');
+  assert.equal(normalizeLocale('fr'), 'fr');
+  assert.equal(normalizeLocale('fr-CA'), 'fr');
+  assert.equal(normalizeLocale('FR_be'), 'fr');
   assert.equal(normalizeLocale('pt-BR'), 'pt');
   assert.equal(normalizeLocale('pt_PT'), 'pt');
   assert.equal(normalizeLocale('xx'), null);

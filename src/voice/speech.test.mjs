@@ -9,6 +9,7 @@ import {
   spokenLabel,
 } from './speech.js';
 import { countWords, findHedges } from './speechLint.js';
+import { setLocale } from '../i18n/index.js';
 
 function envelope(name, result, args) {
   return attachVoiceResult(name, result, args);
@@ -606,4 +607,16 @@ test('the plan step names Panoramax as a source', () => {
     }),
     'Panoramax at Montmartre',
   );
+});
+
+test('progress step labels join through the catalog colon', () => {
+  setLocale('fr');
+  try {
+    assert.equal(
+      progressStepLabel('resolve', 'Capitol'),
+      'Recherche de lieux\u202f: Capitol',
+    );
+  } finally {
+    setLocale('en');
+  }
 });
